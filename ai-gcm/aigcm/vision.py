@@ -233,8 +233,11 @@ class Counter:
         old = self.value
         needed = self._reads_needed(old, value, fresh_match)
         if needed is not None and self.pending_n >= needed:
+            # A reset can wait minutes for the new lobby to confirm it; it happened at confirmation, not
+            # when a teammate's 0 first showed up.
+            when = t if self.kind == "elims" and value == 0 and old else self.pending_t
             self.value, self.pending = value, None
-            return self.pending_t, old, value
+            return when, old, value
         return None
 
 

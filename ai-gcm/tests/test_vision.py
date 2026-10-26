@@ -40,6 +40,14 @@ def test_reset_to_zero_starts_a_new_match_in_a_fresh_lobby():
     assert kinds == ["match_start", "self_kill"]
 
 
+def test_reset_is_timed_when_the_new_lobby_confirms_it():
+    counter = Counter("elims")
+    feed(counter, [4, 4])
+    for t in range(2, 10):
+        assert counter.update(float(t), 0, fresh_match=False) is None
+    assert counter.update(10.0, 0, fresh_match=True) == (10.0, 4, 0)
+
+
 def test_brief_zero_mid_match_is_ignored():
     # A teammate's counter flashing up while the streamer spectates must not reset kills.
     changes = feed(Counter("elims"), [3, 3, 0, 0, 0, 3, 3], fresh_match=False)
