@@ -56,7 +56,8 @@ class Settings:
     gemini_model: str = "gemini-2.5-flash-lite"
     gemini_rpm: int = 10
     whisper_model: str = "small"
-    caption_language: str | None = None
+    # Auto-detect mistook Hinglish clips for Spanish and Portuguese; set AIGCM_CAPTION_LANGUAGE to change it.
+    caption_language: str | None = "hi"
 
     @classmethod
     def from_env(cls):
@@ -66,6 +67,7 @@ class Settings:
         s.gemini_model = os.environ.get("AIGCM_GEMINI_MODEL", s.gemini_model)
         s.gemini_rpm = int(os.environ.get("AIGCM_GEMINI_RPM", s.gemini_rpm))
         s.whisper_model = os.environ.get("AIGCM_WHISPER_MODEL", s.whisper_model)
+        s.caption_language = os.environ.get("AIGCM_CAPTION_LANGUAGE", s.caption_language) or None
         names = os.environ.get("AIGCM_PLAYER_NAMES", "")
         s.player_names = tuple(n.strip().lower() for n in names.split(",") if n.strip())
         return s

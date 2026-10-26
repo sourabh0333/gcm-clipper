@@ -61,6 +61,22 @@ class Ocr:
     def __init__(self):
         from rapidocr_onnxruntime import RapidOCR
         self.engine = RapidOCR(det_limit_type="max", det_limit_side_len=960, use_cls=False)
+        self._hires = None
+
+    def lines_hires(self, img, scale=2.0):
+        """Like lines(), on an enlarged image with a larger detection limit: slow, but finds the tiny HUD of
+        a gameplay window inside a vertical or composite stream layout. Boxes are in the original pixels."""
+        import cv2
+        from rapidocr_onnxruntime import RapidOCR
+        if self._hires is None:
+            self._hires = RapidOCR(det_limit_type="max", det_limit_side_len=2600, use_cls=False)
+        big = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        result, _ = self._hires(big)
+        out = []
+        for box, text, conf in result or []:
+            xs, ys = [p[0] / scale for p in box], [p[1] / scale for p in box]
+            out.append((text, float(conf), (min(xs), min(ys), max(xs), max(ys))))
+        return out
 
     def lines(self, img):
         """[(text, confidence, (x0, y0, x1, y1))] for each line of text found, in crop pixels."""
@@ -148,9 +164,11 @@ def crop_region(frame, region):
     return frame[int(y * h): int((y + rh) * h), int(x * w): int((x + rw) * w)]
 
 
-def frame_size(info, height):
-    height = min(height, info["height"])
-    return int(round(info["width"] * height / info["height"] / 2) * 2), height
+def frame_size(info, short_side):
+    """Analysis size: the shorter side capped at `short_side`, so vertical streams keep their detail."""
+    w, h = info["width"], info["height"]
+    scale = min(1.0, short_side / min(w, h))
+    return int(round(w * scale / 2) * 2), int(round(h * scale / 2) * 2)
 
 
 def grab_frame(src, t, size):
@@ -163,16 +181,26 @@ def grab_frame(src, t, size):
 
 def locate_counters(src, info, size, ocr):
     """Find the number box to the right of each counter label, as fractions of the frame. Labels are found
-    on frames spread through the video and the median position is used, so a few bad reads don't matter."""
+    on frames spread through the video and the median position is used, so a few bad reads don't matter.
+    A landscape stream has them in the top-left corner; otherwise (vertical or composite layouts, where
+    the gameplay is a smaller window) the whole frame is searched at higher resolution."""
+    boxes = _locate_counters(src, info, size, ocr, COUNTER_SEARCH, ocr.lines)
+    if not boxes:
+        log("vision: counters not in the top-left corner, searching the whole frame")
+        boxes = _locate_counters(src, info, size, ocr, (0.0, 0.0, 1.0, 1.0), ocr.lines_hires, frames=12)
+    return boxes
+
+
+def _locate_counters(src, info, size, ocr, search, read, frames=CALIBRATION_FRAMES):
     w, h = size
-    sx, sy, sw, sh = COUNTER_SEARCH
+    sx, sy, sw, sh = search
     found = {name: [] for name in COUNTER_LABELS}
-    times = np.linspace(info["duration"] * 0.03, info["duration"] * 0.97, CALIBRATION_FRAMES)
+    times = np.linspace(info["duration"] * 0.03, info["duration"] * 0.97, frames)
     for t in times:
         frame = grab_frame(src, float(t), size)
         if frame is None:
             continue
-        for text, _, (x0, y0, x1, y1) in ocr.lines(crop_region(frame, COUNTER_SEARCH)):
+        for text, _, (x0, y0, x1, y1) in read(crop_region(frame, search)):
             letters = re.sub(r"[^a-z]", "", text.lower())
             if re.search(r"\d", text) or len(letters) < 6:
                 continue  # merged with its number, so the label's right edge is unreliable
