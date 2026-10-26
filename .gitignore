@@ -1,0 +1,11 @@
+# Local Claude Code permissions
+.claude/settings.local.json
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+
+# Secrets and downloaded footage
+.env
+ai-gcm/jobs/
