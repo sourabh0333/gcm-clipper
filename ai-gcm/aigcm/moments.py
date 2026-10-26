@@ -13,6 +13,7 @@ EXCITEMENT_PEAK = 2.5
 DENSITY_WINDOW_S = 20.0
 BACKTRACK_S = 20.0
 TAIL_S = 10.0
+EDGE_S = 10.0
 
 
 def _index(t, value):
@@ -168,6 +169,8 @@ def build(events, audio, settings, duration, remaining=()):
                 continue
             taken.append(i)
             peak_t = float(t[i])
+            if peak_t < EDGE_S or peak_t > duration - EDGE_S:
+                continue  # a section's cut edge, not a reaction
             if any(c["start"] <= peak_t <= c["end"] for c in candidates):
                 continue
             start, end = _fit(peak_t - 10, peak_t + 6, peak_t, settings, duration)

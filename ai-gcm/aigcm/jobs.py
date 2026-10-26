@@ -6,7 +6,9 @@ import os
 import time
 from pathlib import Path
 
-STAGES = ["ingest", "audio", "vision", "moments", "judge", "captions", "render", "review"]
+# Vision is the slow stage and doesn't depend on audio, so it comes first: forcing a rerun of the (one
+# second) audio analysis then doesn't redo vision.
+STAGES = ["ingest", "vision", "audio", "moments", "judge", "captions", "render", "review"]
 
 
 def log(msg):

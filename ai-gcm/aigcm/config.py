@@ -39,11 +39,13 @@ class Settings:
     player_names: tuple = ()
 
     # Moments: events closer than merge_gap_s belong to one fight; clips get a lead-in and a reaction tail.
+    # The Eliminations counter changes at the moment of the kill, so the lead-in has to cover the fight
+    # before it (a 4 s lead-in on the first test stream cut straight to the aftermath).
     audio_hop_s: float = 0.5
-    merge_gap_s: float = 15.0
-    pre_roll_s: float = 4.0
-    post_roll_s: float = 5.0
-    min_clip_s: float = 8.0
+    merge_gap_s: float = 25.0
+    pre_roll_s: float = 12.0
+    post_roll_s: float = 6.0
+    min_clip_s: float = 15.0
     max_clip_s: float = 60.0
     max_candidates: int = 25
     top_n: int = 12

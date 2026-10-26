@@ -15,7 +15,9 @@ def rolling_robust_z(x, window):
     if len(x) == 0:
         return x
     half = window // 2
-    padded = np.pad(x, (half, half), mode="edge")
+    # Reflect rather than repeat the edge values, which skewed the median and made the first and last
+    # seconds of a section look unusually loud.
+    padded = np.pad(x, (half, half), mode="reflect" if len(x) > half else "edge")
     view = np.lib.stride_tricks.sliding_window_view(padded, 2 * half + 1)
     med = np.median(view, axis=1)
     mad = np.median(np.abs(view - med[:, None]), axis=1)

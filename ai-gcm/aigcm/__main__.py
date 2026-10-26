@@ -15,8 +15,8 @@ from .media import download, extract_audio, extract_frame, is_url, parse_time, p
 # Folders and files each stage writes, removed when that stage is forced to run again.
 OUTPUTS = {
     "ingest": ["source.mp4", "audio.wav", "info.json"],
-    "audio": ["audio.npz"],
     "vision": ["vision.json"],
+    "audio": ["audio.npz"],
     "moments": ["moments.json"],
     "judge": ["judge", "ranked.json"],
     "captions": ["captions"],
