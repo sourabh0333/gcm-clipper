@@ -59,7 +59,7 @@ class Job:
             return
         log(f"{stage}: starting")
         started = time.time()
-        self._set(stage, status="running", error=None)
+        self._set(stage, status="running", error=None, started=round(started))
         try:
             fn(self)
         except BaseException as exc:

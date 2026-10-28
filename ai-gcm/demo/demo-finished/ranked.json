@@ -29,8 +29,8 @@
     "score": 40.0,
     "type": "multi_kill",
     "reasons": [
-      "0 knocks and 3 kills by the streamer",
-      "late game, 9 players left"
+      "final circles (9 players left)",
+      "3 kills by the streamer"
     ],
     "id": "m01",
     "heuristic_rank": 1,
@@ -63,7 +63,7 @@
     "score": 37.6,
     "type": "fight",
     "reasons": [
-      "0 knocks and 2 kills by the streamer"
+      "2 kills by the streamer"
     ],
     "id": "m02",
     "heuristic_rank": 2,
@@ -90,7 +90,7 @@
     "score": 28.6,
     "type": "fight",
     "reasons": [
-      "0 knocks and 1 kills by the streamer"
+      "1 kill by the streamer"
     ],
     "id": "m03",
     "heuristic_rank": 3,

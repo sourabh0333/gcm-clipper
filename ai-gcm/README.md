@@ -47,7 +47,15 @@ Optional free Gemini key: create one at https://aistudio.google.com/apikey, copy
 .venv\Scripts\python -m aigcm eval jobs\<job> labels.csv
 ```
 
-Open `jobs\<job>\review.html` in a browser to review clips. "Export decisions" saves your keep/reject choices, which become labelled training data.
+## App
+
+```
+.venv\Scripts\python -m aigcm serve
+```
+
+Then open http://localhost:8765 on the laptop, or the `http://192.168.…:8765` address it prints on a phone on the same Wi-Fi (allow Python through the Windows firewall the first time). Paste a YouTube link, watch the progress, swipe right to keep a clip and left to reject it, then download the kept clips. The laptop does the processing, so it has to stay on while a job runs. Installing to the home screen and sharing need HTTPS, which the plain Wi-Fi address doesn't have.
+
+Without the app, open `jobs\<job>\review.html` in a browser to review clips. "Export decisions" saves your keep/reject choices, which become labelled training data.
 
 `python make_demo.py` builds three demo jobs in `demo\` (finished with placeholder clips, still processing, failed) for working on the app without a real stream. Set `AIGCM_JOBS_DIR=demo` to use them.
 

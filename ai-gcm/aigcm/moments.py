@@ -97,7 +97,8 @@ def _score(cand, audio, settings, remaining=()):
             reasons.append(f"late game ({left} players left)")
     own_kills, own_knocks = counts["self_kill"], counts["self_knock"]
     if own_kills or own_knocks:
-        reasons.append(f"{own_knocks} knocks and {own_kills} kills by the streamer")
+        parts = [f"{n} {word}{'s' if n > 1 else ''}" for n, word in ((own_knocks, "knock"), (own_kills, "kill")) if n]
+        reasons.append(f"{' and '.join(parts)} by the streamer")
     if counts["accolade"]:
         reasons.append("Ace Eliminator")
     dense = _densest([e for e in cand["events"] if e["kind"] in ("self_kill", "self_knock")], DENSITY_WINDOW_S)

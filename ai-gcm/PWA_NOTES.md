@@ -18,40 +18,65 @@ A mobile-first web app over the existing pipeline, installable on a phone as a P
 - PWA, not a native app (28 Oct). Costs ₹0.
 - The server runs on the laptop, because the pipeline needs its CPU, ffmpeg and models. The phone reaches it on home Wi-Fi first; a free Cloudflare Tunnel can come later for use outside home.
 - Build on the job folders the pipeline already writes. The app reads them; it does not change how the pipeline stores things.
+- Server: Python standard library only (`aigcm/server.py`, started with `python -m aigcm serve`). App: plain HTML, CSS and JS modules in `app/`, no build step, so the phone session can edit it too.
+- One job runs at a time, as a `python -m aigcm run` child process logging to the job's `run.log`. Only jobs started by the running server count as "running"; anything else left half done shows as "stopped" with a Resume button.
+- Keep or reject decisions are saved on the laptop in the job's `decisions.json`, so the phone and laptop see the same review.
 
-## What the app can read from a job folder
+## How it fits together
+
+| Piece | Where |
+|---|---|
+| Server, API, clip streaming (Range requests) | `aigcm/server.py` |
+| Screens: job list and new job, progress, swipe review, kept clips | `app/app.js`, `app/style.css`, `app/index.html` |
+| Install and offline shell | `app/manifest.webmanifest`, `app/sw.js`, `app/icon-*.png` |
+| Tests | `tests/test_server.py` (runs against a copy of the demo jobs) |
+
+API: `GET /api/jobs`, `GET /api/jobs/<job>`, `POST /api/jobs {url, section}`, `POST /api/jobs/<job>/resume`, `POST /api/jobs/<job>/stop`, `POST /api/jobs/<job>/decisions {id, verdict: keep|reject|null}`, `GET /media/<job>/<clip file>[?download=1]`.
+
+## What the app reads from a job folder
 
 | File | What it holds |
 |---|---|
-| `manifest.json` | `stages.<name>.status`: `done`, `running`, `failed` or `stale` (missing means pending), plus `seconds` or `error` |
+| `manifest.json` | `stages.<name>.status`: `done`, `running`, `failed` or `stale` (missing means pending), plus `seconds`, `started` or `error` |
 | `settings.json` | Source URL, section, layout, number of clips |
 | `info.json` | Video title, channel, duration, size (written after `ingest`) |
-| `ranked.json` | Chosen clips, best first: `id`, `rank`, `start`, `end`, `type`, `final_score`, `reasons`, `players_left`, `events` |
+| `ranked.json` | Chosen clips, best first: `id`, `rank`, `start`, `end` (from the start of the section), `type`, `final_score`, `reasons`, `players_left`, `events` |
 | `clips.json` | Clip id to file name in `clips/` |
-
-Stage order is in `aigcm.jobs.STAGES`. A job starts with `python -m aigcm run <url> --section <from>-<to>`; running the same command again resumes it.
+| `decisions.json` | Written by the app: clip id to `{verdict, reason, at}` |
+| `run.log` | Written by the app: the pipeline's output; the last line shows on the progress screen, and "N min scanned" lines drive the bar during vision |
 
 ## Demo jobs (`ai-gcm/demo/`)
 
 | Job | State |
 |---|---|
 | `demo-finished` | All stages done, 4 placeholder clips (coloured cards, 18–28 s, with sound) |
-| `demo-processing` | Ingest done, vision running |
+| `demo-processing` | Ingest done, vision left "running" (shows as stopped) |
 | `demo-failed` | Ingest failed with a download error |
+
+Run against them with `AIGCM_JOBS_DIR=demo`. To avoid writing decisions into the committed demo folder while testing, copy it somewhere and point `AIGCM_JOBS_DIR` at the copy (an absolute path works).
 
 ## Done
 
 - 28 Oct: demo jobs, `AIGCM_JOBS_DIR` setting, these notes and `CLAUDE.md`.
+- 28 Oct: first working app. Job list and new-job form, progress screen with stage list, rough percentage, last log line, Stop and Resume, failed-step errors; swipe review with keep, reject, undo, tap to pause, sound toggle and arrow keys; kept clips with Download (and Share where the browser allows it); manifest, service worker and icons. Clip reasons now read "2 kills by the streamer" instead of "0 knocks and 2 kills".
 
-## Next
+## Tested
 
-1. Choose the server approach (keep dependencies small; the laptop already has Python 3.12).
-2. Job list and "new job" screen.
-3. Progress screen that polls `manifest.json`.
-4. Swipe review with keep or reject, saved on the server so both devices see it.
-5. Download and share (Web Share API on the phone).
-6. Manifest and service worker so it installs on the phone's home screen.
+- In the desktop app's browser against copies of the demo jobs: all screens, swipe left, keep and undo buttons, finish screen, kept clips, a Range request with download, the service worker installing.
+- Starting a job through the app: it launched the real pipeline, YouTube rejected the made-up demo video, and the progress screen showed the real error. Bad links get a clear message; a second job is refused while one runs.
+- `tests/test_server.py`: states, decisions and undo, Range streaming, refusing bad links and path tricks, app files.
 
 ## Not tested yet
 
-- Nothing in the PWA exists yet.
+- On a real phone over Wi-Fi (needs the owner's phone; Windows will ask to allow Python through the firewall).
+- A full real stream through the app, including the progress bar during vision and the Stop button (`taskkill` on Windows).
+- Share: needs HTTPS (or localhost), so it won't show over the plain Wi-Fi address.
+- Installing to the home screen: also needs HTTPS.
+
+## Next
+
+1. Run one real stream through the app on the laptop and fix what shows up.
+2. Owner opens the Wi-Fi address on their phone and tries a review.
+3. HTTPS for use outside home and for install and share: Cloudflare quick tunnel (`cloudflared tunnel --url http://localhost:8765`, free, no account), plus a simple PIN on the server first, because anyone with the tunnel address could start jobs.
+4. Show an estimated time left, using the stage times from earlier jobs.
+5. Better titles for jobs that failed before download (now the raw link).

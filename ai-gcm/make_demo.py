@@ -47,9 +47,10 @@ def event(t, n):
 
 
 def clip_record(rank, start, end, kind, kills, players_left, score):
-    reasons = [f"0 knocks and {len(kills)} kills by the streamer"] if kills else ["loud reaction"]
+    reasons = []
     if players_left <= 10:
-        reasons.append(f"late game, {players_left} players left")
+        reasons.append(f"final circles ({players_left} players left)")
+    reasons.append(f"{len(kills)} kill{'s' if len(kills) > 1 else ''} by the streamer" if kills else "loud reaction")
     return {
         "start": start, "end": end, "events": [event(t, n) for n, t in enumerate(kills)],
         "source": "hud" if kills else "audio", "players_left": players_left, "audio_peak": 1.5,

@@ -202,6 +202,11 @@ def cmd_eval(args, settings):
         print(f"  missed {l['type'] or 'moment'} at {l['start']:.0f}-{l['end']:.0f}s (rating {l['rating']})")
 
 
+def cmd_serve(args, settings):
+    from . import server
+    server.serve(settings, args.host, args.port)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="aigcm", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -237,6 +242,11 @@ def main(argv=None):
     p.add_argument("job")
     p.add_argument("labels")
     p.set_defaults(fn=cmd_eval)
+
+    p = sub.add_parser("serve", help="run the app: start jobs, watch progress, review and share clips")
+    p.add_argument("--host", default="0.0.0.0", help="0.0.0.0 lets a phone on the same Wi-Fi connect")
+    p.add_argument("--port", type=int, default=8765)
+    p.set_defaults(fn=cmd_serve)
 
     args = parser.parse_args(argv)
     try:
