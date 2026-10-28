@@ -82,3 +82,5 @@ def test_remaining_ignores_dropped_digits():
     # "60" misread as "6" and "10" as "0" in the real test stream.
     changes = feed(Counter("remaining"), [60, 60, 6, 6, 60, 0, 0, 59, 59])
     assert [c[2] for c in changes] == [60, 59]
+    # "41" read as "141" on a stream that enlarged the HUD.
+    assert feed(Counter("remaining"), [41, 41, 141, 141, 141, 141, 141, 141]) == [(0.0, None, 41)]
