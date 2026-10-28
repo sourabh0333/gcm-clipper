@@ -1,0 +1,44 @@
+{
+  "stages": {
+    "ingest": {
+      "status": "done",
+      "error": null,
+      "seconds": 1057.6
+    },
+    "vision": {
+      "status": "done",
+      "error": null,
+      "seconds": 1240.1
+    },
+    "audio": {
+      "status": "done",
+      "error": null,
+      "seconds": 0.3
+    },
+    "moments": {
+      "status": "done",
+      "error": null,
+      "seconds": 0.1
+    },
+    "judge": {
+      "status": "done",
+      "error": null,
+      "seconds": 0.0
+    },
+    "captions": {
+      "status": "done",
+      "error": null,
+      "seconds": 61.8
+    },
+    "render": {
+      "status": "done",
+      "error": null,
+      "seconds": 120.8
+    },
+    "review": {
+      "status": "done",
+      "error": null,
+      "seconds": 0.0
+    }
+  }
+}

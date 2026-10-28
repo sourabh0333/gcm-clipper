@@ -49,6 +49,8 @@ Optional free Gemini key: create one at https://aistudio.google.com/apikey, copy
 
 Open `jobs\<job>\review.html` in a browser to review clips. "Export decisions" saves your keep/reject choices, which become labelled training data.
 
+`python make_demo.py` builds three demo jobs in `demo\` (finished with placeholder clips, still processing, failed) for working on the app without a real stream. Set `AIGCM_JOBS_DIR=demo` to use them.
+
 `eval` compares the chosen clips with a hand-made list of good moments (`start,end,type,rating` in seconds, rating 1–5). It reports how many of the 4–5 rated moments were found and how many clips matched a real moment.
 
 ## Next improvements

@@ -1,0 +1,122 @@
+[
+  {
+    "start": 277.5,
+    "end": 305.5,
+    "events": [
+      {
+        "t": 289.5,
+        "kind": "self_kill",
+        "text": "eliminations 0 -> 1",
+        "region": "counter"
+      },
+      {
+        "t": 293.0,
+        "kind": "self_kill",
+        "text": "eliminations 1 -> 2",
+        "region": "counter"
+      },
+      {
+        "t": 299.5,
+        "kind": "self_kill",
+        "text": "eliminations 2 -> 3",
+        "region": "counter"
+      }
+    ],
+    "source": "hud",
+    "players_left": 9,
+    "audio_peak": 1.5,
+    "action_ratio": 1.0,
+    "score": 40.0,
+    "type": "multi_kill",
+    "reasons": [
+      "0 knocks and 3 kills by the streamer",
+      "late game, 9 players left"
+    ],
+    "id": "m01",
+    "heuristic_rank": 1,
+    "detector_score": 100.0,
+    "judge": null,
+    "final_score": 100.0,
+    "rank": 1
+  },
+  {
+    "start": 1146.0,
+    "end": 1165.0,
+    "events": [
+      {
+        "t": 1158.0,
+        "kind": "self_kill",
+        "text": "eliminations 0 -> 1",
+        "region": "counter"
+      },
+      {
+        "t": 1159.0,
+        "kind": "self_kill",
+        "text": "eliminations 1 -> 2",
+        "region": "counter"
+      }
+    ],
+    "source": "hud",
+    "players_left": 41,
+    "audio_peak": 1.5,
+    "action_ratio": 1.0,
+    "score": 37.6,
+    "type": "fight",
+    "reasons": [
+      "0 knocks and 2 kills by the streamer"
+    ],
+    "id": "m02",
+    "heuristic_rank": 2,
+    "detector_score": 94.0,
+    "judge": null,
+    "final_score": 94.0,
+    "rank": 2
+  },
+  {
+    "start": 622.0,
+    "end": 640.0,
+    "events": [
+      {
+        "t": 634.0,
+        "kind": "self_kill",
+        "text": "eliminations 0 -> 1",
+        "region": "counter"
+      }
+    ],
+    "source": "hud",
+    "players_left": 72,
+    "audio_peak": 1.5,
+    "action_ratio": 1.0,
+    "score": 28.6,
+    "type": "fight",
+    "reasons": [
+      "0 knocks and 1 kills by the streamer"
+    ],
+    "id": "m03",
+    "heuristic_rank": 3,
+    "detector_score": 71.5,
+    "judge": null,
+    "final_score": 71.5,
+    "rank": 3
+  },
+  {
+    "start": 1502.0,
+    "end": 1520.0,
+    "events": [],
+    "source": "audio",
+    "players_left": 23,
+    "audio_peak": 1.5,
+    "action_ratio": 1.0,
+    "score": 20.8,
+    "type": "reaction",
+    "reasons": [
+      "loud reaction"
+    ],
+    "id": "m04",
+    "heuristic_rank": 4,
+    "detector_score": 52.0,
+    "judge": null,
+    "final_score": 52.0,
+    "rank": 4
+  }
+]

@@ -66,6 +66,8 @@ class Settings:
     def from_env(cls):
         load_dotenv(ROOT / ".env")
         s = cls()
+        # AIGCM_JOBS_DIR=demo points the app at the demo jobs made by make_demo.py.
+        s.jobs_dir = ROOT / os.environ.get("AIGCM_JOBS_DIR", "jobs")
         s.gemini_api_key = os.environ.get("GEMINI_API_KEY", "").strip()
         s.gemini_model = os.environ.get("AIGCM_GEMINI_MODEL", s.gemini_model)
         s.gemini_rpm = int(os.environ.get("AIGCM_GEMINI_RPM", s.gemini_rpm))

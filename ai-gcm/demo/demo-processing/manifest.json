@@ -1,0 +1,13 @@
+{
+  "stages": {
+    "ingest": {
+      "status": "done",
+      "error": null,
+      "seconds": 1057.6
+    },
+    "vision": {
+      "status": "running",
+      "error": null
+    }
+  }
+}

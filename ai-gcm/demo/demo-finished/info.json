@@ -1,0 +1,19 @@
+{
+  "source": "https://www.youtube.com/watch?v=demo0000001",
+  "id": "demo0000001",
+  "title": "Demo stream: rush gameplay | BGMI",
+  "uploader": "Demo Streamer",
+  "channel": "Demo Streamer",
+  "duration": 1800.0,
+  "webpage_url": "https://www.youtube.com/watch?v=demo0000001",
+  "was_live": true,
+  "width": 720,
+  "height": 1280,
+  "fps": 30.0,
+  "has_audio": true,
+  "path": null,
+  "section": [
+    1800.0,
+    3600.0
+  ]
+}

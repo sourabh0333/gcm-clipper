@@ -1,0 +1,8 @@
+{
+  "stages": {
+    "ingest": {
+      "status": "failed",
+      "error": "DownloadError('ERROR: [youtube] demo0000001: Video unavailable')"
+    }
+  }
+}
