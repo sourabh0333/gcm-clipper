@@ -3,7 +3,8 @@
 
 const app = document.getElementById("app");
 const STAGE_NAMES = {
-  ingest: "Download video", vision: "Read kills from the HUD", audio: "Measure audio", moments: "Find moments",
+  ingest: "Download video", vision: "Read kills from the HUD", audio: "Measure audio",
+  sounds: "Listen for laughs and gunfire", moments: "Find moments",
   judge: "Rank moments", captions: "Write captions", render: "Make 9:16 clips", review: "Finish",
 };
 const TYPE_NAMES = { multi_kill: "Multi kill", fight: "Fight", win: "Chicken dinner", reaction: "Reaction" };

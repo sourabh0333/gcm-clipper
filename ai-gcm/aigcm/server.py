@@ -31,7 +31,7 @@ TYPES = {".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".p
 NAME = re.compile(r"^[\w-]{1,80}$")
 
 # Rough share of a job's time each stage takes, from the three test streams; only for the progress bar.
-STAGE_WEIGHT = {"ingest": 0.35, "vision": 0.45, "audio": 0.01, "moments": 0.01, "judge": 0.02,
+STAGE_WEIGHT = {"ingest": 0.35, "vision": 0.44, "audio": 0.01, "sounds": 0.01, "moments": 0.01, "judge": 0.02,
                 "captions": 0.09, "render": 0.07, "review": 0.0}
 SCANNED = re.compile(r"vision: (\d+) min scanned")
 

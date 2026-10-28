@@ -7,7 +7,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from . import audio, captions, judge, moments, render, review, vision
+from . import audio, captions, judge, moments, render, review, sounds, vision
 from .config import Settings
 from .jobs import STAGES, Job, log, read_json, write_json
 from .media import download, extract_audio, extract_frame, is_url, parse_time, probe, search
@@ -17,6 +17,7 @@ OUTPUTS = {
     "ingest": ["source.mp4", "audio.wav", "info.json"],
     "vision": ["vision.json"],
     "audio": ["audio.npz"],
+    "sounds": ["sounds.npz"],
     "moments": ["moments.json"],
     "judge": ["judge", "ranked.json"],
     "captions": ["captions"],
@@ -63,6 +64,9 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
 
     def audio_stage(job):
         audio.save(job.path("audio.npz"), audio.analyse(job.path("audio.wav"), settings.audio_hop_s))
+
+    def sounds_stage(job):
+        sounds.save(job.path("sounds.npz"), sounds.analyse(job.path("audio.wav")))
 
     def vision_stage(job):
         info = read_json(job.path("info.json"))
@@ -118,7 +122,8 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
         job.path("review.html").write_text(review.build(job.root.name, info, ranked), encoding="utf-8")
         log(f"review: open {job.path('review.html')}")
 
-    stages = {"ingest": ingest, "audio": audio_stage, "vision": vision_stage, "moments": moments_stage,
+    stages = {"ingest": ingest, "audio": audio_stage, "sounds": sounds_stage, "vision": vision_stage,
+              "moments": moments_stage,
               "judge": judge_stage, "captions": captions_stage, "render": render_stage, "review": review_stage}
     for name in STAGES:
         job.run(name, stages[name])

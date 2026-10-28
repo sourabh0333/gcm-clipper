@@ -3,5 +3,6 @@ __pycache__/
 .pytest_cache/
 .env
 jobs/
+models/
 demo/*/decisions.json
 demo/*/run.log
