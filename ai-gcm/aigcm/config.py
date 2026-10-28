@@ -50,8 +50,9 @@ class Settings:
     max_candidates: int = 25
     top_n: int = 12
 
-    # Rendering: "blur" keeps the whole frame over a blurred fill; "split" puts the facecam on top.
-    layout: str = "blur"
+    # Rendering: "auto" keeps a vertical stream as it is ("native") and puts a landscape one over a
+    # blurred fill ("blur"); "split" puts a given facecam box on top.
+    layout: str = "auto"
     facecam: tuple | None = None
 
     gemini_api_key: str = ""

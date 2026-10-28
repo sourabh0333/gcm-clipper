@@ -94,8 +94,9 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
             log("captions: skipped")
             return
         info = read_json(job.path("info.json"))
+        layout = render.resolve_layout(settings.layout, info)
         captions.caption_clips(job, info["path"], read_json(job.path("ranked.json")), settings,
-                               render.CAPTION_MARGIN.get(settings.layout, 380))
+                               render.CAPTION_MARGIN.get(layout, 380))
 
     def render_stage(job):
         info = read_json(job.path("info.json"))
@@ -210,7 +211,7 @@ def main(argv=None):
     p.add_argument("--section", help="only this part of a YouTube video, e.g. 0:30:00-1:30:00")
     p.add_argument("--job", help="job folder name (default: from the video id or file name)")
     p.add_argument("--top", type=int, help="number of clips to make (default 12)")
-    p.add_argument("--layout", choices=["blur", "split"])
+    p.add_argument("--layout", choices=["auto", "blur", "split", "native"])
     p.add_argument("--facecam", help="facecam box as x,y,w,h fractions of the frame; implies --layout split")
     p.add_argument("--force", choices=STAGES, help="rerun this stage and everything after it")
     p.add_argument("--until", choices=STAGES, help="stop after this stage")

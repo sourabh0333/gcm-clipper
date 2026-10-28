@@ -2,7 +2,9 @@
 
 "blur" layout: the whole gameplay frame, full width, over a blurred, zoomed copy of itself, so the kill
 feed and HUD stay visible. "split" layout: the facecam on top and the full gameplay frame below it.
-Captions are burned in from the clip's .ass file."""
+"native" layout: a vertical stream is already laid out as a Short by the streamer, so it is only scaled.
+"auto" picks native for vertical sources and blur otherwise. Captions are burned in from the clip's .ass
+file."""
 
 import shutil
 
@@ -13,12 +15,21 @@ W, H = 1080, 1920
 FACECAM_H = 760
 
 # Where captions sit, measured up from the bottom edge, for each layout.
-CAPTION_MARGIN = {"blur": 380, "split": 260}
+CAPTION_MARGIN = {"blur": 380, "split": 260, "native": 560}
+
+
+def resolve_layout(layout, info):
+    if layout == "auto":
+        return "native" if info["height"] > info["width"] else "blur"
+    return layout
 
 
 def _filter(layout, info, facecam, captions):
     gameplay_h = int(round(W * info["height"] / info["width"] / 2) * 2)
-    if layout == "split" and facecam:
+    if layout == "native":
+        graph = (f"[0:v]scale={W}:{H}:force_original_aspect_ratio=decrease,"
+                 f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=black")
+    elif layout == "split" and facecam:
         fx, fy, fw, fh = facecam
         crop = (f"crop=iw*{fw}:ih*{fh}:iw*{fx}:ih*{fy},"
                 f"scale={W}:{FACECAM_H}:force_original_aspect_ratio=increase,crop={W}:{FACECAM_H}")
@@ -44,7 +55,7 @@ def render_clip(source, clip, info, settings, out_dir, captions=None):
     if captions and captions.exists():
         local_captions = out_dir / captions.name
         shutil.copyfile(captions, local_captions)
-    graph = _filter(settings.layout, info, settings.facecam, local_captions)
+    graph = _filter(resolve_layout(settings.layout, info), info, settings.facecam, local_captions)
     cmd = [tool("ffmpeg"), "-v", "error", "-y", "-ss", f"{clip['start']:.3f}", "-i", str(source),
            "-t", f"{clip['end'] - clip['start']:.3f}", "-filter_complex", graph, "-map", "[v]", "-map", "0:a?",
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-r", "30",

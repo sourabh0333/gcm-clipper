@@ -40,6 +40,7 @@ SPECTATE_EVERY_S = 2.0
 SPECTATE_HOLD_S = 6.0
 LOBBY_PLAYERS = 80        # Remaining at or above this means a fresh match
 LOBBY_JUMP = 20
+UNCONFIRMED_RESET_READS = 20   # 10 s at 2 frames a second
 MAX_REMAINING_DROP = 30
 
 COUNTER_LABELS = {"elims": "eliminations", "remaining": "remaining"}
@@ -242,8 +243,14 @@ class Counter:
                 return 2
             if value < old:
                 # Eliminations never go down within a match. A drop is a teammate's counter (spectating),
-                # a transition screen or a misread, unless a new lobby has opened.
-                return 2 if fresh_match and value == 0 else None
+                # a transition screen or a misread, unless a new lobby has opened. With no lobby signal
+                # (fresh_match is None: no Remaining counter in this layout) a reset must hold for 10 s;
+                # a real new match keeps 0 for minutes, a flicker lasts a second or two.
+                if value != 0:
+                    return None
+                if fresh_match is None:
+                    return UNCONFIRMED_RESET_READS
+                return 2 if fresh_match else None
             return 6
         return 2 if 0 < old - value <= MAX_REMAINING_DROP or value >= LOBBY_PLAYERS else 6
 
@@ -297,6 +304,10 @@ def scan(src, info, settings):
     counters = {name: Counter(name) for name in counter_boxes}
     remaining = []          # [(t, players left)] whenever it changes
     spectating_until, last_spectate_read = -1.0, -1e9
+    # Vertical streams put the gameplay window anywhere, so the whole frame is checked, less often.
+    portrait = out_h > out_w
+    spectate_region = (0.0, 0.0, 1.0, 1.0) if portrait else SPECTATE_REGION
+    spectate_every = SPECTATE_EVERY_S * 2 if portrait else SPECTATE_EVERY_S
     lobby_open = False      # the Remaining counter jumped to a fresh lobby since the last Eliminations change
     history = {name: deque(maxlen=int(fps * 10)) for name in settings.regions}
     last_read = {name: -1e9 for name in settings.regions}
@@ -313,10 +324,10 @@ def scan(src, info, settings):
             t = index / fps
             index += 1
 
-            if "elims" in counter_boxes and t - last_spectate_read >= SPECTATE_EVERY_S:
+            if "elims" in counter_boxes and t - last_spectate_read >= spectate_every:
                 last_spectate_read = t
                 ocr_calls += 1
-                if any(is_spectating(text) for text, _, _ in ocr.lines(crop_region(frame, SPECTATE_REGION))):
+                if any(is_spectating(text) for text, _, _ in ocr.lines(crop_region(frame, spectate_region))):
                     spectating_until = t + SPECTATE_HOLD_S
             spectating = t < spectating_until
 
@@ -325,8 +336,8 @@ def scan(src, info, settings):
                 reads = ocr.read_digits(crop_region(frame, counter_boxes[n]) for n in names)
                 for name, (text, conf) in zip(names, reads):
                     value = parse_number(text) if conf >= 0.2 else None
-                    # Without a Remaining counter there is no lobby signal, so resets are always allowed.
-                    change = counters[name].update(t, value, lobby_open or "remaining" not in counters)
+                    # Without a Remaining counter there is no lobby signal (None): resets must last longer.
+                    change = counters[name].update(t, value, lobby_open if "remaining" in counters else None)
                     if not change:
                         continue
                     if name == "elims":

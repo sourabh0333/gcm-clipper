@@ -48,6 +48,14 @@ def test_reset_is_timed_when_the_new_lobby_confirms_it():
     assert counter.update(10.0, 0, fresh_match=True) == (10.0, 4, 0)
 
 
+def test_without_lobby_signal_a_flicker_is_ignored_but_a_long_reset_counts():
+    # ANJI's vertical layout hides the Remaining counter; a 2 s flicker to 0 double-counted a kill.
+    flicker = feed(Counter("elims"), [1, 1, 0, 0, 0, 0, 1, 1], fresh_match=None)
+    assert flicker == [(0.0, None, 1)]
+    reset = feed(Counter("elims"), [3, 3] + [0] * 20, fresh_match=None)
+    assert reset[-1][1:] == (3, 0)
+
+
 def test_brief_zero_mid_match_is_ignored():
     # A teammate's counter flashing up while the streamer spectates must not reset kills.
     changes = feed(Counter("elims"), [3, 3, 0, 0, 0, 3, 3], fresh_match=False)
