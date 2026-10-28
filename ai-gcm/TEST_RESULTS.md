@@ -33,7 +33,7 @@ Downloading a 30–40 minute section at 720p took a further 15–20 minutes on t
 | Kill counted twice on ANJI | 2 s flicker to 0 with no Remaining counter in the layout | Without a lobby signal, a reset must hold for 10 s |
 | Clips showed only the aftermath | The counter changes at the kill; the lead-in was 4 s | 12 s lead-in, 15 s minimum |
 | Vertical streams downloaded at 360×640 | Download limited the height, not the shorter side | Limit the shorter side, so vertical streams come down at 720×1280 |
-| HUD reading took 31 min for 30 min of vertical video | Whole-frame "Spectating" check every 4 s | Check only when the counter seems to change |
+| HUD reading took 31 min for 30 min of vertical video (ANJI) | Whole-frame "Spectating" check every 4 s | Check only when the counter seems to change. The next vertical stream (DIPENDU) took 20 min: better, but still about 3× slower than landscape |
 
 ## Product findings
 
