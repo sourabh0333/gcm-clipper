@@ -64,11 +64,11 @@ Run against them with `AIGCM_JOBS_DIR=demo`. To avoid writing decisions into the
 
 - In the desktop app's browser against copies of the demo jobs: all screens, swipe left, keep and undo buttons, finish screen, kept clips, a Range request with download, the service worker installing.
 - Starting a job through the app: it launched the real pipeline, YouTube rejected the made-up demo video, and the progress screen showed the real error. Bad links get a clear message; a second job is refused while one runs.
+- 28 Oct: the owner opened it on their phone over home Wi-Fi (`http://192.168.1.100:8765`) and it worked with the 3 real test jobs. The laptop's firewall already allows Python 3.12 on private networks.
 - `tests/test_server.py`: states, decisions and undo, Range streaming, refusing bad links and path tricks, app files.
 
 ## Not tested yet
 
-- On a real phone over Wi-Fi (needs the owner's phone; Windows will ask to allow Python through the firewall).
 - A full real stream through the app, including the progress bar during vision and the Stop button (`taskkill` on Windows).
 - Share: needs HTTPS (or localhost), so it won't show over the plain Wi-Fi address.
 - Installing to the home screen: also needs HTTPS.
@@ -76,7 +76,6 @@ Run against them with `AIGCM_JOBS_DIR=demo`. To avoid writing decisions into the
 ## Next
 
 1. Run one real stream through the app on the laptop and fix what shows up.
-2. Owner opens the Wi-Fi address on their phone and tries a review.
-3. HTTPS for use outside home and for install and share: Cloudflare quick tunnel (`cloudflared tunnel --url http://localhost:8765`, free, no account), plus a simple PIN on the server first, because anyone with the tunnel address could start jobs.
-4. Show an estimated time left, using the stage times from earlier jobs.
-5. Better titles for jobs that failed before download (now the raw link).
+2. HTTPS for use outside home and for install and share: Cloudflare quick tunnel (`cloudflared tunnel --url http://localhost:8765`, free, no account), plus a simple PIN on the server first, because anyone with the tunnel address could start jobs.
+3. Show an estimated time left, using the stage times from earlier jobs.
+4. Better titles for jobs that failed before download (now the raw link).
