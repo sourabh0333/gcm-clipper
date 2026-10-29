@@ -29,6 +29,14 @@ Score every 2 s from: laughter and scream spikes relative to the stream's own le
 - **New DIPENDU clips (12):** 3 talk clips (ranked #1, #4 and #10), 6 fights, 3 reactions. Fight starts barely moved, because the gunfire in these fights began inside the existing 12 s lead-in. Talk clip #1 (mic problem) outranking 2-kill fights is unproven.
 - The owner said testing on one stream is enough for now (29 Oct), so ANJI was only transcribed and GtxPreet was not redone.
 
+## Gemini on DIPENDU (29 Oct, owner's free key)
+
+- The key lives only in `ai-gcm/.env` (git-ignored). Keys made after late 2026 can't use `gemini-2.5-flash-lite`; the default is now `gemini-3.5-flash-lite`. A first key failed with "bound service account is deleted or disabled"; a fresh key from AI Studio worked.
+- Talk scan (2 requests, 14 s): 3 moments. 20:17 camper rage (worth 8, also found by the rules), 05:40 "bande itne slow kyon hai… Free Fire" (worth 7, missed by the rules), 09:21 rant about random teammates (worth 8). Judging all 17 candidates took 4 min.
+- The judge is strict: fights got 3–4 out of 10, the camper rage 7, the slow-teammates rant 6. It marked 4 "reaction" candidates as dead time in the plane or lobby (worth 1), and the rules' "sori bhaiya" clip as lobby chat (1). Those dropped out of the top 12.
+- **The owner's swipes on the rules' clips:** 8 of 12 reviewed, all 8 kept, including clips the judge rated 3 ("hello bhai", single kills). Keeping everything can't show what makes a clip good. Ask the owner to be strict (keep only what they'd actually post), or look at which ones they download.
+- New ranking: camper rage #1, slow-teammates rant #2, the mic-problem talk #3 (judge 3, still high from the rules), then fights.
+
 ## Fixed on the way
 
 - Rerunning a job without `--section` wiped its saved time range (the app then showed "Whole video" and wrong stream times). A resumed job now keeps its range; the three test jobs' ranges were restored by hand.
@@ -37,12 +45,12 @@ Score every 2 s from: laughter and scream spikes relative to the stream's own le
 
 ## Next
 
-1. Owner reviews DIPENDU's new clips in the app; their keeps and rejects show whether talk clips are worth it and how to weight them.
-2. Owner creates a free Gemini key (https://aistudio.google.com/apikey), then the AI reads the whole transcript for funny moments (`talk.from_gemini`, untested) and the judge rates every clip.
+1. Owner reviews DIPENDU's Gemini-ranked clips strictly (keep only what they would post).
+2. Decide how much the judge's rating should outweigh the rules (now 60/40). The mic-problem talk clip stays at #3 despite a 3 from the judge.
 3. If ANJI-like streams are common, test the Apex model, or switch to it only when Swift's transcript looks broken.
 4. Later: knock detection, a "missed a moment" button for measuring recall, learning weights from swipes.
 
 ## Not tested
 
-- `talk.from_gemini` and the judge's new transcript prompt (no key yet).
+- Gemini on ANJI and GtxPreet.
 - Talk rules on more than one stream with real dialogue.

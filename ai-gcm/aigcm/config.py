@@ -56,7 +56,8 @@ class Settings:
     facecam: tuple | None = None
 
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash-lite"
+    # 2.5 Flash-Lite is closed to keys created after late 2026; Google points new users to 3.5 Flash-Lite.
+    gemini_model: str = "gemini-3.5-flash-lite"
     gemini_rpm: int = 10
     # A folder name under models/ (a converted Hinglish model) or a stock Whisper size such as "small".
     whisper_model: str = "hinglish-swift"
