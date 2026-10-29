@@ -4,10 +4,14 @@
 const app = document.getElementById("app");
 const STAGE_NAMES = {
   ingest: "Download video", vision: "Read kills from the HUD", audio: "Measure audio",
-  sounds: "Listen for laughs and gunfire", moments: "Find moments",
+  sounds: "Listen for laughs and gunfire", transcript: "Write down what's said", moments: "Find moments",
   judge: "Rank moments", captions: "Write captions", render: "Make 9:16 clips", review: "Finish",
 };
-const TYPE_NAMES = { multi_kill: "Multi kill", fight: "Fight", win: "Chicken dinner", reaction: "Reaction" };
+const TYPE_NAMES = {
+  multi_kill: "Multi kill", fight: "Fight", win: "Chicken dinner", reaction: "Reaction", talk: "Talk", funny: "Funny",
+  banter: "Banter", rage: "Rage", hype: "Hype", wholesome: "Wholesome", story: "Story", clutch: "Clutch",
+  squad_wipe: "Squad wipe", close_escape: "Close escape",
+};
 const STATE_NAMES = { done: "Ready", running: "Processing", stopped: "Stopped", failed: "Failed" };
 const ICON = {
   keep: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
@@ -258,7 +262,7 @@ async function share(job, clip, button) {
 }
 
 function clipTitle(clip) {
-  return clip.judge?.title || TYPE_NAMES[clip.type] || clip.type.replace(/_/g, " ");
+  return clip.judge?.title || clip.title || TYPE_NAMES[clip.type] || clip.type.replace(/_/g, " ");
 }
 
 // ---------- Review: one clip at a time ----------

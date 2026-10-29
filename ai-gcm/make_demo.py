@@ -103,7 +103,8 @@ def finished():
     write_json(job / "clips.json", files)
     settings_file(job)
     write_json(job / "manifest.json", manifest([("ingest", 1057.6), ("vision", 1240.1), ("audio", 0.3),
-                                                ("sounds", 36.0), ("moments", 0.1), ("judge", 0.0), ("captions", 61.8),
+                                                ("sounds", 36.0), ("transcript", 150.0),
+                                                ("moments", 0.1), ("judge", 0.0), ("captions", 61.8),
                                                 ("render", 120.8), ("review", 0.0)]))
     ranked = [dict(c, file=files[c["id"]]) for c in ranked]
     (job / "review.html").write_text(review.build(job.name, INFO, ranked), encoding="utf-8")

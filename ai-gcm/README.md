@@ -11,11 +11,13 @@ Each step saves its result in the job folder, so a crashed or stopped run contin
 | Step | What it does | Output |
 |---|---|---|
 | `ingest` | Downloads the YouTube video (or copies a local file) and extracts the audio | `source.mp4`, `audio.wav`, `info.json` |
+| `vision` | Reads the Eliminations and Remaining counters and on-screen messages with OCR | `vision.json` |
 | `audio` | Measures loudness, gunfire-like bursts and voice excitement every half second | `audio.npz` |
-| `vision` | Reads the on-screen kill and knock messages with OCR, only when the HUD changes | `vision.json` |
-| `moments` | Groups events into fights, adds loud-reaction moments, scores and ranks them | `moments.json` |
+| `sounds` | Tells laughter, screaming, speech, gunfire and music apart about once a second (YAMNet) | `sounds.npz` |
+| `transcript` | Writes down everything said, in Hinglish, with word times (Whisper on the laptop) | `transcript.json` |
+| `moments` | Groups kills into fights that start where the shooting started, finds funny and lively talk, scores and ranks them | `moments.json`, `talk.json` |
 | `judge` | Optional: Gemini watches each candidate and rates it, names the moment and trims the cut | `judge/*.json` |
-| `captions` | Transcribes each chosen clip with Whisper on the laptop | `captions/*.ass` |
+| `captions` | Cuts each chosen clip's words from the transcript | `captions/*.ass` |
 | `render` | Cuts 1080×1920 clips with captions burned in | `clips/*.mp4` |
 | `review` | Builds a page to watch, keep or reject clips | `review.html` |
 
@@ -34,6 +36,17 @@ Then, from this folder:
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
 ```
+
+Hinglish speech model (one time, about 5 minutes). Converting it needs `torch` and `transformers`, so use a separate throwaway venv:
+
+```
+python -m venv %TEMP%\convert-venv
+%TEMP%\convert-venv\Scripts\python -m pip install --index-url https://download.pytorch.org/whl/cpu torch
+%TEMP%\convert-venv\Scripts\python -m pip install transformers ctranslate2
+%TEMP%\convert-venv\Scripts\ct2-transformers-converter --model Oriserve/Whisper-Hindi2Hinglish-Swift --output_dir models\hinglish-swift --quantization int8 --copy_files tokenizer.json preprocessor_config.json
+```
+
+Without it, transcripts and captions fall back to Whisper `small`, which writes Hindi in Devanagari.
 
 Optional free Gemini key: create one at https://aistudio.google.com/apikey, copy `.env.example` to `.env` and paste it in.
 

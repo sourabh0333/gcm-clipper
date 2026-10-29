@@ -7,11 +7,15 @@ import time
 
 from .jobs import log, read_json, write_json
 from .media import cut_preview
+from .transcript import text_between
 
-TYPES = ["fight", "clutch", "multi_kill", "squad_wipe", "close_escape", "funny", "win", "reaction", "nothing"]
+TYPES = ["fight", "clutch", "multi_kill", "squad_wipe", "close_escape", "funny", "banter", "rage", "hype", "win",
+         "reaction", "nothing"]
 
 PROMPT = """You are a short-form video editor for an Indian BGMI (Battlegrounds Mobile India) gaming creator.
 This is one candidate moment cut from a longer stream. A detector flagged it because: {reasons}.
+What was said, from an automatic Hinglish transcript that has mistakes: {said}
+Judge the gameplay and the talk: a funny or entertaining conversation is worth posting even without kills.
 
 Watch it and reply with JSON only, using exactly these keys:
 - "worth": integer 1-10, how likely the creator would post this as a YouTube Short or Instagram Reel. Be strict: most candidates are not worth posting.
@@ -51,7 +55,7 @@ def _clean(raw, length):
             "weak_points": str(raw.get("weak_points", ""))}
 
 
-def judge_all(job, source, candidates, settings):
+def judge_all(job, source, candidates, settings, transcript=None):
     out_dir = job.path("judge")
     out_dir.mkdir(exist_ok=True)
     client = _client(settings.gemini_api_key)
@@ -63,7 +67,9 @@ def judge_all(job, source, candidates, settings):
             continue
         preview = out_dir / f"{cand['id']}.mp4"
         cut_preview(source, cand["start"], cand["end"], preview)
-        prompt = PROMPT.format(reasons=", ".join(cand["reasons"]) or "a loud moment", types=", ".join(TYPES))
+        said = text_between(transcript, cand["start"], cand["end"]) if transcript else ""
+        prompt = PROMPT.format(reasons=", ".join(cand["reasons"]) or "a loud moment", types=", ".join(TYPES),
+                               said=said or "(nothing transcribed)")
         for attempt in range(4):
             wait = gap - (time.time() - last_call)
             if wait > 0:

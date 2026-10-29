@@ -14,6 +14,13 @@ DENSITY_WINDOW_S = 20.0
 BACKTRACK_S = 20.0
 TAIL_S = 10.0
 EDGE_S = 10.0
+# YAMNet gunfire score that counts as a shot, and the longest pause that still belongs to one fight.
+GUNFIRE_ON = 0.3
+GUNFIRE_PAUSE_S = 4.0
+# Talk moments (talk.py) score their rule score (about 3-12) or Gemini's 6-10 rating times these, so a good
+# conversation ranks with a one- or two-kill fight.
+TALK_WEIGHT_RULES = 3.0
+TALK_WEIGHT_GEMINI = 5.0
 
 
 def _index(t, value):
@@ -42,16 +49,35 @@ def _cluster(events, gap):
     return clusters
 
 
-def _bounds(first, last, audio, settings):
+def _gunfire_start(first, sounds):
+    """When the shooting that led up to `first` began: walk back while gunfire keeps coming, allowing short
+    pauses, up to BACKTRACK_S. None if there was no gunfire just before."""
+    t, gun = sounds["t"], sounds["gunfire"]
+    shots = t[(gun >= GUNFIRE_ON) & (t <= first + 1) & (t >= first - BACKTRACK_S)]
+    if not len(shots) or first - shots[-1] > GUNFIRE_PAUSE_S:
+        return None
+    begin = shots[-1]
+    for shot in shots[::-1]:
+        if begin - shot > GUNFIRE_PAUSE_S:
+            break
+        begin = shot
+    return float(begin)
+
+
+def _bounds(first, last, audio, settings, sounds=None):
     """Start where the shooting before the first event began; end once the reaction calms down."""
     t, action, excitement = audio["t"], audio["action"], audio["excitement"]
     start, end = first - settings.pre_roll_s, last + settings.post_roll_s
-    if len(t):
+    began = _gunfire_start(first, sounds) if sounds else None
+    if began is not None:
+        start = min(start, began - 2.0)
+    elif len(t):
         busy = float(np.percentile(action, 75))
         i = _index(t, first)
         while i > 0 and action[i - 1] > busy and first - t[i - 1] <= BACKTRACK_S:
             i -= 1
         start = min(start, float(t[i]) - 2.0)
+    if len(t):
         k = _index(t, last)
         while k + 1 < len(t) and excitement[k + 1] > 1.0 and t[k + 1] - last <= TAIL_S:
             k += 1
@@ -125,6 +151,10 @@ def _score(cand, audio, settings, remaining=()):
             reasons.append("loud reaction")
         if busy >= 2:
             reasons.append("heavy gunfire")
+    talk = cand.get("talk_score")
+    if talk is not None:
+        score += talk * (TALK_WEIGHT_GEMINI if cand["source"] == "gemini" else TALK_WEIGHT_RULES)
+        reasons = cand.get("reasons", []) + reasons
     length = cand["end"] - cand["start"]
     if length > 45:
         score -= (length - 45) * 0.3
@@ -135,9 +165,11 @@ def _score(cand, audio, settings, remaining=()):
         kind = "multi_kill"
     elif cand["events"]:
         kind = "fight"
+    elif talk is not None:
+        kind = cand.get("talk_type", "talk")
     else:
         kind = "reaction"
-    cand.update(score=round(score, 2), type=kind, reasons=reasons)
+    cand.update(score=round(score, 2), type=kind, reasons=list(dict.fromkeys(reasons)))
     return cand
 
 
@@ -148,12 +180,12 @@ def _overlap(a, b):
     return inter / min(a["end"] - a["start"], b["end"] - b["start"])
 
 
-def build(events, audio, settings, duration, remaining=()):
-    candidates = []
+def build(events, audio, settings, duration, remaining=(), sounds=None, talks=()):
+    candidates = [dict(t, events=[]) for t in talks]
     useful = [e for e in events if e["kind"] in WEIGHTS]
     for cluster in _cluster(useful, settings.merge_gap_s):
         first, last = cluster[0]["t"], cluster[-1]["t"]
-        start, end = _bounds(first, last, audio, settings)
+        start, end = _bounds(first, last, audio, settings, sounds)
         anchor = float(np.median([e["t"] for e in cluster]))
         start, end = _fit(start, end, anchor, settings, duration)
         candidates.append({"start": start, "end": end, "events": cluster, "source": "hud"})

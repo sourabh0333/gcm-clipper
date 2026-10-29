@@ -5,9 +5,10 @@ import csv
 import re
 import shutil
 import sys
+import time
 from pathlib import Path
 
-from . import audio, captions, judge, moments, render, review, sounds, vision
+from . import audio, captions, judge, moments, render, review, sounds, talk, transcript, vision
 from .config import Settings
 from .jobs import STAGES, Job, log, read_json, write_json
 from .media import download, extract_audio, extract_frame, is_url, parse_time, probe, search
@@ -18,7 +19,8 @@ OUTPUTS = {
     "vision": ["vision.json"],
     "audio": ["audio.npz"],
     "sounds": ["sounds.npz"],
-    "moments": ["moments.json"],
+    "transcript": ["transcript.json"],
+    "moments": ["moments.json", "talk.json"],
     "judge": ["judge", "ranked.json"],
     "captions": ["captions"],
     "render": ["clips", "clips.json"],
@@ -38,6 +40,16 @@ def job_name(source, section):
 
 
 def clear_from(job, stage):
+    # Keep or reject decisions belong to the clips they were made on. Clip ids are reused when moments run
+    # again, so move the decisions aside with the clip list they refer to; they are labelled data.
+    decisions = job.path("decisions.json")
+    if STAGES.index(stage) <= STAGES.index("moments") and decisions.exists():
+        archive = job.path("history", time.strftime("%Y%m%d-%H%M%S"))
+        archive.mkdir(parents=True)
+        shutil.move(str(decisions), archive / "decisions.json")
+        if job.path("ranked.json").exists():
+            shutil.copyfile(job.path("ranked.json"), archive / "ranked.json")
+        log(f"earlier keep/reject decisions moved to {archive}")
     for name in STAGES[STAGES.index(stage):]:
         for item in OUTPUTS[name]:
             path = job.path(item)
@@ -68,6 +80,9 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
     def sounds_stage(job):
         sounds.save(job.path("sounds.npz"), sounds.analyse(job.path("audio.wav")))
 
+    def transcript_stage(job):
+        write_json(job.path("transcript.json"), transcript.transcribe(job.path("audio.wav"), settings))
+
     def vision_stage(job):
         info = read_json(job.path("info.json"))
         write_json(job.path("vision.json"), vision.scan(info["path"], info, settings))
@@ -76,8 +91,10 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
         info = read_json(job.path("info.json"))
         seen = read_json(job.path("vision.json"))
         events = seen["events"]
-        found = moments.build(events, audio.load(job.path("audio.npz")), settings, info["duration"],
-                              seen.get("remaining", []))
+        heard, said = sounds.load(job.path("sounds.npz")), read_json(job.path("transcript.json"))
+        loudness = audio.load(job.path("audio.npz"))
+        talks = talk.find(job, said, heard, loudness, settings, info["duration"])
+        found = moments.build(events, loudness, settings, info["duration"], seen.get("remaining", []), heard, talks)
         write_json(job.path("moments.json"), found)
         log(f"moments: {len(found)} candidates from {len(events)} HUD events")
 
@@ -85,7 +102,7 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
         info = read_json(job.path("info.json"))
         found = read_json(job.path("moments.json"))
         if use_judge and settings.gemini_api_key:
-            judge.judge_all(job, info["path"], found, settings)
+            judge.judge_all(job, info["path"], found, settings, read_json(job.path("transcript.json")))
         elif use_judge:
             log("judge: no GEMINI_API_KEY in .env, ranking with the detector score only")
         ranked = judge.merge(job, found, settings)[: settings.top_n]
@@ -99,7 +116,7 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
             return
         info = read_json(job.path("info.json"))
         layout = render.resolve_layout(settings.layout, info)
-        captions.caption_clips(job, info["path"], read_json(job.path("ranked.json")), settings,
+        captions.caption_clips(job, read_json(job.path("ranked.json")), read_json(job.path("transcript.json")),
                                render.CAPTION_MARGIN.get(layout, 380))
 
     def render_stage(job):
@@ -122,8 +139,8 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
         job.path("review.html").write_text(review.build(job.root.name, info, ranked), encoding="utf-8")
         log(f"review: open {job.path('review.html')}")
 
-    stages = {"ingest": ingest, "audio": audio_stage, "sounds": sounds_stage, "vision": vision_stage,
-              "moments": moments_stage,
+    stages = {"ingest": ingest, "audio": audio_stage, "sounds": sounds_stage, "transcript": transcript_stage,
+              "vision": vision_stage, "moments": moments_stage,
               "judge": judge_stage, "captions": captions_stage, "render": render_stage, "review": review_stage}
     for name in STAGES:
         job.run(name, stages[name])
@@ -147,6 +164,8 @@ def cmd_run(args, settings):
     job = Job(settings.jobs_dir / (args.job or job_name(args.source, section)))
     saved = read_json(job.path("settings.json"))
     if saved:
+        # A resumed job keeps its time range too; the downloaded video only covers that range.
+        section = section or (tuple(saved["section"]) if saved.get("section") else None)
         # A resumed job keeps the layout it started with unless the command line changes it.
         settings.layout = args.layout or ("split" if args.facecam else saved.get("layout", settings.layout))
         settings.facecam = settings.facecam or (tuple(saved["facecam"]) if saved.get("facecam") else None)

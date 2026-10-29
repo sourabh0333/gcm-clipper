@@ -58,8 +58,10 @@ class Settings:
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash-lite"
     gemini_rpm: int = 10
-    whisper_model: str = "small"
-    # Auto-detect mistook Hinglish clips for Spanish and Portuguese; set AIGCM_CAPTION_LANGUAGE to change it.
+    # A folder name under models/ (a converted Hinglish model) or a stock Whisper size such as "small".
+    whisper_model: str = "hinglish-swift"
+    # Language for stock Whisper models. Auto-detect mistook Hinglish clips for Spanish and Portuguese;
+    # set AIGCM_CAPTION_LANGUAGE to change it.
     caption_language: str | None = "hi"
 
     @classmethod

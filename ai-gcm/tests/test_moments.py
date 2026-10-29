@@ -3,6 +3,7 @@ import numpy as np
 from aigcm import moments
 from aigcm.captions import chunk_words, to_ass
 from aigcm.config import Settings
+from aigcm.transcript import looping, split_lines, words_between
 from aigcm.vision import classify
 
 
@@ -53,6 +54,32 @@ def test_loud_spike_without_hud_event_becomes_reaction():
     found = moments.build([], audio, Settings(), 600)
     assert len(found) == 1 and found[0]["type"] == "reaction"
     assert found[0]["start"] < 400 < found[0]["end"]
+
+
+def test_fight_clip_starts_where_the_gunfire_began():
+    t = np.arange(600, dtype=np.float32)
+    gun = np.zeros(600, dtype=np.float32)
+    gun[[180, 182, 185, 188, 191, 195, 199]] = 0.9   # a fight with short pauses, ending in the kill at 200
+    gun[150] = 0.9                                    # an earlier lone shot, too far back to belong to it
+    found = moments.build([ev(200, "self_kill")], quiet_audio(600), Settings(), 600, sounds={"t": t, "gunfire": gun})
+    assert found[0]["start"] == 178
+
+
+def test_words_and_captions_are_cut_from_the_transcript():
+    words = [{"start": 10.0 + i, "end": 10.5 + i, "word": f"w{i}"} for i in range(6)]
+    transcript = {"segments": [{"start": 10.0, "end": 15.5, "text": " ".join(w["word"] for w in words),
+                                "words": words}]}
+    assert [w["word"] for w in words_between(transcript, 11.5, 14.6)] == ["w2", "w3", "w4"]
+    assert words_between(transcript, 11.5, 14.6)[0]["start"] == 0.5
+
+
+def test_long_segments_split_into_lines_and_loops_are_caught():
+    words = [{"start": t, "end": t + 0.3, "word": w} for t, w in
+             [(0.0, "Sorry"), (0.4, "bhaiya."), (0.8, "Lag"), (1.2, "ho"), (1.6, "gaya"), (3.0, "koi"), (3.4, "baat")]]
+    assert [" ".join(w["word"] for w in line) for line in split_lines(words)] == \
+        ["Sorry bhaiya.", "Lag ho gaya", "koi baat"]
+    loop = [{"start": i, "end": i + 0.5, "word": "chaudhari,"} for i in range(14)]
+    assert looping(loop) and not looping(words)
 
 
 def test_hud_text_classification():
