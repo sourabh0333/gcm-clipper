@@ -33,7 +33,7 @@ Score every 2 s from: laughter and scream spikes relative to the stream's own le
 
 - Rerunning a job without `--section` wiped its saved time range (the app then showed "Whole video" and wrong stream times). A resumed job now keeps its range; the three test jobs' ranges were restored by hand.
 - Rerunning `moments` reused clip ids, so earlier keep/reject decisions pointed at different clips. They are now moved to `history/<time>/` with the clip list they belong to. The owner's 28 Oct phone review of DIPENDU is in `jobs/Pylusnav-1Q_1800-3600/history/20261028-reviewed-on-phone/`.
-- ANJI's and GtxPreet's old clips were deleted by the reruns and are being remade with the new pipeline.
+- ANJI's and GtxPreet's old clips were deleted by the reruns and were remade with the new pipeline (29 Oct). ANJI: 9 clips, the top 3 are talk clips picked mostly from laughter because its transcript is poor, so they likely outrank its fights wrongly. GtxPreet (transcript 511 s for 40 min): 12 clips, fights on top, 6 talk clips.
 
 ## Next
 
