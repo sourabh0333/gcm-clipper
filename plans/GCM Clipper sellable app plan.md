@@ -1,8 +1,21 @@
 # GCM Clipper: plan to a ready-to-sell app
 
-Written 4 November 2026. Goal: an app a BGMI streamer can sign up to, pay for by UPI, and use every week without you doing anything by hand. After that, contact streamers.
+Written 4 November 2026, updated the same day with approval-based posting, learning from past posts, and more games. The research behind the update is [AI clipper autoposting and multigame gaps](../reports/AI%20clipper%20autoposting%20and%20multigame%20gaps.md).
 
-**Estimate: about 6–7 weeks of building**, if you can do the account sign-ups and decisions in the "You do" column within a day or two each time. Claude writes the code, tests and docs.
+Goal: an app a gaming streamer can sign up to, pay for by UPI, and use every week without you doing anything by hand: it makes the clips, asks "should I post this?", posts the approved ones to YouTube Shorts and Instagram Reels on a schedule, and learns which kinds of clips work for that creator. After that, contact streamers.
+
+**Estimate: about 8–9 weeks of building to launch**, then Free Fire and other games in the month after. This assumes you can do the account sign-ups and decisions in the "You" column within a day or two each time. Claude writes the code, tests and docs.
+
+---
+
+## What the research changed
+
+- **Posting after approval is needed, but it won't win sales on its own.** OpusClip, Vizard, Klap, Reap and Eklipse already post to Shorts and Reels on their $15–39 a month plans. Creators complain about bad clips, not about uploading. So posting is part of the base product, and clip quality stays the main job.
+- **YouTube posting became cheap two days ago** (2 Nov 2026): uploads from new, unreviewed apps no longer stay private, and an upload costs 1 unit from a separate allowance of 100 uploads a day for the whole app (about 33 creators at 3 Shorts a day). This is two days old, so it gets tested with one real upload first.
+- **Instagram needs paperwork:** Meta App Review plus Business Verification, which needs a registered company (Cevrynt). Until that clears, beta creators post to Instagram through a posting service (Zernio: first 2 accounts free).
+- **Learning from past posts is the real gap, but only one kind:** re-rank today's clips by what worked for this creator before (kills, clutches, funny talk, rage; which game). Nobody does this with game-event labels. It needs 10+ posted clips per creator first, so it comes after launch. "Best time to post" has weak evidence for Shorts; generic virality scores are mistrusted.
+- **Free Fire comes next:** about 77.4M monthly users in India against BGMI's 20.8M, relaunched as Free Fire India on 28 Oct 2026, and its kill and win banners work like BGMI's. A "talk mode" then covers GTA V roleplay, Minecraft and horror games using the funny-moment pipeline that already exists.
+- **Skip:** TikTok (banned in India), Moj/Josh/ShareChat posting (no public API; download and share only), fully automatic posting without approval (YouTube's "inauthentic content" and Instagram's originality rules), generic virality scores, a "best time" engine, built-in A/B tests (Instagram's Trial Reels does it free).
 
 ---
 
@@ -11,15 +24,17 @@ Written 4 November 2026. Goal: an app a BGMI streamer can sign up to, pay for by
 A creator can:
 
 1. Sign up with Google or a phone OTP on the website or the installed app.
-2. Start a free trial stream: paste a YouTube link or upload a recording.
-3. Get 10 ranked 9:16 clips with Hinglish captions and titles within a few hours, with an email or WhatsApp-style notification.
-4. Swipe to keep or reject, trim a clip, fix a caption, then download or share.
-5. Pay monthly by UPI AutoPay, see how many stream hours are left, cancel any time.
+2. Start a free trial stream: paste a YouTube link or upload a recording, and pick the game.
+3. Get ranked 9:16 clips with Hinglish captions, clean titles and hashtags within a few hours, with a notification.
+4. Swipe to keep or reject, trim a clip, fix a caption or title.
+5. Connect YouTube and Instagram once. Each kept clip asks **"Post this?"**. Approved clips go into a queue that posts one or more a day at times the creator picks, with a clear status and an alert if a post fails.
+6. See a "your results" page: which kinds of clips did best on Shorts and Reels.
+7. Pay monthly by UPI AutoPay, see stream hours left, cancel any time.
 
 And you can:
 
-6. See every user, job, failure and payment on an admin page, and fix things without opening the code.
-7. Leave it running for a week without touching it.
+8. See every user, job, post, failure and payment on an admin page.
+9. Leave it running for a week without touching it.
 
 ---
 
@@ -27,10 +42,11 @@ And you can:
 
 | # | Decision | Options | Suggestion |
 |---|---|---|---|
-| D1 | Brand and seller | Sell as **Cevrynt** (your company) or as a new name like **GCM Clipper** | Under Cevrynt: the payment account, policies and domain then belong to the company |
-| D2 | Price | The validation plan offers ₹499 and ₹999 per 4 weeks | Two plans: **Starter ₹499** (about 8 stream hours a month) and **Pro ₹999** (about 20 hours), first stream free |
-| D3 | Where processing runs at launch | **Laptop** (free, but must stay on, and handles roughly 10–20 creators) or **cloud server** (always on and faster, but costs money every month from day one) | Laptop for the first customers, cloud once revenue covers it (step 23) |
+| D1 | Brand and seller | Sell as **Cevrynt** or as a new name like **GCM Clipper** | Under Cevrynt: Meta's Business Verification and Razorpay both need a business identity, and the domain and policies belong to the company |
+| D2 | Price | The validation plan offers ₹499 and ₹999 per 4 weeks | **Starter ₹499** (about 8 stream hours a month, YouTube posting) and **Pro ₹999** (about 20 hours, YouTube and Instagram posting, results page), first stream free. Rivals with posting charge about ₹1,300–3,500 a month |
+| D3 | Where processing runs at launch | **Laptop** (free, roughly 30–40 creators, must stay on) or **cloud server** (always on, costs monthly from day one) | Laptop first, cloud once revenue covers it (step 32) |
 | D4 | Video source | YouTube link only, or also file upload | Both. Downloading from YouTube is against YouTube's terms, even for the creator's own videos; upload is the safe path |
+| D5 | Instagram during beta | Posting service (Zernio, free for 2 accounts, then about ₹530 per account a month) or wait for Meta's review | Posting service for beta creators, direct Meta posting once Business Verification and App Review clear |
 
 ---
 
@@ -38,47 +54,65 @@ And you can:
 
 | Step | What | Who | Done when |
 |---|---|---|---|
-| 1 | **Full-length streams:** 3–5 hour streams run end to end. Process in chunks, resume after a crash or power cut, delete the source video after clips are made so the disk doesn't fill up. | Claude | Three full real streams processed with no manual fixes |
-| 2 | **Speed:** run vision, audio and transcript at the same time, read the HUD at a lower rate during quiet stretches, download only what's needed. Target: a 3-hour stream in about 1 hour on the laptop (now 1–3 hours). | Claude | Measured on a 3-hour stream |
-| 3 | **Accuracy:** test on 10 more streams. Add knock detection, use the bigger speech model when a transcript looks broken (ANJI case), tune talk vs fight ranking from your swipes. | Claude, you review clips | Each stream checked; misses written down |
-| 4 | **File upload:** upload a recording from phone or PC, in parts if large, as well as pasting a link. | Claude | A 2 GB file uploads from a phone and processes |
-| 5 | **Clip editing:** trim start and end, edit caption text, change the title, choose the layout (facecam on top or blur). | Claude | Done from a phone |
-| 6 | **Delivery:** download one clip or all as a zip, share to Instagram or YouTube from the phone, copy the suggested title and hashtags. | Claude | Works on Android Chrome |
+| 1 | **Full-length streams:** 3–5 hour streams end to end, in chunks, resume after a crash or power cut, delete the source after clips are made. | Claude | Three full real streams processed with no manual fixes |
+| 2 | **Speed:** run vision, audio and transcript at the same time, read the HUD less often in quiet stretches. Target a 3-hour stream in about 1 hour on the laptop (now 1–3 hours). | Claude | Measured on a 3-hour stream |
+| 3 | **Accuracy:** test on 10 more streams. Knock detection, the bigger speech model when a transcript looks broken, tune talk vs fight ranking from your swipes. | Claude, you review clips | Each stream checked; misses written down |
+| 4 | **File upload** from phone or PC, in parts if large, as well as pasting a link. | Claude | A 2 GB file uploads from a phone |
+| 5 | **Clip editing:** trim, edit caption text, change title, choose layout. | Claude | Done from a phone |
+| 6 | **Post-ready output:** clean Hinglish title (no swear words in titles, which limits ads), 3–5 hashtags, the "not endorsed by Krafton" line for BGMI descriptions, no GCM watermark, no added music. | Claude | Every clip has a ready title, hashtags and description |
+| 7 | **Clip labels for learning later:** save each clip's type (kill, multi-kill, clutch, funny, rage, banter), game, length and score, and later its posting results. | Claude | Stored for every clip |
+| 8 | **Delivery:** download one clip or all as a zip, share from the phone (also covers Moj, Josh and ShareChat by hand). | Claude | Works on Android Chrome |
 
 ## Phase 2: Turn it into a service (weeks 3–4, first small costs)
 
 | Step | What | Who | Cost |
 |---|---|---|---|
-| 7 | **Domain**, e.g. `clipper.cevrynt.com` (free if you own cevrynt.com) or a new `.in` | You buy or confirm, Claude sets it up | ₹0, or about ₹800 a year for a new domain |
-| 8 | **Website and app hosting** on Cloudflare Pages: secure HTTPS, so the app installs on phones and sharing works | You make a free Cloudflare account, Claude deploys | ₹0 |
-| 9 | **Laptop connected to the internet safely** through Cloudflare Tunnel: no open ports, and it works from anywhere | Claude | ₹0 |
-| 10 | **Accounts:** Google login and phone OTP, each creator sees only their own streams (Supabase free tier: login and database) | You make a free Supabase account, Claude builds | ₹0 up to 50,000 users |
-| 11 | **Job queue:** many creators can submit; streams run one at a time in order, with a "your stream is 3rd in line" message | Claude | ₹0 |
-| 12 | **Clip storage** on Cloudflare R2, auto-deleted after 30 days | Claude | ₹0 up to 10 GB, then about ₹1.3 per GB a month |
-| 13 | **Payments:** Razorpay subscriptions with UPI AutoPay, plans from D2, free first stream, upgrade, cancel, invoices | **You do Razorpay KYC** (PAN, bank account, and company documents if you sell as Cevrynt), Claude builds | No fixed fee, about 2% of each payment |
-| 14 | **Usage limits:** stream hours per plan, a clear message when the limit is reached | Claude | ₹0 |
-| 15 | **Notifications:** email when clips are ready or a stream fails (Brevo or Resend free tier) | You make the account, Claude builds | ₹0 for the first few hundred emails a day |
+| 9 | **Domain**, e.g. `clipper.cevrynt.com` or a new `.in` | You buy or confirm, Claude sets it up | ₹0, or about ₹800 a year |
+| 10 | **Website and app hosting** on Cloudflare Pages: HTTPS, installable app, sharing works | You make a free Cloudflare account, Claude deploys | ₹0 |
+| 11 | **Laptop connected safely** through Cloudflare Tunnel | Claude | ₹0 |
+| 12 | **Accounts:** Google login and phone OTP; each creator sees only their own streams (Supabase free tier) | You make a free Supabase account, Claude builds | ₹0 up to 50,000 users |
+| 13 | **Job queue:** many creators submit; streams run in order, with "your stream is 3rd in line" | Claude | ₹0 |
+| 14 | **Clip storage** on Cloudflare R2, auto-deleted after 30 days (posted clips stay on the platforms) | Claude | ₹0 up to 10 GB |
+| 15 | **Payments:** Razorpay subscriptions with UPI AutoPay, plans from D2, free first stream | **You do Razorpay KYC**, Claude builds | About 2% of each payment |
+| 16 | **Usage limits** per plan | Claude | ₹0 |
+| 17 | **Notifications:** email when clips are ready, a post went live, or something failed | You make the account (Brevo or Resend free tier), Claude builds | ₹0 |
 
-## Phase 3: Trust, safety and launch (weeks 5–6)
+## Phase 3: Posting after approval (weeks 5–6)
 
 | Step | What | Who | Cost |
 |---|---|---|---|
-| 16 | **Paid Gemini for customer streams.** On the free tier Google can use what's sent to improve its products. That's fine for testing on public streams, not for paying customers' videos. | You add a payment card to the Google AI Studio account, Claude adds a spending cap | Estimate: a few rupees per stream for text and clip checks; measured in step 3 before launch |
-| 17 | **Legal pages:** privacy policy, terms of service, refund policy (Razorpay requires all three), and consent for AI processing. Terms say the creator must own the stream. | Claude drafts, **you approve**; a lawyer review is worth it once revenue starts | ₹0 to draft |
-| 18 | **Game and platform terms:** check Krafton's BGMI and YouTube terms on clips and on tools that process streams | Claude researches, you decide | ₹0 |
-| 19 | **Admin page:** users, jobs, failures, payments, retry button, refund link | Claude | ₹0 |
-| 20 | **Monitoring:** alert to your phone when a job fails or the laptop goes offline | Claude | ₹0 |
-| 21 | **Landing page:** what it does, demo clips (with permission), pricing, sign-up | Claude builds, you approve | ₹0 |
-| 22 | **Closed beta:** 5 friendly streamers use it free for 2 weeks; fix what they hit; collect 2–3 testimonials | You invite, Claude fixes | ₹0 |
+| 18 | **Test YouTube's new rule first:** upload one test Short from a test Google project and confirm it goes public; check the quota page | Claude, with your test YouTube channel | ₹0 |
+| 19 | **Connect YouTube:** creator signs in once; Google's free "sensitive scope" check (about 3–5 business days, needs the domain, privacy policy and a demo video) | You submit with Claude's prepared answers, Claude builds | ₹0 |
+| 20 | **"Post this?" approvals:** every kept clip asks; approve one by one or a batch; edit title and description before approving | Claude | ₹0 |
+| 21 | **Posting queue and schedule:** "post 1 approved clip a day at 6 pm" style settings (simple defaults, no best-time engine); YouTube's own scheduled publish | Claude | ₹0 |
+| 22 | **Post status and safety:** posted, scheduled, failed with retry; alert on failure; daily-limit counter; never repost the same clip to the same channel | Claude | ₹0 |
+| 23 | **Instagram Reels for beta creators** through the posting service (D5); Trial Reels option | You make the Zernio account, Claude builds | ₹0 for 2 accounts, then about ₹530 per account a month |
+| 24 | **Start Meta Business Verification and App Review** under Cevrynt (same week as Razorpay KYC); switch to direct Instagram posting when approved | **You submit company documents**, Claude prepares the app review | ₹0 |
 
-## Phase 4: After launch, when revenue allows
+## Phase 4: Trust and launch (weeks 7–8)
+
+| Step | What | Who | Cost |
+|---|---|---|---|
+| 25 | **Paid Gemini for customer streams** (free tier lets Google use the data), with a spending cap | You add a card in Google AI Studio, Claude sets the cap | Estimate: a few rupees per stream |
+| 26 | **Legal pages:** privacy policy, terms (creator must own the stream; posting only after their approval), refund policy, AI processing consent, YouTube and Meta data-use disclosures | Claude drafts, **you approve** | ₹0 to draft |
+| 27 | **Game and platform terms:** Krafton, Garena, Rockstar, Mojang, YouTube and Instagram rules on clips and auto-posting | Claude researches, you decide | ₹0 |
+| 28 | **Admin page:** users, jobs, posts, failures, payments, retry, refund link | Claude | ₹0 |
+| 29 | **Monitoring:** phone alert when a job or post fails or the laptop goes offline | Claude | ₹0 |
+| 30 | **Landing page:** demo clips (with permission), pricing, sign-up | Claude builds, you approve | ₹0 |
+| 31 | **Closed beta:** 5 streamers for 2 weeks, free; fix what they hit; 2–3 testimonials; compare their own picks with the app's ranking | You invite, Claude fixes | ₹0 |
+
+## Phase 5: After launch (month 1–3)
 
 | Step | What | When |
 |---|---|---|
-| 23 | **Cloud worker with a GPU**, so it doesn't depend on the laptop and runs faster | When the queue often waits more than a few hours, or revenue covers roughly ₹3,000–8,000 a month (estimate, depends on hours used) |
-| 24 | **Play Store app** (the installed web app wrapped for Android) | Optional; Google charges a one-time fee of about ₹2,100 |
-| 25 | **Learn from swipes:** ranking adapts to each creator's keeps and rejects | Once there are a few hundred decisions |
-| 26 | **Organisations plan** (esports teams, agencies): several channels under one account | If organisations show interest |
+| 32 | **Cloud worker with a GPU**, so it doesn't depend on the laptop | When the queue often waits hours, or revenue covers roughly ₹3,000–8,000 a month (estimate) |
+| 33 | **Free Fire MAX / Free Fire India** as the second game: kill, squad-wipe and Booyah detection, trained on a few hundred labelled frames from real streams | Month 1 after launch |
+| 34 | **Talk mode for any game** (GTA V roleplay, Minecraft, horror, party games): speech, laughter, loudness and the AI judge, no game detector | Month 1 after launch |
+| 35 | **"Your results" page:** from YouTube Analytics and Instagram Insights, which clip types got the best watch-through and views | Once creators have 10+ posted clips each |
+| 36 | **Personal ranking:** push up the kinds of clips that worked for this creator, combined with their keep/reject swipes | After step 35, checked against beta creators' own picks |
+| 37 | **Valorant** (very standard HUD, open tools exist) | When PC creators ask |
+| 38 | **Play Store app** (the installed web app wrapped for Android) | Optional; about ₹2,100 one-time Google fee |
+| 39 | **Organisations plan** (esports teams, agencies): several channels under one account | If organisations show interest |
 
 ---
 
@@ -88,23 +122,40 @@ And you can:
 |---|---|
 | Hosting, login, database, storage, email, tunnel (free tiers) | ₹0 |
 | Domain | ₹0 with cevrynt.com, or about ₹800 a year |
+| YouTube posting and Google's scope check | ₹0 |
+| Instagram posting during beta (2 accounts) | ₹0 |
 | Razorpay | ₹0 upfront, about 2% per payment |
 | Paid Gemini for customer streams | A few rupees per stream, from the first paying customer |
 | Play Store (optional) | About ₹2,100 one time |
 
-So the app can be built and launched for **under ₹1,000**, with real costs starting only once creators pay.
+So the app can still be built and launched for **under ₹1,000**. Real costs start once creators pay: extra Instagram accounts through the posting service until Meta approves direct posting, paid Gemini, and later the cloud worker.
 
 ---
 
+## Check before building on it
+
+These come from thin or very new sources; each has a cheap check, built into the steps above.
+
+| Claim | Check |
+|---|---|
+| YouTube uploads from unreviewed apps can be public (2 Nov 2026) | Step 18: one real test upload |
+| Upload quota of 100 a day for the app | Step 18: read the quota page in Google Cloud Console |
+| Instagram's daily API post limit (Meta's page says both 100 and 50) | Read the limit on a test account; either is enough per creator |
+| Meta Business Verification time (one report of 10+ days) | Start early, step 24 |
+| Posting-service prices and whether free tiers allow commercial use | Read their pricing and terms before step 23 |
+| Free Fire screen signals and effort | Run 2–3 Free Fire streams through the current pipeline before step 33 |
+| Personal ranking improves views | Compare with beta creators' own picks (step 31) before selling it as a feature |
+
 ## Limits to know
 
-- **The laptop is the server at first.** If it's off, asleep, or loses power or internet, processing stops (clips already made stay available). At about 1 hour per 3-hour stream it can handle around 15–20 streams a day, which is roughly 30–40 creators streaming three times a week. Step 23 removes this limit.
-- **YouTube downloading** breaks YouTube's terms, even for a creator's own video. Competitors accept links anyway, but the safe path is upload (step 4), and the terms (step 17) make the creator responsible for owning the content.
-- **Accounts only you can create:** domain, Cloudflare, Supabase, Razorpay (KYC), Google AI Studio billing, email service, Play Store. Claude can't sign up or enter payment or ID details for you. Each takes 5–30 minutes; Razorpay KYC can take a few days to approve, so start it in week 1.
+- **The laptop is the server at first.** If it's off or offline, processing stops (already scheduled YouTube posts still go out, since YouTube publishes them). About 30–40 creators maximum until step 32.
+- **YouTube's 100 uploads a day is for the whole app,** about 33 creators at 3 Shorts a day. Beyond that, Google's quota-extension form.
+- **Posting doesn't sell the product on its own.** The research is clear that creators judge clip quality first. Steps 1–3 matter more than steps 18–24.
+- **Accounts only you can create:** domain, Cloudflare, Supabase, Razorpay (KYC), Meta Business Verification (company documents), Google AI Studio billing, email service, posting service, Play Store. Claude can't sign up or enter payment or ID details for you. Start Razorpay KYC and Meta verification in week 1, since both can take days.
 
 ## Risk of building before asking streamers
 
-Six weeks of building happens before any streamer says what they want, so there's a chance of building things they don't need, or missing the one thing they care about. A cheap way to reduce this without changing the plan: during Phase 1, send your own clips to 3–5 streamers you know and ask one question, "would you post these?". It takes a few hours and costs nothing.
+Eight weeks of building happens before any streamer says what they want. A free way to reduce this: during Phase 1, send your own clips to 3–5 streamers you know and ask "would you post these?" and "would you let an app post them for you after you approve?".
 
 ---
 
@@ -112,10 +163,13 @@ Six weeks of building happens before any streamer says what they want, so there'
 
 | Week | Dates | Build | You |
 |---|---|---|---|
-| 1 | 4–10 Nov | Steps 1–2 (full streams, speed) | Decide D1–D4. Start Razorpay KYC. Create Cloudflare and Supabase accounts |
-| 2 | 11–17 Nov | Steps 3–6 (accuracy, upload, editing, delivery) | Review test clips strictly |
-| 3 | 18–24 Nov | Steps 7–11 (domain, hosting, tunnel, login, queue) | Domain, email account |
-| 4 | 25 Nov – 1 Dec | Steps 12–15 (storage, payments, limits, emails) | Razorpay live keys once KYC is approved |
-| 5 | 2–8 Dec | Steps 16–21 (paid AI, legal, admin, alerts, landing page) | Approve legal pages, add card for paid Gemini |
-| 6 | 9–15 Dec | Fixes; start the closed beta (step 22) | Invite 5 streamers |
-| 7 | 16–22 Dec | Beta fixes | Collect testimonials, then open sales |
+| 1 | 4–10 Nov | Steps 1–2 (full streams, speed) | Decide D1–D5. Start Razorpay KYC and Meta Business Verification. Create Cloudflare and Supabase accounts |
+| 2 | 11–17 Nov | Steps 3–8 (accuracy, upload, editing, post-ready output, labels, delivery) | Review test clips strictly |
+| 3 | 18–24 Nov | Steps 9–13 (domain, hosting, tunnel, login, queue) | Domain, email account |
+| 4 | 25 Nov – 1 Dec | Steps 14–17 (storage, payments, limits, notifications) | Razorpay live keys once KYC is approved |
+| 5 | 2–8 Dec | Steps 18–22 (YouTube test, connect, approvals, queue, post status) | Test YouTube channel; submit Google's scope check |
+| 6 | 9–15 Dec | Steps 23–24 (Instagram via posting service, Meta app review) | Posting-service account |
+| 7 | 16–22 Dec | Steps 25–30 (paid AI, legal, admin, alerts, landing page) | Approve legal pages, add card for paid Gemini |
+| 8 | 23–29 Dec | Fixes; closed beta starts (step 31) | Invite 5 streamers |
+| 9 | 30 Dec – 5 Jan | Beta fixes | Testimonials, then open sales |
+| +1 month | January | Steps 33–34 (Free Fire, talk mode for other games) | Find 2–3 Free Fire streamers for testing |
