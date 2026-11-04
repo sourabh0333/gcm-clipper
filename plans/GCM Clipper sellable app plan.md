@@ -12,7 +12,7 @@ Goal: an app a gaming streamer can sign up to, pay for by UPI, and use every wee
 
 - **Posting after approval is needed, but it won't win sales on its own.** OpusClip, Vizard, Klap, Reap and Eklipse already post to Shorts and Reels on their $15–39 a month plans. Creators complain about bad clips, not about uploading. So posting is part of the base product, and clip quality stays the main job.
 - **YouTube posting became cheap two days ago** (2 Nov 2026): uploads from new, unreviewed apps no longer stay private, and an upload costs 1 unit from a separate allowance of 100 uploads a day for the whole app (about 33 creators at 3 Shorts a day). This is two days old, so it gets tested with one real upload first.
-- **Instagram needs paperwork:** Meta App Review plus Business Verification, which needs a registered company (Cevrynt). Until that clears, beta creators post to Instagram through a posting service (Zernio: first 2 accounts free).
+- **Instagram needs paperwork:** Meta App Review plus Business Verification, which needs proof of a business (for a sole proprietor, documents such as Udyam or GST registration). Until that clears, beta creators post to Instagram through a posting service (Zernio: first 2 accounts free).
 - **Learning from past posts is the real gap, but only one kind:** re-rank today's clips by what worked for this creator before (kills, clutches, funny talk, rage; which game). Nobody does this with game-event labels. It needs 10+ posted clips per creator first, so it comes after launch. "Best time to post" has weak evidence for Shorts; generic virality scores are mistrusted.
 - **Free Fire comes next:** about 77.4M monthly users in India against BGMI's 20.8M, relaunched as Free Fire India on 28 Oct 2026, and its kill and win banners work like BGMI's. A "talk mode" then covers GTA V roleplay, Minecraft and horror games using the funny-moment pipeline that already exists.
 - **Skip:** TikTok (banned in India), Moj/Josh/ShareChat posting (no public API; download and share only), fully automatic posting without approval (YouTube's "inauthentic content" and Instagram's originality rules), generic virality scores, a "best time" engine, built-in A/B tests (Instagram's Trial Reels does it free).
@@ -42,11 +42,11 @@ And you can:
 
 | # | Decision | Options | Suggestion |
 |---|---|---|---|
-| D1 | Brand and seller | Sell as **Cevrynt** or as a new name like **GCM Clipper** | Under Cevrynt: Meta's Business Verification and Razorpay both need a business identity, and the domain and policies belong to the company |
+| D1 | Brand and seller | A separate product with its own name. The seller behind it can be **you as a sole proprietor**, or a **new company** later | **Its own brand, not Cevrynt** (owner's decision, 4 Nov). Start as a sole proprietor (PAN, bank account, free Udyam registration) for Razorpay and Meta; register a company only if the product takes off |
 | D2 | Price | The validation plan offers ₹499 and ₹999 per 4 weeks | **Starter ₹499** (about 8 stream hours a month, YouTube posting) and **Pro ₹999** (about 20 hours, YouTube and Instagram posting, results page), first stream free. Rivals with posting charge about ₹1,300–3,500 a month |
 | D3 | Where processing runs at launch | **Laptop** (free, roughly 30–40 creators, must stay on) or **cloud server** (always on, costs monthly from day one) | Laptop first, cloud once revenue covers it (step 32) |
 | D4 | Video source | YouTube link only, or also file upload | Both. Downloading from YouTube is against YouTube's terms, even for the creator's own videos; upload is the safe path |
-| D5 | Instagram during beta | Posting service (Zernio, free for 2 accounts, then about ₹530 per account a month) or wait for Meta's review | Posting service for beta creators, direct Meta posting once Business Verification and App Review clear |
+| D5 | Instagram during beta | (a) A posting service that Meta has already approved posts for us (Zernio: free for 2 accounts, then about ₹530 per account a month, vendor price not checked); (b) add each beta creator as a "tester" on our own Meta app, free but fiddly; (c) wait for Meta's review | (a) for beta, (b) as a free fallback, then direct posting once Business Verification and App Review clear |
 
 ---
 
@@ -67,7 +67,7 @@ And you can:
 
 | Step | What | Who | Cost |
 |---|---|---|---|
-| 9 | **Domain**, e.g. `clipper.cevrynt.com` or a new `.in` | You buy or confirm, Claude sets it up | ₹0, or about ₹800 a year |
+| 9 | **Domain**, a new `.com` or `.in` for the product's own name | You buy or confirm, Claude sets it up | About ₹800–1,000 a year |
 | 10 | **Website and app hosting** on Cloudflare Pages: HTTPS, installable app, sharing works | You make a free Cloudflare account, Claude deploys | ₹0 |
 | 11 | **Laptop connected safely** through Cloudflare Tunnel | Claude | ₹0 |
 | 12 | **Accounts:** Google login and phone OTP; each creator sees only their own streams (Supabase free tier) | You make a free Supabase account, Claude builds | ₹0 up to 50,000 users |
@@ -87,7 +87,7 @@ And you can:
 | 21 | **Posting queue and schedule:** "post 1 approved clip a day at 6 pm" style settings (simple defaults, no best-time engine); YouTube's own scheduled publish | Claude | ₹0 |
 | 22 | **Post status and safety:** posted, scheduled, failed with retry; alert on failure; daily-limit counter; never repost the same clip to the same channel | Claude | ₹0 |
 | 23 | **Instagram Reels for beta creators** through the posting service (D5); Trial Reels option | You make the Zernio account, Claude builds | ₹0 for 2 accounts, then about ₹530 per account a month |
-| 24 | **Start Meta Business Verification and App Review** under Cevrynt (same week as Razorpay KYC); switch to direct Instagram posting when approved | **You submit company documents**, Claude prepares the app review | ₹0 |
+| 24 | **Start Meta Business Verification and App Review** as a sole proprietor (same week as Razorpay KYC); switch to direct Instagram posting when approved | **You submit business documents**, Claude prepares the app review | ₹0 |
 
 ## Phase 4: Trust and launch (weeks 7–8)
 
@@ -121,14 +121,14 @@ And you can:
 | Item | Cost |
 |---|---|
 | Hosting, login, database, storage, email, tunnel (free tiers) | ₹0 |
-| Domain | ₹0 with cevrynt.com, or about ₹800 a year |
+| Domain | About ₹800–1,000 a year |
 | YouTube posting and Google's scope check | ₹0 |
 | Instagram posting during beta (2 accounts) | ₹0 |
 | Razorpay | ₹0 upfront, about 2% per payment |
 | Paid Gemini for customer streams | A few rupees per stream, from the first paying customer |
 | Play Store (optional) | About ₹2,100 one time |
 
-So the app can still be built and launched for **under ₹1,000**. Real costs start once creators pay: extra Instagram accounts through the posting service until Meta approves direct posting, paid Gemini, and later the cloud worker.
+So the app can still be built and launched for **about ₹1,000** (the domain). Real costs start once creators pay: extra Instagram accounts through the posting service until Meta approves direct posting, paid Gemini, and later the cloud worker.
 
 ---
 
@@ -151,7 +151,7 @@ These come from thin or very new sources; each has a cheap check, built into the
 - **The laptop is the server at first.** If it's off or offline, processing stops (already scheduled YouTube posts still go out, since YouTube publishes them). About 30–40 creators maximum until step 32.
 - **YouTube's 100 uploads a day is for the whole app,** about 33 creators at 3 Shorts a day. Beyond that, Google's quota-extension form.
 - **Posting doesn't sell the product on its own.** The research is clear that creators judge clip quality first. Steps 1–3 matter more than steps 18–24.
-- **Accounts only you can create:** domain, Cloudflare, Supabase, Razorpay (KYC), Meta Business Verification (company documents), Google AI Studio billing, email service, posting service, Play Store. Claude can't sign up or enter payment or ID details for you. Start Razorpay KYC and Meta verification in week 1, since both can take days.
+- **Accounts only you can create:** domain, Cloudflare, Supabase, Razorpay (KYC), Meta Business Verification (business documents), Google AI Studio billing, email service, posting service, Play Store. Claude can't sign up or enter payment or ID details for you. Start Razorpay KYC and Meta verification in week 1, since both can take days.
 
 ## Risk of building before asking streamers
 
