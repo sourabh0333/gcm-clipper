@@ -2,9 +2,9 @@
 
 Written 4 November 2026, updated the same day with approval-based posting, learning from past posts, and more games. The research behind the update is [AI clipper autoposting and multigame gaps](../reports/AI%20clipper%20autoposting%20and%20multigame%20gaps.md).
 
-Goal: an app a gaming streamer can sign up to, pay for by UPI, and use every week without you doing anything by hand: it makes the clips, asks "should I post this?", posts the approved ones to YouTube Shorts and Instagram Reels on a schedule, and learns which kinds of clips work for that creator. After that, contact streamers.
+Goal: an app a gaming YouTuber can sign up to, pay for by UPI, and use every week without you doing anything by hand: it makes the clips, asks "should I post this?", posts the approved ones to their YouTube channel as Shorts on a schedule, and learns which kinds of clips work for that creator. **YouTube is the main platform** (owner's decision, 4 Nov); Instagram is optional, after launch, if creators ask. After that, contact streamers.
 
-**Estimate: about 8–9 weeks of building to launch**, then Free Fire and other games in the month after. This assumes you can do the account sign-ups and decisions in the "You" column within a day or two each time. Claude writes the code, tests and docs.
+**Estimate: about 8 weeks of building to launch**, then Free Fire and other games in the month after. This assumes you can do the account sign-ups and decisions in the "You" column within a day or two each time. Claude writes the code, tests and docs.
 
 ---
 
@@ -12,7 +12,8 @@ Goal: an app a gaming streamer can sign up to, pay for by UPI, and use every wee
 
 - **Posting after approval is needed, but it won't win sales on its own.** OpusClip, Vizard, Klap, Reap and Eklipse already post to Shorts and Reels on their $15–39 a month plans. Creators complain about bad clips, not about uploading. So posting is part of the base product, and clip quality stays the main job.
 - **YouTube posting became cheap two days ago** (2 Nov 2026): uploads from new, unreviewed apps no longer stay private, and an upload costs 1 unit from a separate allowance of 100 uploads a day for the whole app (about 33 creators at 3 Shorts a day). This is two days old, so it gets tested with one real upload first.
-- **Instagram needs paperwork:** Meta App Review plus Business Verification, which needs proof of a business (for a sole proprietor, documents such as Udyam or GST registration). Until that clears, beta creators post to Instagram through a posting service (Zernio: first 2 accounts free).
+- **Instagram needs paperwork:** Meta App Review plus Business Verification, which needs proof of a business (for a sole proprietor, documents such as Udyam or GST registration). Since YouTube is the main platform, Instagram moves after launch (step 37) and only if creators ask.
+- **Access to a creator's channel is always through "Sign in with Google"**, never their password. Shared passwords break with 2-step verification, can get the account flagged, and make you responsible for anything that goes wrong. For a manual beta before the app's sign-in is ready, a creator can add you in YouTube Studio → Settings → Permissions, which needs no password. Clips are always posted on the creator's own channel, never re-uploaded to yours.
 - **Learning from past posts is the real gap, but only one kind:** re-rank today's clips by what worked for this creator before (kills, clutches, funny talk, rage; which game). Nobody does this with game-event labels. It needs 10+ posted clips per creator first, so it comes after launch. "Best time to post" has weak evidence for Shorts; generic virality scores are mistrusted.
 - **Free Fire comes next:** about 77.4M monthly users in India against BGMI's 20.8M, relaunched as Free Fire India on 28 Oct 2026, and its kill and win banners work like BGMI's. A "talk mode" then covers GTA V roleplay, Minecraft and horror games using the funny-moment pipeline that already exists.
 - **Skip:** TikTok (banned in India), Moj/Josh/ShareChat posting (no public API; download and share only), fully automatic posting without approval (YouTube's "inauthentic content" and Instagram's originality rules), generic virality scores, a "best time" engine, built-in A/B tests (Instagram's Trial Reels does it free).
@@ -27,8 +28,8 @@ A creator can:
 2. Start a free trial stream: paste a YouTube link or upload a recording, and pick the game.
 3. Get ranked 9:16 clips with Hinglish captions, clean titles and hashtags within a few hours, with a notification.
 4. Swipe to keep or reject, trim a clip, fix a caption or title.
-5. Connect YouTube and Instagram once. Each kept clip asks **"Post this?"**. Approved clips go into a queue that posts one or more a day at times the creator picks, with a clear status and an alert if a post fails.
-6. See a "your results" page: which kinds of clips did best on Shorts and Reels.
+5. Connect their YouTube channel once with "Sign in with Google". Each kept clip asks **"Post this?"**. Approved clips go into a queue that posts one or more Shorts a day at times the creator picks, with a clear status and an alert if a post fails.
+6. See a "your results" page: which kinds of clips did best as Shorts.
 7. Pay monthly by UPI AutoPay, see stream hours left, cancel any time.
 
 And you can:
@@ -42,11 +43,11 @@ And you can:
 
 | # | Decision | Options | Suggestion |
 |---|---|---|---|
-| D1 | Brand and seller | A separate product with its own name. The seller behind it can be **you as a sole proprietor**, or a **new company** later | **Its own brand, not Cevrynt** (owner's decision, 4 Nov). Start as a sole proprietor (PAN, bank account, free Udyam registration) for Razorpay and Meta; register a company only if the product takes off |
-| D2 | Price | The validation plan offers ₹499 and ₹999 per 4 weeks | **Starter ₹499** (about 8 stream hours a month, YouTube posting) and **Pro ₹999** (about 20 hours, YouTube and Instagram posting, results page), first stream free. Rivals with posting charge about ₹1,300–3,500 a month |
+| D1 | Brand and seller | A separate product with its own name. The seller behind it can be **you as a sole proprietor**, or a **new company** later | **Its own brand, not Cevrynt** (owner's decision, 4 Nov). Start as a sole proprietor (PAN, bank account, free Udyam registration) for Razorpay; register a company only if the product takes off |
+| D2 | Price | The validation plan offers ₹499 and ₹999 per 4 weeks | **Starter ₹499** (about 8 stream hours a month, YouTube posting) and **Pro ₹999** (about 20 hours, YouTube posting, results page), first stream free. Rivals with posting charge about ₹1,300–3,500 a month |
 | D3 | Where processing runs at launch | **Laptop** (free, roughly 30–40 creators, must stay on) or **cloud server** (always on, costs monthly from day one) | Laptop first, cloud once revenue covers it (step 32) |
 | D4 | Video source | YouTube link only, or also file upload | Both. Downloading from YouTube is against YouTube's terms, even for the creator's own videos; upload is the safe path |
-| D5 | Instagram during beta | (a) A posting service that Meta has already approved posts for us (Zernio: free for 2 accounts, then about ₹530 per account a month, vendor price not checked); (b) add each beta creator as a "tester" on our own Meta app, free but fiddly; (c) wait for Meta's review | (a) for beta, (b) as a free fallback, then direct posting once Business Verification and App Review clear |
+| D5 | Platforms | YouTube only at launch, or YouTube and Instagram | **YouTube only at launch** (owner's decision, 4 Nov). Instagram after launch if creators ask (step 37) |
 
 ---
 
@@ -77,25 +78,25 @@ And you can:
 | 16 | **Usage limits** per plan | Claude | ₹0 |
 | 17 | **Notifications:** email when clips are ready, a post went live, or something failed | You make the account (Brevo or Resend free tier), Claude builds | ₹0 |
 
-## Phase 3: Posting after approval (weeks 5–6)
+## Phase 3: Posting to YouTube after approval (week 5)
 
 | Step | What | Who | Cost |
 |---|---|---|---|
 | 18 | **Test YouTube's new rule first:** upload one test Short from a test Google project and confirm it goes public; check the quota page | Claude, with your test YouTube channel | ₹0 |
-| 19 | **Connect YouTube:** creator signs in once; Google's free "sensitive scope" check (about 3–5 business days, needs the domain, privacy policy and a demo video) | You submit with Claude's prepared answers, Claude builds | ₹0 |
+| 19 | **Connect YouTube with "Sign in with Google"** (no passwords): creator signs in once and can disconnect any time. Google's free "sensitive scope" check (about 3–5 business days, needs the domain, privacy policy and a demo video); until it passes, sign-in shows a warning and works only for listed test users, which is fine for the beta. Follow Google's user data rules: use the access only for approved uploads and scheduling, store it encrypted, delete it on disconnect | You submit with Claude's prepared answers, Claude builds | ₹0 |
 | 20 | **"Post this?" approvals:** every kept clip asks; approve one by one or a batch; edit title and description before approving | Claude | ₹0 |
 | 21 | **Posting queue and schedule:** "post 1 approved clip a day at 6 pm" style settings (simple defaults, no best-time engine); YouTube's own scheduled publish | Claude | ₹0 |
 | 22 | **Post status and safety:** posted, scheduled, failed with retry; alert on failure; daily-limit counter; never repost the same clip to the same channel | Claude | ₹0 |
-| 23 | **Instagram Reels for beta creators** through the posting service (D5); Trial Reels option | You make the Zernio account, Claude builds | ₹0 for 2 accounts, then about ₹530 per account a month |
-| 24 | **Start Meta Business Verification and App Review** as a sole proprietor (same week as Razorpay KYC); switch to direct Instagram posting when approved | **You submit business documents**, Claude prepares the app review | ₹0 |
+| 23 | **"Your channel" basics:** show the creator's recent Shorts and their views next to the clips, so they see what's already working (read-only, from YouTube Analytics) | Claude | ₹0 |
+| 24 | **Manual beta path:** until step 19's check passes, a beta creator can add you in YouTube Studio → Permissions instead | You, with the creator | ₹0 |
 
-## Phase 4: Trust and launch (weeks 7–8)
+## Phase 4: Trust and launch (weeks 6–7)
 
 | Step | What | Who | Cost |
 |---|---|---|---|
 | 25 | **Paid Gemini for customer streams** (free tier lets Google use the data), with a spending cap | You add a card in Google AI Studio, Claude sets the cap | Estimate: a few rupees per stream |
-| 26 | **Legal pages:** privacy policy, terms (creator must own the stream; posting only after their approval), refund policy, AI processing consent, YouTube and Meta data-use disclosures | Claude drafts, **you approve** | ₹0 to draft |
-| 27 | **Game and platform terms:** Krafton, Garena, Rockstar, Mojang, YouTube and Instagram rules on clips and auto-posting | Claude researches, you decide | ₹0 |
+| 26 | **Legal pages:** privacy policy, terms (creator must own the stream; posting only after their approval), refund policy, AI processing consent, and the disclosures Google requires for YouTube data | Claude drafts, **you approve** | ₹0 to draft |
+| 27 | **Game and platform terms:** Krafton, Garena, Rockstar, Mojang and YouTube rules on clips and auto-posting | Claude researches, you decide | ₹0 |
 | 28 | **Admin page:** users, jobs, posts, failures, payments, retry, refund link | Claude | ₹0 |
 | 29 | **Monitoring:** phone alert when a job or post fails or the laptop goes offline | Claude | ₹0 |
 | 30 | **Landing page:** demo clips (with permission), pricing, sign-up | Claude builds, you approve | ₹0 |
@@ -108,11 +109,12 @@ And you can:
 | 32 | **Cloud worker with a GPU**, so it doesn't depend on the laptop | When the queue often waits hours, or revenue covers roughly ₹3,000–8,000 a month (estimate) |
 | 33 | **Free Fire MAX / Free Fire India** as the second game: kill, squad-wipe and Booyah detection, trained on a few hundred labelled frames from real streams | Month 1 after launch |
 | 34 | **Talk mode for any game** (GTA V roleplay, Minecraft, horror, party games): speech, laughter, loudness and the AI judge, no game detector | Month 1 after launch |
-| 35 | **"Your results" page:** from YouTube Analytics and Instagram Insights, which clip types got the best watch-through and views | Once creators have 10+ posted clips each |
+| 35 | **"Your results" page:** from YouTube Analytics, which clip types got the best watch-through and views as Shorts | Once creators have 10+ posted clips each |
 | 36 | **Personal ranking:** push up the kinds of clips that worked for this creator, combined with their keep/reject swipes | After step 35, checked against beta creators' own picks |
-| 37 | **Valorant** (very standard HUD, open tools exist) | When PC creators ask |
-| 38 | **Play Store app** (the installed web app wrapped for Android) | Optional; about ₹2,100 one-time Google fee |
-| 39 | **Organisations plan** (esports teams, agencies): several channels under one account | If organisations show interest |
+| 37 | **Instagram Reels (optional):** first through a posting service Meta has already approved (Zernio: free for 2 accounts, then about ₹530 per account a month, vendor price not checked), then direct after Meta Business Verification and App Review as a sole proprietor | Only if creators ask |
+| 38 | **Valorant** (very standard HUD, open tools exist) | When PC creators ask |
+| 39 | **Play Store app** (the installed web app wrapped for Android) | Optional; about ₹2,100 one-time Google fee |
+| 40 | **Organisations plan** (esports teams, agencies): several channels under one account | If organisations show interest |
 
 ---
 
@@ -123,12 +125,11 @@ And you can:
 | Hosting, login, database, storage, email, tunnel (free tiers) | ₹0 |
 | Domain | About ₹800–1,000 a year |
 | YouTube posting and Google's scope check | ₹0 |
-| Instagram posting during beta (2 accounts) | ₹0 |
 | Razorpay | ₹0 upfront, about 2% per payment |
 | Paid Gemini for customer streams | A few rupees per stream, from the first paying customer |
 | Play Store (optional) | About ₹2,100 one time |
 
-So the app can still be built and launched for **about ₹1,000** (the domain). Real costs start once creators pay: extra Instagram accounts through the posting service until Meta approves direct posting, paid Gemini, and later the cloud worker.
+So the app can still be built and launched for **about ₹1,000** (the domain). Real costs start once creators pay: paid Gemini, later the cloud worker, and Instagram posting only if it's added.
 
 ---
 
@@ -140,9 +141,7 @@ These come from thin or very new sources; each has a cheap check, built into the
 |---|---|
 | YouTube uploads from unreviewed apps can be public (2 Nov 2026) | Step 18: one real test upload |
 | Upload quota of 100 a day for the app | Step 18: read the quota page in Google Cloud Console |
-| Instagram's daily API post limit (Meta's page says both 100 and 50) | Read the limit on a test account; either is enough per creator |
-| Meta Business Verification time (one report of 10+ days) | Start early, step 24 |
-| Posting-service prices and whether free tiers allow commercial use | Read their pricing and terms before step 23 |
+| Instagram limits, Meta verification time, posting-service prices | Only if Instagram is added (step 37) |
 | Free Fire screen signals and effort | Run 2–3 Free Fire streams through the current pipeline before step 33 |
 | Personal ranking improves views | Compare with beta creators' own picks (step 31) before selling it as a feature |
 
@@ -151,7 +150,7 @@ These come from thin or very new sources; each has a cheap check, built into the
 - **The laptop is the server at first.** If it's off or offline, processing stops (already scheduled YouTube posts still go out, since YouTube publishes them). About 30–40 creators maximum until step 32.
 - **YouTube's 100 uploads a day is for the whole app,** about 33 creators at 3 Shorts a day. Beyond that, Google's quota-extension form.
 - **Posting doesn't sell the product on its own.** The research is clear that creators judge clip quality first. Steps 1–3 matter more than steps 18–24.
-- **Accounts only you can create:** domain, Cloudflare, Supabase, Razorpay (KYC), Meta Business Verification (business documents), Google AI Studio billing, email service, posting service, Play Store. Claude can't sign up or enter payment or ID details for you. Start Razorpay KYC and Meta verification in week 1, since both can take days.
+- **Accounts only you can create:** domain, Cloudflare, Supabase, Razorpay (KYC), Google Cloud project for YouTube sign-in, Google AI Studio billing, email service, Play Store. Claude can't sign up or enter payment or ID details for you. Start Razorpay KYC in week 1, since it can take days.
 
 ## Risk of building before asking streamers
 
@@ -163,13 +162,12 @@ Eight weeks of building happens before any streamer says what they want. A free 
 
 | Week | Dates | Build | You |
 |---|---|---|---|
-| 1 | 4–10 Nov | Steps 1–2 (full streams, speed) | Decide D1–D5. Start Razorpay KYC and Meta Business Verification. Create Cloudflare and Supabase accounts |
+| 1 | 4–10 Nov | Steps 1–2 (full streams, speed) | Decide D1–D4. Start Razorpay KYC (Udyam registration first if needed). Create Cloudflare and Supabase accounts |
 | 2 | 11–17 Nov | Steps 3–8 (accuracy, upload, editing, post-ready output, labels, delivery) | Review test clips strictly |
 | 3 | 18–24 Nov | Steps 9–13 (domain, hosting, tunnel, login, queue) | Domain, email account |
 | 4 | 25 Nov – 1 Dec | Steps 14–17 (storage, payments, limits, notifications) | Razorpay live keys once KYC is approved |
-| 5 | 2–8 Dec | Steps 18–22 (YouTube test, connect, approvals, queue, post status) | Test YouTube channel; submit Google's scope check |
-| 6 | 9–15 Dec | Steps 23–24 (Instagram via posting service, Meta app review) | Posting-service account |
-| 7 | 16–22 Dec | Steps 25–30 (paid AI, legal, admin, alerts, landing page) | Approve legal pages, add card for paid Gemini |
-| 8 | 23–29 Dec | Fixes; closed beta starts (step 31) | Invite 5 streamers |
-| 9 | 30 Dec – 5 Jan | Beta fixes | Testimonials, then open sales |
+| 5 | 2–8 Dec | Steps 18–24 (YouTube test, sign-in, approvals, queue, post status, channel basics) | Test YouTube channel; submit Google's scope check |
+| 6 | 9–15 Dec | Steps 25–30 (paid AI, legal, admin, alerts, landing page) | Approve legal pages, add card for paid Gemini |
+| 7 | 16–22 Dec | Fixes; closed beta starts (step 31) | Invite 5 streamers |
+| 8 | 23–29 Dec | Beta fixes | Testimonials, then open sales |
 | +1 month | January | Steps 33–34 (Free Fire, talk mode for other games) | Find 2–3 Free Fire streamers for testing |
