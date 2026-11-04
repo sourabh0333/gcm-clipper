@@ -1,10 +1,20 @@
 # GCM Clipper: plan to a ready-to-sell app
 
-Written 4 November 2026, updated the same day with approval-based posting, learning from past posts, and more games. The research behind the update is [AI clipper autoposting and multigame gaps](../reports/AI%20clipper%20autoposting%20and%20multigame%20gaps.md).
+Written 4 November 2026, updated the same day with approval-based posting, learning from past posts, more games, and the full content-management workflow. The research behind the update is [AI clipper autoposting and multigame gaps](../reports/AI%20clipper%20autoposting%20and%20multigame%20gaps.md).
 
-Goal: an app a gaming YouTuber can sign up to, pay for by UPI, and use every week without you doing anything by hand: it makes the clips, asks "should I post this?", posts the approved ones to their YouTube channel as Shorts on a schedule, and learns which kinds of clips work for that creator. **YouTube is the main platform** (owner's decision, 4 Nov); Instagram is optional, after launch, if creators ask. After that, contact streamers.
+**What the product is:** a **gaming content management app** for YouTubers. One place for the whole workflow, from a finished stream to posted videos:
 
-**Estimate: about 8 weeks of building to launch**, then Free Fire and other games in the month after. This assumes you can do the account sign-ups and decisions in the "You" column within a day or two each time. Claude writes the code, tests and docs.
+| Stage | What the app does |
+|---|---|
+| **1. Clip** | Finds the best moments in each stream (kills, clutches, funny talk, rage) and cuts ranked 9:16 clips |
+| **2. Edit** | A phone-friendly editor built for gaming clips: trim, layout, zoom on the action, caption styles, hook text, brand kit, thumbnails; plus compilations from many clips |
+| **3. Plan** | A library of every clip across all streams, and a content calendar to plan what goes out when |
+| **4. Post** | Asks "Post this?", then schedules and posts to the creator's YouTube channel, with status and failure alerts |
+| **5. Learn** | Shows what worked on the channel and pushes similar clips up next time |
+
+**YouTube is the main platform** (owner's decision, 4 Nov); Instagram is optional, after launch, if creators ask. After launch, contact streamers.
+
+**Estimate: about 11 weeks of building to launch**, then Free Fire and other games in the month after. This assumes you can do the account sign-ups and decisions in the "You" column within a day or two each time. Claude writes the code, tests and docs.
 
 ---
 
@@ -27,15 +37,17 @@ A creator can:
 1. Sign up with Google or a phone OTP on the website or the installed app.
 2. Start a free trial stream: paste a YouTube link or upload a recording, and pick the game.
 3. Get ranked 9:16 clips with Hinglish captions, clean titles and hashtags within a few hours, with a notification.
-4. Swipe to keep or reject, trim a clip, fix a caption or title.
-5. Connect their YouTube channel once with "Sign in with Google". Each kept clip asks **"Post this?"**. Approved clips go into a queue that posts one or more Shorts a day at times the creator picks, with a clear status and an alert if a post fails.
-6. See a "your results" page: which kinds of clips did best as Shorts.
-7. Pay monthly by UPI AutoPay, see stream hours left, cancel any time.
+4. Swipe to keep or reject.
+5. Edit any clip on the phone or laptop: trim and split, facecam and gameplay layout, zoom on the kill, caption style, hook text at the start, their own logo and outro, pick a thumbnail frame. Or make a compilation ("Top 10 kills this week") from several clips.
+6. Find any clip later in the **library** (filter by stream, game, type, status), and see the week on a **content calendar**.
+7. Connect their YouTube channel once with "Sign in with Google". Each finished clip asks **"Post this?"**. Approved clips go onto the calendar and post at the planned times, with a clear status and an alert if a post fails.
+8. See a "your results" page: which kinds of clips did best as Shorts.
+9. Pay monthly by UPI AutoPay, see stream hours left, cancel any time.
 
 And you can:
 
-8. See every user, job, post, failure and payment on an admin page.
-9. Leave it running for a week without touching it.
+10. See every user, job, post, failure and payment on an admin page.
+11. Leave it running for a week without touching it.
 
 ---
 
@@ -59,12 +71,30 @@ And you can:
 | 2 | **Speed:** run vision, audio and transcript at the same time, read the HUD less often in quiet stretches. Target a 3-hour stream in about 1 hour on the laptop (now 1–3 hours). | Claude | Measured on a 3-hour stream |
 | 3 | **Accuracy:** test on 10 more streams. Knock detection, the bigger speech model when a transcript looks broken, tune talk vs fight ranking from your swipes. | Claude, you review clips | Each stream checked; misses written down |
 | 4 | **File upload** from phone or PC, in parts if large, as well as pasting a link. | Claude | A 2 GB file uploads from a phone |
-| 5 | **Clip editing:** trim, edit caption text, change title, choose layout. | Claude | Done from a phone |
+| 5 | **Edit data model:** store every clip as a list of edits on top of the source (cuts, layout, zoom, captions, overlays), so edits are fast, undoable and re-rendered only on export. The editor itself is Phase 1b. | Claude | Old clips open as editable projects |
 | 6 | **Post-ready output:** clean Hinglish title (no swear words in titles, which limits ads), 3–5 hashtags, the "not endorsed by Krafton" line for BGMI descriptions, no GCM watermark, no added music. | Claude | Every clip has a ready title, hashtags and description |
 | 7 | **Clip labels for learning later:** save each clip's type (kill, multi-kill, clutch, funny, rage, banter), game, length and score, and later its posting results. | Claude | Stored for every clip |
 | 8 | **Delivery:** download one clip or all as a zip, share from the phone (also covers Moj, Josh and ShareChat by hand). | Claude | Works on Android Chrome |
 
-## Phase 2: Turn it into a service (weeks 3–4, first small costs)
+## Phase 1b: Content studio, the management part (weeks 3–5, ₹0)
+
+Indian gaming creators edit Shorts today in phone apps like VN and InShot (CapCut is banned in India) or pay an editor. The studio doesn't try to copy those general editors. It does the edits gaming clips need, fast, on a phone, with the AI doing the first pass.
+
+| Step | What | Who | Done when |
+|---|---|---|---|
+| S1 | **Clip library:** every clip from every stream in one place; filter by stream, game, type (kill, clutch, funny…), status (new, kept, edited, scheduled, posted, rejected), date; search by what was said | Claude | 100+ clips browse smoothly on a phone |
+| S2 | **Editor basics:** trim, split and join, change start and end on a timeline, speed up dead parts, preview instantly | Claude | A clip is re-cut in under a minute on a phone |
+| S3 | **Gaming layouts:** facecam on top and gameplay below (auto-detect the facecam box, adjustable), full gameplay, blur fill; **zoom on the kill** using the kill time the AI already knows; keep the kill feed visible | Claude | Each layout renders correctly on all 3 test streams |
+| S4 | **Captions and text:** caption style presets (font, colour, size, position, word highlight), Hinglish or Devanagari, edit words; a **hook line** in the first 2 seconds ("1v4 clutch 😱"), AI-suggested | Claude | Styles look right on vertical and landscape sources |
+| S5 | **Brand kit:** creator's logo, colours, caption style, intro and outro clips, standard description, hashtags and game disclaimer, applied to every clip automatically | Claude | Set once, used on every export |
+| S6 | **Thumbnails and titles:** pick a frame, add big text; AI title options in Hinglish (clean, no swear words) | Claude | Every clip has a thumbnail and 3 title options |
+| S7 | **Compilations:** pick several clips (or "best 10 of this week") and make one longer video, 16:9 for a normal YouTube upload or 9:16 for a long Short, with transitions and chapter titles | Claude | A 5-minute "best of the week" renders from 10 clips |
+| S8 | **Content calendar:** week and month view of scheduled and posted videos; drag to move; empty-day warnings; "fill this week" places approved clips one a day | Claude | Plan a week in a few taps |
+| S9 | **Sound safety:** no added music by default; optional sound effects only from a royalty-free set; warn when game or background music might trigger copyright claims | Claude | No added track can cause a claim |
+
+Kept out at launch (add if creators ask): music library, stickers and effects packs, voice-over recording, team accounts for creator plus editor, multi-channel management.
+
+## Phase 2: Turn it into a service (weeks 6–7, first small costs)
 
 | Step | What | Who | Cost |
 |---|---|---|---|
@@ -78,19 +108,19 @@ And you can:
 | 16 | **Usage limits** per plan | Claude | ₹0 |
 | 17 | **Notifications:** email when clips are ready, a post went live, or something failed | You make the account (Brevo or Resend free tier), Claude builds | ₹0 |
 
-## Phase 3: Posting to YouTube after approval (week 5)
+## Phase 3: Posting to YouTube after approval (week 8)
 
 | Step | What | Who | Cost |
 |---|---|---|---|
 | 18 | **Test YouTube's new rule first:** upload one test Short from a test Google project and confirm it goes public; check the quota page | Claude, with your test YouTube channel | ₹0 |
 | 19 | **Connect YouTube with "Sign in with Google"** (no passwords): creator signs in once and can disconnect any time. Google's free "sensitive scope" check (about 3–5 business days, needs the domain, privacy policy and a demo video); until it passes, sign-in shows a warning and works only for listed test users, which is fine for the beta. Follow Google's user data rules: use the access only for approved uploads and scheduling, store it encrypted, delete it on disconnect | You submit with Claude's prepared answers, Claude builds | ₹0 |
 | 20 | **"Post this?" approvals:** every kept clip asks; approve one by one or a batch; edit title and description before approving | Claude | ₹0 |
-| 21 | **Posting queue and schedule:** "post 1 approved clip a day at 6 pm" style settings (simple defaults, no best-time engine); YouTube's own scheduled publish | Claude | ₹0 |
+| 21 | **Calendar posting:** approved clips and compilations go onto the content calendar (S8) and are uploaded with YouTube's own scheduled publish time; "1 Short a day at 6 pm" style defaults, no best-time engine; thumbnail, title, description and hashtags from the studio | Claude | ₹0 |
 | 22 | **Post status and safety:** posted, scheduled, failed with retry; alert on failure; daily-limit counter; never repost the same clip to the same channel | Claude | ₹0 |
 | 23 | **"Your channel" basics:** show the creator's recent Shorts and their views next to the clips, so they see what's already working (read-only, from YouTube Analytics) | Claude | ₹0 |
 | 24 | **Manual beta path:** until step 19's check passes, a beta creator can add you in YouTube Studio → Permissions instead | You, with the creator | ₹0 |
 
-## Phase 4: Trust and launch (weeks 6–7)
+## Phase 4: Trust and launch (weeks 9–10)
 
 | Step | What | Who | Cost |
 |---|---|---|---|
@@ -154,7 +184,7 @@ These come from thin or very new sources; each has a cheap check, built into the
 
 ## Risk of building before asking streamers
 
-Eight weeks of building happens before any streamer says what they want. A free way to reduce this: during Phase 1, send your own clips to 3–5 streamers you know and ask "would you post these?" and "would you let an app post them for you after you approve?".
+Eleven weeks of building happens before any streamer says what they want. A free way to reduce this: during Phase 1, send your own clips to 3–5 streamers you know and ask "would you post these?" and "would you let an app post them for you after you approve?".
 
 ---
 
@@ -163,11 +193,14 @@ Eight weeks of building happens before any streamer says what they want. A free 
 | Week | Dates | Build | You |
 |---|---|---|---|
 | 1 | 4–10 Nov | Steps 1–2 (full streams, speed) | Decide D1–D4. Start Razorpay KYC (Udyam registration first if needed). Create Cloudflare and Supabase accounts |
-| 2 | 11–17 Nov | Steps 3–8 (accuracy, upload, editing, post-ready output, labels, delivery) | Review test clips strictly |
-| 3 | 18–24 Nov | Steps 9–13 (domain, hosting, tunnel, login, queue) | Domain, email account |
-| 4 | 25 Nov – 1 Dec | Steps 14–17 (storage, payments, limits, notifications) | Razorpay live keys once KYC is approved |
-| 5 | 2–8 Dec | Steps 18–24 (YouTube test, sign-in, approvals, queue, post status, channel basics) | Test YouTube channel; submit Google's scope check |
-| 6 | 9–15 Dec | Steps 25–30 (paid AI, legal, admin, alerts, landing page) | Approve legal pages, add card for paid Gemini |
-| 7 | 16–22 Dec | Fixes; closed beta starts (step 31) | Invite 5 streamers |
-| 8 | 23–29 Dec | Beta fixes | Testimonials, then open sales |
-| +1 month | January | Steps 33–34 (Free Fire, talk mode for other games) | Find 2–3 Free Fire streamers for testing |
+| 2 | 11–17 Nov | Steps 3–8 (accuracy, upload, edit data model, post-ready output, labels, delivery) | Review test clips strictly |
+| 3 | 18–24 Nov | Studio S1–S3 (library, editor basics, gaming layouts and zoom) | Try the editor on your phone, say what feels slow |
+| 4 | 25 Nov – 1 Dec | Studio S4–S6 (caption styles and hook text, brand kit, thumbnails and titles) | Send a logo and outro for testing |
+| 5 | 2–8 Dec | Studio S7–S9 (compilations, content calendar, sound safety) | Plan a test week on the calendar |
+| 6 | 9–15 Dec | Steps 9–13 (domain, hosting, tunnel, login, queue) | Domain, email account |
+| 7 | 16–22 Dec | Steps 14–17 (storage, payments, limits, notifications) | Razorpay live keys once KYC is approved |
+| 8 | 23–29 Dec | Steps 18–24 (YouTube test, sign-in, approvals, calendar posting, post status, channel basics) | Test YouTube channel; submit Google's scope check |
+| 9 | 30 Dec – 5 Jan | Steps 25–30 (paid AI, legal, admin, alerts, landing page) | Approve legal pages, add card for paid Gemini |
+| 10 | 6–12 Jan | Fixes; closed beta starts (step 31) | Invite 5 streamers |
+| 11 | 13–19 Jan | Beta fixes | Testimonials, then open sales |
+| +1 month | February | Steps 33–34 (Free Fire, talk mode for other games) | Find 2–3 Free Fire streamers for testing |
