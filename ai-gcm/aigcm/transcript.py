@@ -24,6 +24,19 @@ MIN_UNIQUE = 0.35
 # The Hinglish model returns about 30 s per segment, too long to cut clips on, so segments are split into
 # lines at pauses and at sentence ends.
 PAUSE_S = 0.7
+# faster-whisper's batched pipeline groups the speech chunks the VAD finds and runs them together: on the
+# laptop that was 5x faster than one chunk at a time (35 s vs 183 s for 10 min of continuous Hinglish)
+# and found more words.
+BATCH_SIZE = 8
+
+
+def _load(settings):
+    """(model name, language, batched pipeline) for the configured Whisper model."""
+    from faster_whisper import BatchedInferencePipeline, WhisperModel
+
+    name, language = resolve_model(settings)
+    model = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=getattr(settings, "analysis_threads", 0))
+    return name, language, BatchedInferencePipeline(model=model)
 
 
 def resolve_model(settings):
@@ -66,10 +79,7 @@ def retranscribe_windows(wav_path, windows, settings, transcript):
     """Transcribe only the given [(start, end)] windows with `settings.whisper_model` and splice the result
     into `transcript`, replacing whatever it had there. Used with the bigger Hinglish model, which is far too
     slow for a whole stream (over 2x realtime on the laptop) but fine for a dozen clips."""
-    from faster_whisper import WhisperModel
-
-    name, language = resolve_model(settings)
-    model = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=getattr(settings, "analysis_threads", 0))
+    name, language, model = _load(settings)
     with wave.open(str(wav_path), "rb") as w:
         rate = w.getframerate()
         samples = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32) / 32768.0
@@ -77,7 +87,7 @@ def retranscribe_windows(wav_path, windows, settings, transcript):
     for start, end in windows:
         a, b = int(start * rate), int(end * rate)
         parts, _ = model.transcribe(samples[a:b], language=language, word_timestamps=True, vad_filter=True,
-                                    beam_size=1, condition_on_previous_text=False)
+                                    beam_size=1, batch_size=BATCH_SIZE)
         for seg in parts:
             if seg.compression_ratio > MAX_COMPRESSION or seg.avg_logprob < MIN_LOGPROB:
                 continue
@@ -124,10 +134,7 @@ def looping(line):
 
 
 def transcribe(wav_path, settings, checkpoint=None):
-    from faster_whisper import WhisperModel
-
-    name, language = resolve_model(settings)
-    model = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=getattr(settings, "analysis_threads", 0))
+    name, language, model = _load(settings)
     with wave.open(str(wav_path), "rb") as w:
         rate = w.getframerate()
         samples = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32) / 32768.0
@@ -141,7 +148,7 @@ def transcribe(wav_path, settings, checkpoint=None):
     for offset in range(start, len(samples), step):
         base = offset / rate
         parts, _ = model.transcribe(samples[offset:offset + step], language=language, word_timestamps=True,
-                                    vad_filter=True, beam_size=1, condition_on_previous_text=False)
+                                    vad_filter=True, beam_size=1, batch_size=BATCH_SIZE)
         for seg in parts:
             if seg.compression_ratio > MAX_COMPRESSION or seg.avg_logprob < MIN_LOGPROB:
                 dropped += 1

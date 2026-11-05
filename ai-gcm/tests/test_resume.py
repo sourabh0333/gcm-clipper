@@ -49,7 +49,7 @@ def silent_wav(path, seconds, rate=16000):
 
 
 def test_transcript_resumes_after_a_crash_without_redoing_chunks(tmp_path, monkeypatch):
-    monkeypatch.setitem(sys.modules, "faster_whisper", types.SimpleNamespace(WhisperModel=FakeWhisper))
+    monkeypatch.setitem(sys.modules, "faster_whisper", types.SimpleNamespace(WhisperModel=FakeWhisper, BatchedInferencePipeline=lambda model: model))
     monkeypatch.setattr(transcript, "CHUNK_S", 10)
     wav, ckpt = tmp_path / "audio.wav", tmp_path / "transcript.partial.json"
     silent_wav(wav, 35)                                  # 4 chunks of 10 s
@@ -79,7 +79,7 @@ def test_a_transcript_that_misses_detected_speech_looks_broken():
 
 
 def test_clip_windows_are_redone_and_spliced_into_the_transcript(tmp_path, monkeypatch):
-    monkeypatch.setitem(sys.modules, "faster_whisper", types.SimpleNamespace(WhisperModel=FakeWhisper))
+    monkeypatch.setitem(sys.modules, "faster_whisper", types.SimpleNamespace(WhisperModel=FakeWhisper, BatchedInferencePipeline=lambda model: model))
     wav = tmp_path / "audio.wav"
     silent_wav(wav, 60)
     old = {"segments": [{"start": 5.0, "end": 6.0, "text": "old a", "words": [{"start": 5.0, "end": 6.0, "word": "old"}]},
