@@ -213,7 +213,9 @@ def locate_counters(src, info, size, ocr):
         boxes = _locate_icon_counters(src, info, size, ocr)
     if not boxes:
         log("vision: counters not in the top-left corner, searching the whole frame")
-        boxes = _locate_counters(src, info, size, ocr, (0.0, 0.0, 1.0, 1.0), ocr.lines_hires, frames=12)
+        # Small streamers spend long stretches in lobbies with no counters on screen, so more frames are
+        # sampled here than for the corner search.
+        boxes = _locate_counters(src, info, size, ocr, (0.0, 0.0, 1.0, 1.0), ocr.lines_hires, frames=24)
     return boxes
 
 
