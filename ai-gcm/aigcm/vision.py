@@ -42,7 +42,8 @@ SPECTATE_HOLD_S = 6.0
 LOBBY_PLAYERS = 80        # Remaining at or above this means a fresh match
 LOBBY_JUMP = 20
 MAX_PLAYERS = 100
-UNCONFIRMED_RESET_READS = 20   # 10 s at 2 frames a second
+UNCONFIRMED_RESET_S = 10.0   # how long a reset must hold when there is no lobby signal
+BANNER_MIN_GAP_S = 3.0       # message text is read at most this often, even while it keeps appearing
 MAX_REMAINING_DROP = 30
 
 COUNTER_LABELS = {"elims": "eliminations", "remaining": "remaining"}
@@ -234,8 +235,9 @@ class Counter:
     - "remaining": a drop of up to 30 players, or a jump to a fresh lobby. 0 is never shown in a match.
     """
 
-    def __init__(self, kind):
+    def __init__(self, kind, reads_per_second=2.0):
         self.kind = kind
+        self.reset_reads = max(2, int(round(UNCONFIRMED_RESET_S * reads_per_second)))
         self.value = None
         self.pending, self.pending_t, self.pending_n = None, None, 0
 
@@ -262,7 +264,7 @@ class Counter:
                 if value != 0:
                     return None
                 if fresh_match is None:
-                    return UNCONFIRMED_RESET_READS
+                    return self.reset_reads
                 return 2 if fresh_match else None
             return 6
         return 2 if 0 < old - value <= MAX_REMAINING_DROP or value >= LOBBY_PLAYERS else 6
@@ -322,7 +324,7 @@ def scan(src, info, settings, checkpoint=None):
     counter_boxes = ({k: tuple(v) for k, v in saved["counter_boxes"].items()} if saved
                      else locate_counters(src, info, size, ocr))
 
-    counters = {name: Counter(name) for name in counter_boxes}
+    counters = {name: Counter(name, fps) for name in counter_boxes}
     remaining = []          # [(t, players left)] whenever it changes
     spectating_until, last_spectate_read = -1.0, -1e9
     # Vertical streams put the gameplay window anywhere, so the whole frame is checked there.
@@ -404,7 +406,7 @@ def scan(src, info, settings, checkpoint=None):
                 base = float(np.median(history[name])) if history[name] else ratio
                 history[name].append(ratio)
                 appeared = ratio > 0.003 and ratio > base * 1.5 + 0.002
-                if not appeared and t - last_read[name] < settings.ocr_every_s:
+                if (not appeared and t - last_read[name] < settings.ocr_every_s) or t - last_read[name] < BANNER_MIN_GAP_S:
                     continue
                 last_read[name] = t
                 ocr_calls += 1

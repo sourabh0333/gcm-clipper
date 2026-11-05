@@ -28,13 +28,16 @@ def load_dotenv(path):
 @dataclass
 class Settings:
     jobs_dir: Path = ROOT / "jobs"
+    # Which game's HUD to read; "bgmi" is the only one so far. Stored on each clip's labels.
+    game: str = "bgmi"
     download_height: int = 720
     # A 4-hour 720p source is 2-4 GB; it's kept this long after the clips are made so they can be re-edited.
     source_keep_days: int = 14
 
     # Vision: frames sampled per second, the height they are scaled to, and how often the HUD is read
     # even when nothing seems to change.
-    vision_fps: float = 2.0
+    # One read a second: a kill stays on the counter, and two agreeing reads confirm it a second later.
+    vision_fps: float = 1.0
     vision_height: int = 720
     ocr_every_s: float = 10.0
     regions: dict = field(default_factory=lambda: dict(DEFAULT_REGIONS))
@@ -56,6 +59,8 @@ class Settings:
     # blurred fill ("blur"); "split" puts a given facecam box on top.
     layout: str = "auto"
     facecam: tuple | None = None
+    # Also render a bleeped copy of any clip with gaali in the audio.
+    sponsor_safe: bool = False
 
     gemini_api_key: str = ""
     # 2.5 Flash-Lite is closed to keys created after late 2026; Google points new users to 3.5 Flash-Lite.

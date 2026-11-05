@@ -3,6 +3,7 @@ failed run resumes from the first stage that is not done."""
 
 import json
 import os
+import threading
 import time
 from pathlib import Path
 
@@ -36,6 +37,7 @@ class Job:
         self.root.mkdir(parents=True, exist_ok=True)
         self.manifest_path = self.root / "manifest.json"
         self.manifest = read_json(self.manifest_path, {"stages": {}})
+        self._lock = threading.Lock()
 
     def path(self, *parts):
         return self.root.joinpath(*parts)
@@ -44,8 +46,10 @@ class Job:
         return self.manifest["stages"].get(stage, {}).get("status") == "done"
 
     def _set(self, stage, **fields):
-        self.manifest["stages"].setdefault(stage, {}).update(fields)
-        write_json(self.manifest_path, self.manifest)
+        # Stages that run side by side (vision with the audio stages) write the manifest from two threads.
+        with self._lock:
+            self.manifest["stages"].setdefault(stage, {}).update(fields)
+            write_json(self.manifest_path, self.manifest)
 
     def invalidate_from(self, stage):
         """Mark a stage and everything after it as not done, so they run again."""
@@ -67,3 +71,24 @@ class Job:
             raise
         self._set(stage, status="done", seconds=round(time.time() - started, 1))
         log(f"{stage}: done in {time.time() - started:.0f}s")
+
+    def run_parallel(self, groups):
+        """Run several stage lists at the same time, each list in order: [[("vision", fn)], [("audio", fn), ...]].
+        Vision reads frames and the audio stages read the wav, so on a 4-core laptop they overlap well. The
+        first error is raised after every group has stopped."""
+        errors = []
+
+        def worker(stages):
+            try:
+                for name, fn in stages:
+                    self.run(name, fn)
+            except BaseException as exc:
+                errors.append(exc)
+
+        threads = [threading.Thread(target=worker, args=(g,), daemon=True) for g in groups]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        if errors:
+            raise errors[0]

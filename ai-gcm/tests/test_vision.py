@@ -56,6 +56,13 @@ def test_without_lobby_signal_a_flicker_is_ignored_but_a_long_reset_counts():
     assert reset[-1][1:] == (3, 0)
 
 
+def test_reset_hold_is_measured_in_seconds_not_reads():
+    # At one read a second the 10 s hold is 10 reads; at two a second it is 20.
+    assert Counter("elims", 1.0).reset_reads == 10 and Counter("elims", 2.0).reset_reads == 20
+    reset = feed(Counter("elims", 1.0), [3, 3] + [0] * 10, fresh_match=None)
+    assert reset[-1][1:] == (3, 0)
+
+
 def test_brief_zero_mid_match_is_ignored():
     # A teammate's counter flashing up while the streamer spectates must not reset kills.
     changes = feed(Counter("elims"), [3, 3, 0, 0, 0, 3, 3], fresh_match=False)

@@ -10,6 +10,7 @@ import shutil
 
 from .jobs import log
 from .media import run, tool
+from .safety import mute_filter
 
 W, H = 1080, 1920
 FACECAM_H = 760
@@ -49,15 +50,20 @@ def _filter(layout, info, facecam, captions):
     return graph + ",format=yuv420p[v]"
 
 
-def render_clip(source, clip, info, settings, out_dir, captions=None):
-    out = out_dir / f"{clip['rank']:02d}_{clip['type']}_{clip['id']}.mp4"
+def render_clip(source, clip, info, settings, out_dir, captions=None, mute=()):
+    """Cut one clip. `mute` is [(start, end)] in clip seconds to silence, for a sponsor-safe version."""
+    suffix = "_safe" if mute else ""
+    out = out_dir / f"{clip['rank']:02d}_{clip['type']}_{clip['id']}{suffix}.mp4"
     local_captions = None
     if captions and captions.exists():
         local_captions = out_dir / captions.name
         shutil.copyfile(captions, local_captions)
     graph = _filter(resolve_layout(settings.layout, info), info, settings.facecam, local_captions)
+    if mute:
+        graph += f";[0:a]{mute_filter(mute)}[a]"
     cmd = [tool("ffmpeg"), "-v", "error", "-y", "-ss", f"{clip['start']:.3f}", "-i", str(source),
-           "-t", f"{clip['end'] - clip['start']:.3f}", "-filter_complex", graph, "-map", "[v]", "-map", "0:a?",
+           "-t", f"{clip['end'] - clip['start']:.3f}", "-filter_complex", graph, "-map", "[v]",
+           "-map", "[a]" if mute else "0:a?",
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-r", "30",
            "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out.name]
     run(cmd, cwd=out_dir)

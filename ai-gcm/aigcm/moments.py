@@ -8,6 +8,8 @@ from collections import Counter
 
 import numpy as np
 
+from .markers import describe
+
 WEIGHTS = {"self_kill": 12, "self_knock": 7, "accolade": 5, "dinner": 20}
 EXCITEMENT_PEAK = 2.5
 DENSITY_WINDOW_S = 20.0
@@ -21,6 +23,12 @@ GUNFIRE_PAUSE_S = 4.0
 # conversation ranks with a one- or two-kill fight.
 TALK_WEIGHT_RULES = 3.0
 TALK_WEIGHT_GEMINI = 5.0
+# A creator's own marker outranks a two-kill fight on its own; several marks on one moment add a little.
+MARKER_WEIGHT = 30.0
+MARKER_EXTRA = 5.0
+# A marker is pressed just after the moment, so its clip starts well before it and ends soon after.
+MARKER_BEFORE_S = 20.0
+MARKER_AFTER_S = 8.0
 
 
 def _index(t, value):
@@ -155,6 +163,10 @@ def _score(cand, audio, settings, remaining=()):
     if talk is not None:
         score += talk * (TALK_WEIGHT_GEMINI if cand["source"] == "gemini" else TALK_WEIGHT_RULES)
         reasons = cand.get("reasons", []) + reasons
+    marks = cand.get("markers", [])
+    if marks:
+        score += MARKER_WEIGHT + MARKER_EXTRA * (sum(m.get("count", 1) for m in marks) - 1)
+        reasons = [describe(m) for m in marks[:1]] + reasons
     length = cand["end"] - cand["start"]
     if length > 45:
         score -= (length - 45) * 0.3
@@ -167,10 +179,36 @@ def _score(cand, audio, settings, remaining=()):
         kind = "fight"
     elif talk is not None:
         kind = cand.get("talk_type", "talk")
+    elif marks:
+        kind = "marked"
     else:
         kind = "reaction"
-    cand.update(score=round(score, 2), type=kind, reasons=list(dict.fromkeys(reasons)))
+    reasons = list(dict.fromkeys(reasons))
+    # The first kill is the moment; a marker is pressed just after it, so it comes second.
+    anchor = cand["events"][0]["t"] if cand["events"] else (marks[0]["t"] if marks else cand.get("peak", cand["start"]))
+    cand.update(score=round(score, 2), type=kind, reasons=reasons, anchor=round(float(anchor), 2),
+                why=f"{', '.join(reasons) or 'loud moment'} at {_clock(anchor)}",
+                labels={"type": kind, "game": settings.game, "kills": own_kills, "knocks": own_knocks,
+                        "win": bool(counts["dinner"]), "marked": bool(marks), "talk": cand.get("talk_type"),
+                        "players_left": cand.get("players_left"), "length_s": round(length, 1)})
     return cand
+
+
+def _clock(seconds):
+    seconds = int(seconds)
+    return f"{seconds // 3600}:{seconds // 60 % 60:02d}:{seconds % 60:02d}"
+
+
+def _place_markers(candidates, markers, settings, duration):
+    """Attach each marker to the candidate it falls in, or make a candidate for it."""
+    for m in markers:
+        t = float(m["t"])
+        home = next((c for c in candidates if c["start"] - 5 <= t <= c["end"] + 5), None)
+        if home is None:
+            start, end = _fit(t - MARKER_BEFORE_S, t + MARKER_AFTER_S, t, settings, duration)
+            home = {"start": start, "end": end, "events": [], "source": "marker"}
+            candidates.append(home)
+        home.setdefault("markers", []).append(m)
 
 
 def _overlap(a, b):
@@ -180,7 +218,7 @@ def _overlap(a, b):
     return inter / min(a["end"] - a["start"], b["end"] - b["start"])
 
 
-def build(events, audio, settings, duration, remaining=(), sounds=None, talks=()):
+def build(events, audio, settings, duration, remaining=(), sounds=None, talks=(), markers=()):
     candidates = [dict(t, events=[]) for t in talks]
     useful = [e for e in events if e["kind"] in WEIGHTS]
     for cluster in _cluster(useful, settings.merge_gap_s):
@@ -208,12 +246,15 @@ def build(events, audio, settings, duration, remaining=(), sounds=None, talks=()
                 continue
             start, end = _fit(peak_t - 10, peak_t + 6, peak_t, settings, duration)
             candidates.append({"start": start, "end": end, "events": [], "source": "audio"})
+    _place_markers(candidates, markers, settings, duration)
 
     scored = sorted((_score(c, audio, settings, remaining) for c in candidates), key=lambda c: -c["score"])
     kept = []
     for cand in scored:
-        if any(_overlap(cand, k) > 0.5 for k in kept):
+        # A marked moment is never dropped for overlapping something else; the other one goes.
+        if any(_overlap(cand, k) > 0.5 and not (cand.get("markers") and not k.get("markers")) for k in kept):
             continue
+        kept = [k for k in kept if not (cand.get("markers") and not k.get("markers") and _overlap(cand, k) > 0.5)]
         kept.append(cand)
         if len(kept) >= settings.max_candidates:
             break

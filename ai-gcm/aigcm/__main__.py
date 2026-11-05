@@ -8,7 +8,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import audio, captions, judge, moments, render, review, sounds, talk, transcript, vision
+from . import audio, captions, judge, markers, moments, package, render, review, sounds, talk, transcript, vision
 from .config import Settings
 from .jobs import STAGES, Job, log, read_json, write_json
 from .media import download, extract_audio, extract_frame, is_url, parse_time, probe, search
@@ -95,9 +95,11 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
         heard, said = sounds.load(job.path("sounds.npz")), read_json(job.path("transcript.json"))
         loudness = audio.load(job.path("audio.npz"))
         talks = talk.find(job, said, heard, loudness, settings, info["duration"])
-        found = moments.build(events, loudness, settings, info["duration"], seen.get("remaining", []), heard, talks)
+        marks = markers.merge(markers.load(job), markers.from_transcript(said))
+        found = moments.build(events, loudness, settings, info["duration"], seen.get("remaining", []), heard, talks,
+                              marks)
         write_json(job.path("moments.json"), found)
-        log(f"moments: {len(found)} candidates from {len(events)} HUD events")
+        log(f"moments: {len(found)} candidates from {len(events)} HUD events, {len(marks)} markers")
 
     def judge_stage(job):
         info = read_json(job.path("info.json"))
@@ -109,6 +111,9 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
         ranked = judge.merge(job, found, settings)[: settings.top_n]
         for n, clip in enumerate(ranked, 1):
             clip["rank"] = n
+        package.decorate(ranked, info, read_json(job.path("transcript.json")), settings)
+        flagged = sum(1 for c in ranked if c["flags"])
+        log(f"judge: {len(ranked)} clips packaged with titles; {flagged} carry safety flags")
         write_json(job.path("ranked.json"), ranked)
 
     def captions_stage(job):
@@ -131,6 +136,9 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
                 continue
             ass = job.path("captions", f"{clip['id']}.ass")
             done[clip["id"]] = render.render_clip(info["path"], clip, info, settings, out_dir, ass)
+            if settings.sponsor_safe and clip.get("mute_spans"):
+                done[clip["id"] + "_safe"] = render.render_clip(info["path"], clip, info, settings, out_dir, ass,
+                                                                mute=clip["mute_spans"])
             write_json(job.path("clips.json"), done)
 
     def review_stage(job):
@@ -143,7 +151,22 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
     stages = {"ingest": ingest, "audio": audio_stage, "sounds": sounds_stage, "transcript": transcript_stage,
               "vision": vision_stage, "moments": moments_stage,
               "judge": judge_stage, "captions": captions_stage, "render": render_stage, "review": review_stage}
-    for name in STAGES:
+    # Vision (frames, OCR) runs alongside the audio stages (wav, YAMNet, Whisper); the rest is sequential.
+    side_by_side = ["vision", "audio", "sounds", "transcript"]
+    name_iter = iter(STAGES)
+    for name in name_iter:
+        if name == "vision":
+            analysis = [s for s in side_by_side if not job.done(s)]
+            if analysis:
+                log(f"running side by side: {', '.join(analysis)}")
+                job.run_parallel([[(s, stages[s])] for s in analysis if s == "vision"]
+                                 + [[(s, stages[s]) for s in analysis if s != "vision"]])
+            for s in side_by_side[1:]:
+                next(name_iter)
+            if until in side_by_side:
+                log(f"stopped after {until}; run again without --until to continue")
+                break
+            continue
         job.run(name, stages[name])
         if name == until:
             log(f"stopped after {until}; run again without --until to continue")
@@ -162,6 +185,9 @@ def cmd_run(args, settings):
         settings.layout = "split"
     if args.top:
         settings.top_n = args.top
+    settings.sponsor_safe = bool(getattr(args, "sponsor_safe", False))
+    if getattr(args, "game", None):
+        settings.game = args.game
     job = Job(settings.jobs_dir / (args.job or job_name(args.source, section)))
     saved = read_json(job.path("settings.json"))
     if saved:
@@ -272,6 +298,8 @@ def main(argv=None):
     p.add_argument("--until", choices=STAGES, help="stop after this stage")
     p.add_argument("--no-judge", action="store_true", help="skip Gemini even if a key is set")
     p.add_argument("--no-captions", action="store_true")
+    p.add_argument("--sponsor-safe", action="store_true", help="also render a bleeped copy of clips with gaali")
+    p.add_argument("--game", choices=["bgmi"], help="which game's HUD to read (default bgmi)")
     p.set_defaults(fn=cmd_run)
 
     p = sub.add_parser("status", help="show which stages of a job are done")
