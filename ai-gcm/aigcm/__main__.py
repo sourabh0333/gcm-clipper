@@ -82,13 +82,13 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
         sounds.save(job.path("sounds.npz"), sounds.analyse(job.path("audio.wav")))
 
     def transcript_stage(job):
-        said = transcript.transcribe(job.path("audio.wav"), settings, job.path("transcript.partial.json"))
+        heard_path = job.path("sounds.npz")
+        heard = sounds.load(heard_path) if heard_path.exists() else None
+        said = transcript.transcribe(job.path("audio.wav"), settings, job.path("transcript.partial.json"), heard)
         # A noisy stream can defeat the small Hinglish model (ANJI: speech half the time, 309 words). The
         # coverage is recorded here; the chosen clips are redone with the bigger model in the judge stage,
         # because that model is too slow for a whole stream.
-        heard_path = job.path("sounds.npz")
-        if heard_path.exists():
-            heard = sounds.load(heard_path)
+        if heard is not None:
             said["coverage"] = transcript.coverage(said, heard)
             said["broken"] = transcript.looks_broken(said, heard)
             if said["broken"]:

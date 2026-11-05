@@ -28,6 +28,36 @@ PAUSE_S = 0.7
 # laptop that was 5x faster than one chunk at a time (35 s vs 183 s for 10 min of continuous Hinglish)
 # and found more words.
 BATCH_SIZE = 8
+# The batched pipeline's own speech detector dropped a sixth of the words on a 3-hour stream (coverage 0.70
+# against 0.86 for the plain pipeline). The sound detector already knows where speech is, so its spans
+# drive the batched pipeline instead: 0.85 coverage at about twice the plain speed on the worst window.
+SPEECH_LEVEL = 0.3
+SPEECH_PAD_S = 0.5
+SPEECH_GAP_S = 1.0
+MAX_CLIP_S = 30.0
+
+
+def speech_spans(sounds, start, end):
+    """[{"start", "end"}] in seconds relative to `start`: where the sound detector heard speech between
+    start and end, padded, merged across short gaps, and cut to the 30 s the batched pipeline takes."""
+    t, speech = sounds["t"], sounds["speech"]
+    m = (t >= start) & (t < end)
+    spans = []
+    for ti in t[m][speech[m] >= SPEECH_LEVEL]:
+        a, b = max(0.0, ti - start - SPEECH_PAD_S), ti - start + 1.0 + SPEECH_PAD_S
+        if spans and a - spans[-1][1] <= SPEECH_GAP_S:
+            spans[-1][1] = max(spans[-1][1], b)
+        else:
+            spans.append([a, b])
+    out = []
+    for a, b in spans:
+        b = min(b, end - start)
+        while b - a > MAX_CLIP_S:
+            out.append({"start": round(a, 2), "end": round(a + MAX_CLIP_S, 2)})
+            a += MAX_CLIP_S
+        if b > a:
+            out.append({"start": round(a, 2), "end": round(b, 2)})
+    return out
 
 
 def _load(settings):
@@ -133,7 +163,7 @@ def looping(line):
     return len(tokens) >= 12 and len(set(tokens)) / len(tokens) < MIN_UNIQUE
 
 
-def transcribe(wav_path, settings, checkpoint=None):
+def transcribe(wav_path, settings, checkpoint=None, sounds=None):
     name, language, model = _load(settings)
     with wave.open(str(wav_path), "rb") as w:
         rate = w.getframerate()
@@ -147,8 +177,14 @@ def transcribe(wav_path, settings, checkpoint=None):
         log(f"transcript: resuming at {start / rate / 60:.0f} min from the checkpoint")
     for offset in range(start, len(samples), step):
         base = offset / rate
-        parts, _ = model.transcribe(samples[offset:offset + step], language=language, word_timestamps=True,
-                                    vad_filter=True, beam_size=1, batch_size=BATCH_SIZE)
+        chunk_end = min(len(samples), offset + step) / rate
+        clips = speech_spans(sounds, base, chunk_end) if sounds is not None else None
+        if clips is not None and not clips:
+            parts = []
+        else:
+            parts, _ = model.transcribe(samples[offset:offset + step], language=language, word_timestamps=True,
+                                        vad_filter=clips is None, clip_timestamps=clips, beam_size=1,
+                                        batch_size=BATCH_SIZE)
         for seg in parts:
             if seg.compression_ratio > MAX_COMPRESSION or seg.avg_logprob < MIN_LOGPROB:
                 dropped += 1

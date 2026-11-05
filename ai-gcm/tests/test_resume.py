@@ -90,6 +90,18 @@ def test_clip_windows_are_redone_and_spliced_into_the_transcript(tmp_path, monke
     assert new["segments"][1]["start"] == 21.0 and new["windows"] == [[20.0, 40.0]]
 
 
+def test_speech_spans_follow_the_sound_detector():
+    t = np.arange(0.0, 100.0, 1.0)
+    speech = np.zeros(100)
+    speech[10:14] = 0.9          # 4 s of talk
+    speech[15] = 0.9             # a 1 s gap, then more: merged into one span
+    speech[50:95] = 0.9          # 45 s of talk: cut into 30 s + the rest
+    spans = transcript.speech_spans({"t": t, "speech": speech}, 0.0, 100.0)
+    assert spans[0] == {"start": 9.5, "end": 16.5}
+    assert [s["end"] - s["start"] for s in spans[1:]] == [30.0, 16.0]
+    assert transcript.speech_spans({"t": t, "speech": speech}, 20.0, 40.0) == []
+
+
 def test_cleanup_deletes_only_old_sources_of_finished_jobs(tmp_path):
     def job(name, rendered, age_days):
         j = Job(tmp_path / name)
