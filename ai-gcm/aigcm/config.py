@@ -38,6 +38,9 @@ class Settings:
     # even when nothing seems to change.
     # One read a second: a kill stays on the counter, and two agreeing reads confirm it a second later.
     vision_fps: float = 1.0
+    # Vision (OCR) and the transcript (Whisper) run side by side; each gets half the CPU threads. With the
+    # default of all threads each, the two thrash and the transcript ran 3x slower than alone.
+    analysis_threads: int = max(2, (os.cpu_count() or 4) // 2)
     vision_height: int = 720
     ocr_every_s: float = 10.0
     regions: dict = field(default_factory=lambda: dict(DEFAULT_REGIONS))

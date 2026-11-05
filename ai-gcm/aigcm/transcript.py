@@ -94,7 +94,7 @@ def transcribe(wav_path, settings, checkpoint=None):
     from faster_whisper import WhisperModel
 
     name, language = resolve_model(settings)
-    model = WhisperModel(name, device="cpu", compute_type="int8")
+    model = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=getattr(settings, "analysis_threads", 0))
     with wave.open(str(wav_path), "rb") as w:
         rate = w.getframerate()
         samples = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32) / 32768.0

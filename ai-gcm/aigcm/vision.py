@@ -65,9 +65,11 @@ class Ocr:
     HUD strip take seconds; capping the long side instead keeps each read to a few tens of milliseconds.
     HUD text is never rotated, so the angle classifier is off."""
 
-    def __init__(self):
+    def __init__(self, threads=None):
         from rapidocr_onnxruntime import RapidOCR
-        self.engine = RapidOCR(det_limit_type="max", det_limit_side_len=960, use_cls=False)
+        self.threads = threads
+        extra = {"intra_op_num_threads": threads} if threads else {}
+        self.engine = RapidOCR(det_limit_type="max", det_limit_side_len=960, use_cls=False, **extra)
         self._hires = None
 
     def lines_hires(self, img, scale=2.0):
@@ -76,7 +78,8 @@ class Ocr:
         import cv2
         from rapidocr_onnxruntime import RapidOCR
         if self._hires is None:
-            self._hires = RapidOCR(det_limit_type="max", det_limit_side_len=2600, use_cls=False)
+            extra = {"intra_op_num_threads": self.threads} if self.threads else {}
+            self._hires = RapidOCR(det_limit_type="max", det_limit_side_len=2600, use_cls=False, **extra)
         big = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
         result, _ = self._hires(big)
         out = []
@@ -319,7 +322,7 @@ def scan(src, info, settings, checkpoint=None):
     fps = settings.vision_fps
     size = frame_size(info, settings.vision_height)
     out_w, out_h = size
-    ocr = Ocr()
+    ocr = Ocr(getattr(settings, "analysis_threads", None))
     saved = _load_checkpoint(checkpoint, src, info, fps)
     counter_boxes = ({k: tuple(v) for k, v in saved["counter_boxes"].items()} if saved
                      else locate_counters(src, info, size, ocr))
