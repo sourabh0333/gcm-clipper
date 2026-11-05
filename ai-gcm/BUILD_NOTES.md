@@ -39,14 +39,15 @@ Progress on building the complete GCM Clipper app, milestone by milestone from [
 - Digit recognition: about 27 ms per crop at the padded 320-wide input. A narrower input is 15 ms but misreads some digits ("2" → "28"), so it was not adopted.
 - Full stream download (3.1 h, 720p): 8 min.
 
+- **Full job rebuilt on the new transcript (5 Nov, 14:22):** moments 7.5 min (Gemini read the whole transcript this time; the first run had hit a 503), judge 11 min including the 12-clip plain re-read, render 6 min. With Gemini's talk scan working, 8 of the top 12 are talk clips (funny, banter, rage) and the 4-kill fight sits at #6, the chicken dinner at #9. Whether that balance is right is for the owner's swipes to decide (talk weight is `TALK_WEIGHT_GEMINI`). Two clips carried spoken gaali ("saala") and got sponsor-safe copies (`*_safe.mp4`) with the word muted.
+
 ## Next
 
-1. Transcript speed: skip stretches with no detected speech (the sound detector already knows), and measure Apex on ANJI (running).
-2. Two more full streams end to end (different streamers) for the step 1 gate.
-3. Step 3: download 10 more streams, label 5 by hand, measure recall, add knock detection from the kill feed.
-4. Then M2: database, API, worker, Google sign-in, upload, new web app.
+1. Two more full streams end to end (different streamers) for the step 1 gate.
+2. Step 3: download 10 more streams, label 5 by hand, measure recall, add knock detection from the kill feed.
+3. Then M2: database, API, worker, Google sign-in, upload, new web app.
 
 ## Not tested yet
 
-- `--sponsor-safe` export on a real clip with gaali (no clip in the full run had any; the filter is unit-tested).
+- The ranking balance between talk clips and fights (needs the owner's swipes on the rebuilt GtxPreet job).
 - After `cleanup`, re-editing a clip needs the source again: the editor (step 5) must re-ingest or say the source is gone.
