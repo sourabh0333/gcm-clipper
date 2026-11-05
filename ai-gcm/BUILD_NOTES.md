@@ -55,6 +55,12 @@ Ten 30-minute sections chosen for variety (`jobs/acc_*`): LoLzZz (big creator, l
 
 Recall against hand-picked moments still needs the owner's strict swipes on five of these sections (their keeps are the "top moments").
 
+**Paused 5 Nov 20:40 at the owner's request.** State when paused:
+- LoLzZz: the kills-only icon HUD scan was at 20 of 30 min with 25 kills when stopped (vision checkpoint kept; `python -m aigcm run <url> --job acc_lolzzz_landscape_bigcreator --section 1:00:00-1:30:00 --no-judge` resumes it and makes its clips).
+- Rajput: the 1080 run finished with no counters found (mostly lobby time in that section); a re-scan with the 24-frame whole-frame search was queued and not started (`... --job acc_rajput_small_hindi --section 0:15:00-0:45:00 --no-judge --force vision`).
+- SULTHAN: 1080 run complete (1 kill, counters read correctly).
+- The app server is still up on the laptop for the owner's swipes.
+
 ## Next
 
 1. Process the 10 accuracy sections; write down per stream: kills found, layout handled or not, transcript coverage, anything odd. The owner swipes 5 of them strictly; their keeps are the "top moments" for the recall figure.
