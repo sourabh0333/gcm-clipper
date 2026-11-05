@@ -1,6 +1,6 @@
 # Full app build notes
 
-Progress on building the complete GCM Clipper app, step by step from [the app plan](../plans/GCM%20Clipper%20sellable%20app%20plan.md), with the technical setup in [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md). Update before every push (see `CLAUDE.md`).
+Progress on building the complete GCM Clipper app, milestone by milestone from [the master plan](../plans/GCM%20Clipper%20master%20plan.md), with the technical setup in [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md). Update before every push (see `CLAUDE.md`).
 
 **Branch to merge first:** none
 

@@ -1,6 +1,6 @@
 # AI-GCM
 
-AI that turns long BGMI livestreams into ranked, captioned 9:16 clips for Indian gaming creators. The Python prototype is in `ai-gcm/` (see `ai-gcm/README.md` and `ai-gcm/TEST_RESULTS.md`). The next step is a PWA on top of it; progress is tracked in `ai-gcm/PWA_NOTES.md`. Work on better detection and funny-moment clips is tracked in `ai-gcm/ANALYSIS_NOTES.md`. The full app is now being built from `plans/GCM Clipper sellable app plan.md`; its progress is in `ai-gcm/BUILD_NOTES.md` and its technical setup in `docs/ARCHITECTURE.md`.
+AI that turns long BGMI livestreams into ranked, captioned 9:16 clips for Indian gaming creators. The Python prototype is in `ai-gcm/` (see `ai-gcm/README.md` and `ai-gcm/TEST_RESULTS.md`). The next step is a PWA on top of it; progress is tracked in `ai-gcm/PWA_NOTES.md`. Work on better detection and funny-moment clips is tracked in `ai-gcm/ANALYSIS_NOTES.md`. The full app is now being built from `plans/GCM Clipper master plan.md` (the single plan: features, milestones, owner tasks, risks); its progress is in `ai-gcm/BUILD_NOTES.md` and its technical setup in `docs/ARCHITECTURE.md`.
 
 ## Working in two places
 
