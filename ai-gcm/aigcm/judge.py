@@ -82,10 +82,16 @@ def judge_all(job, source, candidates, settings, transcript=None):
                 break
             except Exception as exc:
                 text = str(exc)
-                if attempt < 3 and any(code in text for code in ("429", "RESOURCE_EXHAUSTED", "500", "503", "UNAVAILABLE")):
+                busy = any(code in text for code in ("429", "RESOURCE_EXHAUSTED", "500", "503", "UNAVAILABLE"))
+                if busy and attempt < 3:
                     log(f"judge: {cand['id']} busy or over the free limit, retrying in {30 * (attempt + 1)}s")
                     time.sleep(30 * (attempt + 1))
                     continue
+                if busy:
+                    # Gemini's free tier can stay busy for a while. Leave this clip unrated (no cache file, so
+                    # a later run fills it in) rather than failing the whole job.
+                    log(f"judge: {cand['id']} still busy after 4 tries; ranking it by the detector score")
+                    break
                 raise
         preview.unlink(missing_ok=True)
 
