@@ -93,17 +93,15 @@ def test_remaining_ignores_dropped_digits():
     assert feed(Counter("remaining"), [41, 41, 141, 141, 141, 141, 141, 141]) == [(0.0, None, 41)]
 
 
-def test_icon_hud_row_gives_remaining_and_elims_boxes():
+def test_icon_hud_row_gives_the_kill_counter_box():
     from aigcm.vision import icon_row
-    # OCR reads the compact HUD's row as one line, icons included: person 36, crosshair 20, wings 2 across
-    # three 58 px cells on a 1280x720 frame (crop pixels of the top-left search area).
-    lines = [("236202", 0.85, (72, 1, 246, 29)), ("BGMI", 0.9, (301, 6, 339, 27)), ("TAGLoLzZz", 0.84, (87, 32, 141, 51))]
+    # OCR lines from the top-left crop of a 1280x720 frame: three numbers on one row, plus a player name.
+    lines = [("36", 0.9, (60, 10, 95, 36)), ("20", 0.9, (150, 11, 185, 37)), ("2", 0.8, (240, 10, 258, 36)),
+             ("TAGLoLzZz", 0.9, (60, 60, 200, 80)), ("7", 0.3, (300, 200, 310, 215))]
     boxes = icon_row(lines, 1280, 720)
-    assert set(boxes) == {"remaining", "elims"}
-    rx, ry, rw, rh = boxes["remaining"]
-    ex = boxes["elims"][0]
-    # The players number ends just inside the first cell (about x=125) and the box holds two digits.
-    assert abs((rx + rw) * 1280 - 125) < 4 and 34 < rw * 1280 < 52 and rx < ex and 0 <= ry < 0.05
+    assert set(boxes) == {"elims"}
+    x, y, w, h = boxes["elims"]
+    assert abs((x + w) * 1280 - 185) < 5 and w * 1280 >= 2.3 * 26 and 0 <= y < 0.05
     assert icon_row([("36", 0.9, (60, 10, 95, 36))], 1280, 720) == {}
     # The compass strip is a long row of three-digit headings; it must not be taken for the HUD.
     compass = [(str(v), 0.9, (300 + i * 40, 8, 330 + i * 40, 30)) for i, v in enumerate((105, 120, 135, 150, 165))]

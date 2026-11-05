@@ -218,30 +218,37 @@ def locate_counters(src, info, size, ocr):
 
 
 def icon_row(lines, frame_w, frame_h, search=ICON_SEARCH):
-    """Counter boxes for BGMI's compact HUD from OCR lines of the search crop. The row is three fixed-width
-    cells, each an icon with its number right-aligned (person 36 | crosshair 20 | wings 2). OCR usually reads
-    the whole row as one line ("236202", icons included), and the ends of that line are stable, so the
-    numbers are placed from the row's extent: cell width is a third of it, and each number ends a little
-    before its cell's right edge. Returns {"remaining": box, "elims": box} in frame fractions, or {}."""
+    """The kill counter box for BGMI's compact HUD, from OCR lines of the search crop. The HUD is a row of
+    icon + number cells (person 36 | crosshair 20 | wings 2) with no text labels. When OCR reads the numbers
+    as separate lines, the second number's right edge is reliable (the icon that follows it is a separate
+    glyph), so the eliminations box is anchored there, wide enough for three digits. The players-left number
+    is not read: OCR merges the crosshair icon into it unpredictably, and the kill logic works without it.
+    Returns {"elims": box} in frame fractions, or {}."""
     sx, sy, sw, sh = search
+    numbers = []
     for text, conf, (x0, y0, x1, y1) in lines:
-        digits = sum(ch.isdigit() for ch in text.translate(DIGIT_FIX))
-        lh = y1 - y0
-        if digits >= 4 and x1 - x0 >= 5 * lh and lh >= 8 and conf >= 0.5:
-            cell = (x1 - x0) / 3
-            boxes = {}
-            for k, name in enumerate(("remaining", "elims")):
-                right = x1 - (2 - k) * cell - 0.2 * lh
-                boxes[name] = ((sx * frame_w + right - ICON_NUMBER_W * lh) / frame_w,
-                               max(0.0, (sy * frame_h + y0 - 0.1 * lh) / frame_h),
-                               (ICON_NUMBER_W * lh) / frame_w, (lh * 1.2) / frame_h)
-            return boxes
-    return {}
+        digits = text.strip().translate(DIGIT_FIX)
+        if (digits.isdigit() and 0 < len(digits) <= ICON_ROW_MAX_DIGITS and int(digits) <= ICON_MAX_VALUE
+                and conf >= 0.5 and y1 - y0 >= 8):
+            numbers.append((x0, y0, x1, y1))
+    numbers.sort()
+    best = []
+    for i, box in enumerate(numbers):
+        row = [box] + [o for o in numbers[i + 1:] if abs(o[1] - box[1]) < (box[3] - box[1]) * 0.8]
+        if 2 <= len(row) <= 3 and len(row) > len(best):
+            best = row
+    if len(best) < 2:
+        return {}
+    lh = min(y1 - y0 for _, y0, _, y1 in best)
+    x0, y0, x1, y1 = best[1]
+    cy = (y0 + y1) / 2
+    return {"elims": ((sx * frame_w + x1 - 2.3 * lh) / frame_w, max(0.0, (sy * frame_h + cy - 0.7 * lh) / frame_h),
+                      (2.45 * lh) / frame_w, (lh * 1.4) / frame_h)}
 
 
 def _locate_icon_counters(src, info, size, ocr, frames=12):
     w, h = size
-    found = {"remaining": [], "elims": []}
+    found = {"elims": []}
     for t in np.linspace(info["duration"] * 0.03, info["duration"] * 0.97, frames):
         frame = grab_frame(src, float(t), size)
         if frame is None:
