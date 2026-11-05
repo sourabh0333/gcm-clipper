@@ -37,6 +37,39 @@ def resolve_model(settings):
     return settings.whisper_model, settings.caption_language
 
 
+def coverage(transcript, sounds, speech_level=0.5):
+    """What share of the seconds the sound detector heard speech in have at least one transcribed word.
+    ANJI's stream had speech 47% of the time but only 309 words: coverage there was far below this
+    function's healthy range (DIPENDU, a good transcript, scored about 0.95)."""
+    t = sounds["t"]
+    speech = t[sounds["speech"] >= speech_level]
+    if not len(speech):
+        return None
+    spoken = np.zeros(int(t[-1]) + 2, dtype=bool)
+    for seg in transcript["segments"]:
+        for w in seg["words"]:
+            spoken[int(w["start"]):int(w["end"]) + 1] = True
+    return float(spoken[speech.astype(int)].mean())
+
+
+def looks_broken(transcript, sounds, min_coverage=0.5, min_speech_s=120):
+    """True when a transcript misses most of the speech the sound detector heard, or dropped many lines."""
+    t = sounds["t"]
+    speech_s = float((sounds["speech"] >= 0.5).sum() * (t[1] - t[0] if len(t) > 1 else 1.0))
+    if speech_s < min_speech_s:
+        return False
+    cov = coverage(transcript, sounds)
+    return cov is not None and cov < min_coverage
+
+
+def fallback_model(settings):
+    """A bigger Hinglish model to retry with when the default's transcript looks broken, if it is installed."""
+    for name in ("hinglish-apex", "hinglish-prime"):
+        if (ROOT / "models" / name).is_dir() and name != settings.whisper_model:
+            return name
+    return None
+
+
 def split_lines(words):
     lines, current = [], []
     for w in words:

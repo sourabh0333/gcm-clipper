@@ -67,6 +67,17 @@ def test_transcript_resumes_after_a_crash_without_redoing_chunks(tmp_path, monke
     assert not ckpt.exists()
 
 
+def test_a_transcript_that_misses_detected_speech_looks_broken():
+    t = np.arange(0.0, 600.0, 1.0)
+    sounds = {"t": t, "speech": np.where(t < 300, 0.9, 0.0)}        # talking for the first 5 minutes
+    full = {"segments": [{"words": [{"start": float(s), "end": s + 0.8, "word": "w"} for s in range(0, 300, 1)]}]}
+    sparse = {"segments": [{"words": [{"start": float(s), "end": s + 0.8, "word": "w"} for s in range(0, 300, 10)]}]}
+    assert transcript.coverage(full, sounds) > 0.95 and transcript.coverage(sparse, sounds) < 0.3
+    assert not transcript.looks_broken(full, sounds) and transcript.looks_broken(sparse, sounds)
+    quiet = {"t": t, "speech": np.zeros(len(t))}
+    assert not transcript.looks_broken(sparse, quiet)              # too little speech to judge
+
+
 def test_cleanup_deletes_only_old_sources_of_finished_jobs(tmp_path):
     def job(name, rendered, age_days):
         j = Job(tmp_path / name)

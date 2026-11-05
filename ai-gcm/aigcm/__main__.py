@@ -2,6 +2,7 @@
 
 import argparse
 import csv
+from dataclasses import replace
 import re
 import shutil
 import sys
@@ -81,8 +82,18 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
         sounds.save(job.path("sounds.npz"), sounds.analyse(job.path("audio.wav")))
 
     def transcript_stage(job):
-        write_json(job.path("transcript.json"),
-                   transcript.transcribe(job.path("audio.wav"), settings, job.path("transcript.partial.json")))
+        said = transcript.transcribe(job.path("audio.wav"), settings, job.path("transcript.partial.json"))
+        # A noisy stream can defeat the small Hinglish model (ANJI: speech half the time, 309 words). When
+        # the sound detector has already run and the transcript misses most of the speech, retry once with
+        # the bigger model if it is installed.
+        heard_path = job.path("sounds.npz")
+        bigger = transcript.fallback_model(settings)
+        if bigger and heard_path.exists() and transcript.looks_broken(said, sounds.load(heard_path)):
+            log(f"transcript: looks broken (covers little of the detected speech); retrying with {bigger}")
+            retry = replace(settings, whisper_model=bigger)
+            said = transcript.transcribe(job.path("audio.wav"), retry, job.path("transcript.partial.json"))
+            said["retried_with"] = bigger
+        write_json(job.path("transcript.json"), said)
 
     def vision_stage(job):
         info = read_json(job.path("info.json"))
