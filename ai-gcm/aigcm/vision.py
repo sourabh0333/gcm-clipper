@@ -58,6 +58,8 @@ ICON_ROW_MAX_DIGITS = 3
 # for only in the left 30% of the frame, and only values up to 100 (players or kills) count.
 ICON_SEARCH = (0.0, 0.0, 0.3, 0.1)
 ICON_MAX_VALUE = 100
+# A number box is this many line heights wide: room for two digits without the icon to its left.
+ICON_NUMBER_W = 1.7
 # OCR confusions between letters and the HUD's condensed digits.
 DIGIT_FIX = str.maketrans({"O": "0", "o": "0", "D": "0", "Q": "0", "U": "0", "I": "1", "l": "1", "|": "1",
                            "i": "1", "J": "1", "S": "5", "s": "5", "B": "8", "Z": "2", "z": "2", "G": "6",
@@ -216,37 +218,25 @@ def locate_counters(src, info, size, ocr):
 
 
 def icon_row(lines, frame_w, frame_h, search=ICON_SEARCH):
-    """The compact HUD's number row from OCR lines of the search crop: 2-3 short numbers on one line, left to
-    right. Returns {"remaining": box, "elims": box} in frame fractions, or {} when there is no such row."""
+    """Counter boxes for BGMI's compact HUD from OCR lines of the search crop. The row is three fixed-width
+    cells, each an icon with its number right-aligned (person 36 | crosshair 20 | wings 2). OCR usually reads
+    the whole row as one line ("236202", icons included), and the ends of that line are stable, so the
+    numbers are placed from the row's extent: cell width is a third of it, and each number ends a little
+    before its cell's right edge. Returns {"remaining": box, "elims": box} in frame fractions, or {}."""
     sx, sy, sw, sh = search
-    numbers = []
     for text, conf, (x0, y0, x1, y1) in lines:
-        digits = text.strip().translate(DIGIT_FIX)
-        if (digits.isdigit() and 0 < len(digits) <= ICON_ROW_MAX_DIGITS and int(digits) <= ICON_MAX_VALUE
-                and conf >= 0.5 and y1 - y0 >= 8):
-            numbers.append((x0, y0, x1, y1))
-    numbers.sort()
-    best = []
-    for i, box in enumerate(numbers):
-        row = [box]
-        for other in numbers[i + 1:]:
-            if abs(other[1] - box[1]) < (box[3] - box[1]) * 0.8:
-                row.append(other)
-        if 2 <= len(row) <= 3 and len(row) > len(best):
-            best = row
-    if len(best) < 2:
-        return {}
-    boxes = {}
-    # OCR sometimes merges the icon that follows a number into its box, so the right edge is unreliable; the
-    # left edge is where the digits start. Each box starts there, uses the row's smallest line height, and
-    # is wide enough for three digits so a kill count can grow without leaving it (the digit decoder blanks
-    # the icon that then falls inside).
-    lh = min(y1 - y0 for _, y0, _, y1 in best)
-    for name, (x0, y0, x1, y1) in zip(("remaining", "elims"), best[:2]):
-        cy = (y0 + y1) / 2
-        boxes[name] = ((sx * frame_w + x0 - 0.15 * lh) / frame_w, (sy * frame_h + cy - 0.7 * lh) / frame_h,
-                       (2.45 * lh) / frame_w, (lh * 1.4) / frame_h)
-    return boxes
+        digits = sum(ch.isdigit() for ch in text.translate(DIGIT_FIX))
+        lh = y1 - y0
+        if digits >= 4 and x1 - x0 >= 5 * lh and lh >= 8 and conf >= 0.5:
+            cell = (x1 - x0) / 3
+            boxes = {}
+            for k, name in enumerate(("remaining", "elims")):
+                right = x1 - (2 - k) * cell - 0.2 * lh
+                boxes[name] = ((sx * frame_w + right - ICON_NUMBER_W * lh) / frame_w,
+                               max(0.0, (sy * frame_h + y0 - 0.1 * lh) / frame_h),
+                               (ICON_NUMBER_W * lh) / frame_w, (lh * 1.2) / frame_h)
+            return boxes
+    return {}
 
 
 def _locate_icon_counters(src, info, size, ocr, frames=12):
@@ -258,9 +248,9 @@ def _locate_icon_counters(src, info, size, ocr, frames=12):
             continue
         for name, box in icon_row(ocr.lines(crop_region(frame, ICON_SEARCH)), w, h).items():
             found[name].append(box)
-    if len(found["elims"]) < 3:
+    if len(found["elims"]) < 2:
         return {}
-    boxes = {name: tuple(float(v) for v in np.median(np.array(items), axis=0)) for name, items in found.items() if len(items) >= 3}
+    boxes = {name: tuple(float(v) for v in np.median(np.array(items), axis=0)) for name, items in found.items() if len(items) >= 2}
     log(f"vision: compact icon HUD found ({len(found['elims'])} frames): " + ", ".join(boxes))
     return boxes
 
