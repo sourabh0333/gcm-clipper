@@ -72,6 +72,7 @@ def test_judge_kind_does_not_relabel_a_kill_clip(tmp_path):
     from aigcm import judge
     from aigcm.jobs import Job, write_json
     job = Job(tmp_path / "j")
+    job.path("judge").mkdir()
     write_json(job.path("judge", "m01.json"), {"worth": 7, "type": "rage", "start_trim_s": 0, "end_trim_s": 0})
     write_json(job.path("judge", "m02.json"), {"worth": 6, "type": "banter", "start_trim_s": 0, "end_trim_s": 0})
     fight = {"id": "m01", "start": 0.0, "end": 30.0, "score": 40, "type": "multi_kill", "events": [{"t": 10, "kind": "self_kill"}],
