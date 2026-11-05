@@ -54,6 +54,10 @@ VERTICAL_ANALYSIS = 1080
 # labels, in one row at the top left. The numbers are found as a row of 2-3 short numbers; left to right
 # they are players remaining, eliminations, assists.
 ICON_ROW_MAX_DIGITS = 3
+# The compass strip at the top centre is also a row of numbers (105, 120, 135...), so the icon row is looked
+# for only in the left 30% of the frame, and only values up to 100 (players or kills) count.
+ICON_SEARCH = (0.0, 0.0, 0.3, 0.1)
+ICON_MAX_VALUE = 100
 # OCR confusions between letters and the HUD's condensed digits.
 DIGIT_FIX = str.maketrans({"O": "0", "o": "0", "D": "0", "Q": "0", "U": "0", "I": "1", "l": "1", "|": "1",
                            "i": "1", "J": "1", "S": "5", "s": "5", "B": "8", "Z": "2", "z": "2", "G": "6",
@@ -119,6 +123,9 @@ class Ocr:
         out = []
         for crop in crops:
             h, w = crop.shape[:2]
+            if h < 2 or w < 2:
+                out.append(("", 0.0))      # a box that fell off the frame edge
+                continue
             norm = rec.resize_norm_img(crop, max(img_w / img_h, w / h))[np.newaxis].astype(np.float32)
             probs = rec.session(norm)[0][0].copy()
             allowed = probs[:, self._digit_ids]
@@ -208,14 +215,15 @@ def locate_counters(src, info, size, ocr):
     return boxes
 
 
-def icon_row(lines, frame_w, frame_h, search=COUNTER_SEARCH):
+def icon_row(lines, frame_w, frame_h, search=ICON_SEARCH):
     """The compact HUD's number row from OCR lines of the search crop: 2-3 short numbers on one line, left to
     right. Returns {"remaining": box, "elims": box} in frame fractions, or {} when there is no such row."""
     sx, sy, sw, sh = search
     numbers = []
     for text, conf, (x0, y0, x1, y1) in lines:
         digits = text.strip().translate(DIGIT_FIX)
-        if digits.isdigit() and 0 < len(digits) <= ICON_ROW_MAX_DIGITS and conf >= 0.5:
+        if (digits.isdigit() and 0 < len(digits) <= ICON_ROW_MAX_DIGITS and int(digits) <= ICON_MAX_VALUE
+                and conf >= 0.5 and y1 - y0 >= 8):
             numbers.append((x0, y0, x1, y1))
     numbers.sort()
     best = []
@@ -224,7 +232,7 @@ def icon_row(lines, frame_w, frame_h, search=COUNTER_SEARCH):
         for other in numbers[i + 1:]:
             if abs(other[1] - box[1]) < (box[3] - box[1]) * 0.8:
                 row.append(other)
-        if len(row) > len(best):
+        if 2 <= len(row) <= 3 and len(row) > len(best):
             best = row
     if len(best) < 2:
         return {}
@@ -245,7 +253,7 @@ def _locate_icon_counters(src, info, size, ocr, frames=12):
         frame = grab_frame(src, float(t), size)
         if frame is None:
             continue
-        for name, box in icon_row(ocr.lines(crop_region(frame, COUNTER_SEARCH)), w, h).items():
+        for name, box in icon_row(ocr.lines(crop_region(frame, ICON_SEARCH)), w, h).items():
             found[name].append(box)
     if len(found["elims"]) < 3:
         return {}
