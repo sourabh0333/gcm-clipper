@@ -66,7 +66,13 @@ def download(url, out_dir, height=720, section=None):
     if section:
         opts["download_ranges"] = download_range_func(None, [section])
     with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=True)
+        info = ydl.extract_info(url, download=False)
+        # A stream that ended minutes ago is still being processed by YouTube: only DASH segments exist and
+        # a section download fails inside ffmpeg with an unhelpful exit code.
+        if info.get("live_status") in ("is_live", "post_live"):
+            raise RuntimeError("This stream is live or still being processed by YouTube. Try again a few hours "
+                               "after it ends.")
+        info = ydl.process_ie_result(info, download=True)
     path = Path(out_dir) / "source.mp4"
     if not path.exists():
         raise RuntimeError("Download finished but source.mp4 is missing.")
