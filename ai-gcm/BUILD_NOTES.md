@@ -16,7 +16,7 @@ Progress on building the complete GCM Clipper app, milestone by milestone from [
 
 | Step | What | Status |
 |---|---|---|
-| 1 | Full-length streams: resume after crash, bounded disk | **2 of 3 streams done.** GtxPreet 3.1 h (`jobs/vHLz6WDqJkk_full`, landscape): 59 kills, 1 chicken dinner, 12 clips, about 55 min with the final code. DIPENDU 2.06 h (`jobs/Pylusnav-1Q_full`, vertical 720×1280): 21 kills over 3 matches, 12 clips, **78 min** (vision 47 min = 0.38× realtime, because vertical layouts do a whole-frame "Spectating" read; transcript 11 min; judge 11 min). Both with no manual fixes. ANJI's full stream is the third |
+| 1 | Full-length streams: resume after crash, bounded disk | **Done: 3 of 3 streams.** GtxPreet 3.1 h (`jobs/vHLz6WDqJkk_full`, landscape): 59 kills, 1 chicken dinner, 12 clips, about 55 min with the final code. DIPENDU 2.06 h (`jobs/Pylusnav-1Q_full`, vertical): 21 kills over 3 matches, **78 min** (vision 47 min = 0.38× realtime: vertical layouts do a whole-frame "Spectating" read). ANJI 2.15 h (`jobs/utvX-jHSFi8_full`, vertical, noisy): 20 kills over 6 matches, **67 min** (vision 21 min, transcript 15 min with coverage 0.23 flagged as broken, judge 22 min of mostly Gemini busy-retries). All three with no manual fixes |
 | 2 | Speed: 3-hour stream in about 1 hour | **Done for the transcript; the whole job is now bounded by the 36-min HUD scan.** On the 3.1-hour stream: download 8 min; HUD scan about 36 min (1 fps, 0.19× realtime); sounds 3 min; **transcript 18 min** (was 77: faster-whisper's batched pipeline driven by the sound detector's speech spans); judge 7 min (Gemini busy-retries); render 4 min. Vision and the transcript run side by side with half the threads each. Expected whole job: about 55 min |
 | 3 | Accuracy on 10 more streams, knock detection, bigger speech model fallback | **Bigger model dropped.** The Apex (large-v3-turbo) conversion ran at 19× realtime on the laptop and produced garbage ("nan nan nan"), so it was removed. The code path stays: a transcript covering under half of the detected speech (ANJI 0.14; good streams 0.83–0.84) is marked `broken`, and the chosen clips' windows are redone with a bigger model if one is ever installed in `models/` (`transcript.retranscribe_windows`). For ANJI-type noisy streams the realistic fix later is a paid API (Sarvam, about ₹30 per hour of speech). 10-stream test and knock detection not started |
 | 3a | Moment markers | **Done (file-based).** `markers.json` in the job folder (`{"t", "source": button/chat/voice, "by"}`); spoken "clip that / clip karo" found in the transcript; repeats within 5 s fold into one; a marked moment is always a clip and outranks a two-kill fight |
@@ -41,11 +41,20 @@ Progress on building the complete GCM Clipper app, milestone by milestone from [
 
 - **Full job rebuilt on the new transcript (5 Nov, 14:22):** moments 7.5 min (Gemini read the whole transcript this time; the first run had hit a 503), judge 11 min including the 12-clip plain re-read, render 6 min. With Gemini's talk scan working, 8 of the top 12 are talk clips (funny, banter, rage) and the 4-kill fight sits at #6, the chicken dinner at #9. Whether that balance is right is for the owner's swipes to decide (talk weight is `TALK_WEIGHT_GEMINI`). Two clips carried spoken gaali ("saala") and got sponsor-safe copies (`*_safe.mp4`) with the word muted.
 
+## Accuracy set (step 3)
+
+Ten 30-minute sections chosen for variety (`jobs/acc_*`): LoLzZz (big creator, landscape), YouTube SULTHAN (facecam), im_Trex (small, facecam), GoDsBrOtHeR (Malayalam), Aashi (vertical), Bixi OP (handcam, pro), Beast (vertical), SHLOK (solo vs squad), PABLO (Telugu and Hindi), Zx_Rajput (small, Hindi). Downloads started 5 Nov 15:32 (about 15 min each); each is processed as it lands.
+
 ## Next
 
-1. Two more full streams end to end (different streamers) for the step 1 gate.
-2. Step 3: download 10 more streams, label 5 by hand, measure recall, add knock detection from the kill feed.
+1. Process the 10 accuracy sections; write down per stream: kills found, layout handled or not, transcript coverage, anything odd. The owner swipes 5 of them strictly; their keeps are the "top moments" for the recall figure.
+2. Knock detection from the kill feed (step 3).
 3. Then M2: database, API, worker, Google sign-in, upload, new web app.
+
+## Known slow spots
+
+- Gemini free tier: the judge spends most of its time in 503 "busy" retries (7–22 min per job). The paid tier at launch (M6) should remove that.
+- Vertical layouts: the whole-frame "Spectating" check makes vision 2× slower than on landscape streams. Could be limited to the detected gameplay window later.
 
 ## Not tested yet
 
