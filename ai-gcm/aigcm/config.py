@@ -29,6 +29,8 @@ def load_dotenv(path):
 class Settings:
     jobs_dir: Path = ROOT / "jobs"
     download_height: int = 720
+    # A 4-hour 720p source is 2-4 GB; it's kept this long after the clips are made so they can be re-edited.
+    source_keep_days: int = 14
 
     # Vision: frames sampled per second, the height they are scaled to, and how often the HUD is read
     # even when nothing seems to change.

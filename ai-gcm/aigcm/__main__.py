@@ -16,10 +16,10 @@ from .media import download, extract_audio, extract_frame, is_url, parse_time, p
 # Folders and files each stage writes, removed when that stage is forced to run again.
 OUTPUTS = {
     "ingest": ["source.mp4", "audio.wav", "info.json"],
-    "vision": ["vision.json"],
+    "vision": ["vision.json", "vision.partial.json"],
     "audio": ["audio.npz"],
     "sounds": ["sounds.npz"],
-    "transcript": ["transcript.json"],
+    "transcript": ["transcript.json", "transcript.partial.json"],
     "moments": ["moments.json", "talk.json"],
     "judge": ["judge", "ranked.json"],
     "captions": ["captions"],
@@ -81,11 +81,12 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
         sounds.save(job.path("sounds.npz"), sounds.analyse(job.path("audio.wav")))
 
     def transcript_stage(job):
-        write_json(job.path("transcript.json"), transcript.transcribe(job.path("audio.wav"), settings))
+        write_json(job.path("transcript.json"),
+                   transcript.transcribe(job.path("audio.wav"), settings, job.path("transcript.partial.json")))
 
     def vision_stage(job):
         info = read_json(job.path("info.json"))
-        write_json(job.path("vision.json"), vision.scan(info["path"], info, settings))
+        write_json(job.path("vision.json"), vision.scan(info["path"], info, settings, job.path("vision.partial.json")))
 
     def moments_stage(job):
         info = read_json(job.path("info.json"))
@@ -203,6 +204,31 @@ def cmd_find(args, settings):
         print(f"{minutes:6.0f} min  {item['channel']}  |  {item['title']}\n         {item['url']}")
 
 
+def stale_sources(jobs_dir, keep_days, now=None):
+    """Source video and audio files of finished jobs whose clips were made more than keep_days ago. Clips,
+    transcripts and analysis stay; only the large inputs go (re-editing needs the source, hence the wait)."""
+    now = now or time.time()
+    found = []
+    for root in sorted(p for p in Path(jobs_dir).iterdir() if p.is_dir()):
+        job = Job(root)
+        clips = job.path("clips.json")
+        if not job.done("render") or not clips.exists() or now - clips.stat().st_mtime < keep_days * 86400:
+            continue
+        found += [p for p in root.iterdir() if p.is_file() and (p.name.startswith("source.") or p.name == "audio.wav")]
+    return found
+
+
+def cmd_cleanup(args, settings):
+    days = args.days if args.days is not None else settings.source_keep_days
+    files = stale_sources(settings.jobs_dir, days)
+    size = sum(p.stat().st_size for p in files) / 1e9
+    for p in files:
+        print(f"{'would delete' if args.dry_run else 'deleting'} {p}")
+        if not args.dry_run:
+            p.unlink()
+    print(f"{len(files)} files, {size:.1f} GB{' (dry run)' if args.dry_run else ' freed'}")
+
+
 def cmd_eval(args, settings):
     """Compare chosen clips with hand-labelled moments (CSV: start,end,type,rating in seconds)."""
     job = Job(args.job)
@@ -266,6 +292,11 @@ def main(argv=None):
     p.add_argument("job")
     p.add_argument("labels")
     p.set_defaults(fn=cmd_eval)
+
+    p = sub.add_parser("cleanup", help="delete source videos of finished jobs to free disk space")
+    p.add_argument("--days", type=int, help="keep sources this many days after clips are made (default 14)")
+    p.add_argument("--dry-run", action="store_true", help="only list what would be deleted")
+    p.set_defaults(fn=cmd_cleanup)
 
     p = sub.add_parser("serve", help="run the app: start jobs, watch progress, review and share clips")
     p.add_argument("--host", default="0.0.0.0", help="0.0.0.0 lets a phone on the same Wi-Fi connect")

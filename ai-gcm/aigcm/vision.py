@@ -16,10 +16,11 @@ import difflib
 import re
 import subprocess
 from collections import deque
+from pathlib import Path
 
 import numpy as np
 
-from .jobs import log
+from .jobs import log, read_json, write_json
 from .media import tool
 
 # Order matters: the first pattern that matches a line decides its kind. The game also shows mission text
@@ -53,6 +54,9 @@ DIGIT_FIX = str.maketrans({"O": "0", "o": "0", "D": "0", "Q": "0", "U": "0", "I"
                            "b": "6", "g": "9", "q": "9", "T": "7"})
 MAX_KILL_JUMP = 5
 ZERO_LIKE = set("口品回日囗〇OoDQ")
+# A 4-hour stream takes 1-3 hours to scan on the laptop; saving the state every 5 minutes of video means a
+# crash or power cut costs a few minutes, not the whole scan.
+CHECKPOINT_EVERY_S = 300
 
 
 class Ocr:
@@ -235,6 +239,14 @@ class Counter:
         self.value = None
         self.pending, self.pending_t, self.pending_n = None, None, 0
 
+    def state(self):
+        return {"value": self.value, "pending": self.pending, "pending_t": self.pending_t, "pending_n": self.pending_n}
+
+    def restore(self, state):
+        self.value, self.pending = state["value"], state["pending"]
+        self.pending_t, self.pending_n = state["pending_t"], state["pending_n"]
+        return self
+
     def _reads_needed(self, old, value, fresh_match):
         """How many agreeing reads a change needs; None means never accept it."""
         if old is None:
@@ -291,17 +303,24 @@ def counter_events(change):
     return []
 
 
-def scan(src, info, settings):
+def _load_checkpoint(path, src, info, fps):
+    """The saved scan state, if `path` holds one for this same video and frame rate."""
+    saved = read_json(path) if path else None
+    if not saved or saved.get("source") != [str(src), info["duration"], fps]:
+        return None
+    return saved
+
+
+def scan(src, info, settings, checkpoint=None):
+    """Read the HUD through the whole video. With `checkpoint` (a file path), the scan state is saved every
+    few minutes of video, and a scan that was stopped or crashed carries on from there."""
     fps = settings.vision_fps
     size = frame_size(info, settings.vision_height)
     out_w, out_h = size
     ocr = Ocr()
-    counter_boxes = locate_counters(src, info, size, ocr)
-
-    cmd = [tool("ffmpeg"), "-v", "error", "-i", str(src), "-vf", f"fps={fps},scale={out_w}:{out_h}",
-           "-f", "rawvideo", "-pix_fmt", "bgr24", "-"]
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    frame_bytes = out_w * out_h * 3
+    saved = _load_checkpoint(checkpoint, src, info, fps)
+    counter_boxes = ({k: tuple(v) for k, v in saved["counter_boxes"].items()} if saved
+                     else locate_counters(src, info, size, ocr))
 
     counters = {name: Counter(name) for name in counter_boxes}
     remaining = []          # [(t, players left)] whenever it changes
@@ -314,6 +333,32 @@ def scan(src, info, settings):
     recent = {}
     events, ocr_calls, index = [], 0, 0
     next_report = 600
+    if saved:
+        for name, state in saved["counters"].items():
+            counters[name].restore(state)
+        remaining = [tuple(r) for r in saved["remaining"]]
+        spectating_until, last_spectate_read = saved["spectating_until"], saved["last_spectate_read"]
+        lobby_open, last_read = saved["lobby_open"], saved["last_read"]
+        recent = {(kind, text): t for kind, text, t in saved["recent"]}
+        events, ocr_calls, index, next_report = saved["events"], saved["ocr_calls"], saved["index"], saved["next_report"]
+        log(f"vision: resuming at {index / fps / 60:.0f} min from the checkpoint")
+    next_checkpoint = index / fps + CHECKPOINT_EVERY_S
+
+    def save_checkpoint():
+        write_json(checkpoint, {
+            "source": [str(src), info["duration"], fps], "counter_boxes": counter_boxes,
+            "counters": {name: c.state() for name, c in counters.items()}, "remaining": remaining,
+            "spectating_until": spectating_until, "last_spectate_read": last_spectate_read,
+            "lobby_open": lobby_open, "last_read": last_read,
+            "recent": [[kind, text, t] for (kind, text), t in recent.items()],
+            "events": events, "ocr_calls": ocr_calls, "index": index, "next_report": next_report})
+
+    # Seeking before the input is fast and frame-accurate enough here: the next frame read is frame `index`.
+    seek = ["-ss", f"{index / fps:.3f}"] if index else []
+    cmd = [tool("ffmpeg"), "-v", "error", *seek, "-i", str(src), "-vf", f"fps={fps},scale={out_w}:{out_h}",
+           "-f", "rawvideo", "-pix_fmt", "bgr24", "-"]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    frame_bytes = out_w * out_h * 3
 
     try:
         while True:
@@ -379,10 +424,15 @@ def scan(src, info, settings):
                 kills = sum(e["kind"] == "self_kill" for e in events)
                 log(f"vision: {t / 60:.0f} min scanned, {kills} kills, {len(events)} events")
                 next_report += 600
+            if checkpoint and t >= next_checkpoint:
+                save_checkpoint()
+                next_checkpoint += CHECKPOINT_EVERY_S
     finally:
         proc.stdout.close()
         proc.wait()
 
+    if checkpoint:
+        Path(checkpoint).unlink(missing_ok=True)
     events.sort(key=lambda e: e["t"])
     return {"events": events, "remaining": remaining, "counter_boxes": counter_boxes, "frames": index,
             "ocr_calls": ocr_calls, "frame_size": [out_w, out_h]}

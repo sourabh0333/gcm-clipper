@@ -7,11 +7,12 @@ Moments read the transcript to find conversations, and captions cut their words 
 """
 
 import wave
+from pathlib import Path
 
 import numpy as np
 
 from .config import ROOT
-from .jobs import log
+from .jobs import log, read_json, write_json
 
 CHUNK_S = 300
 # Whisper sometimes loops on one phrase over game noise ("I don't know" 50 times) or invents English over
@@ -56,7 +57,7 @@ def looping(line):
     return len(tokens) >= 12 and len(set(tokens)) / len(tokens) < MIN_UNIQUE
 
 
-def transcribe(wav_path, settings):
+def transcribe(wav_path, settings, checkpoint=None):
     from faster_whisper import WhisperModel
 
     name, language = resolve_model(settings)
@@ -64,9 +65,14 @@ def transcribe(wav_path, settings):
     with wave.open(str(wav_path), "rb") as w:
         rate = w.getframerate()
         samples = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32) / 32768.0
-    segments, dropped = [], 0
+    segments, dropped, start = [], 0, 0
     step = rate * CHUNK_S
-    for offset in range(0, len(samples), step):
+    # Each finished 5-minute chunk is saved, so a stopped or crashed run carries on from the next one.
+    saved = read_json(checkpoint) if checkpoint else None
+    if saved and saved.get("source") == [name, len(samples)]:
+        segments, dropped, start = saved["segments"], saved["dropped"], saved["next_offset"]
+        log(f"transcript: resuming at {start / rate / 60:.0f} min from the checkpoint")
+    for offset in range(start, len(samples), step):
         base = offset / rate
         parts, _ = model.transcribe(samples[offset:offset + step], language=language, word_timestamps=True,
                                     vad_filter=True, beam_size=1, condition_on_previous_text=False)
@@ -83,8 +89,13 @@ def transcribe(wav_path, settings):
                 segments.append({"start": line[0]["start"], "end": line[-1]["end"],
                                  "text": " ".join(w["word"] for w in line), "words": line})
         log(f"transcript: {min(len(samples), offset + step) / rate / 60:.0f} min done, {len(segments)} lines")
+        if checkpoint:
+            write_json(checkpoint, {"source": [name, len(samples)], "segments": segments, "dropped": dropped,
+                                    "next_offset": offset + step})
     if dropped:
         log(f"transcript: dropped {dropped} looping lines")
+    if checkpoint:
+        Path(checkpoint).unlink(missing_ok=True)
     return {"model": name, "language": language, "segments": segments}
 
 
