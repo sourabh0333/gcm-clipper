@@ -124,10 +124,13 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
         for n, clip in enumerate(ranked, 1):
             clip["rank"] = n
         said = read_json(job.path("transcript.json"))
-        bigger = transcript.fallback_model(settings)
-        if said.get("broken") and bigger and not said.get("windows_redone_with"):
-            said = transcript.retranscribe_windows(job.path("audio.wav"), [(c["start"], c["end"]) for c in ranked],
-                                                   replace(settings, whisper_model=bigger), said)
+        # The whole-stream transcript is the fast batched one; the chosen clips get the fuller plain read
+        # (and a bigger model, if one is installed, when the transcript looks broken).
+        windows = [(c["start"], c["end"]) for c in ranked]
+        if windows and said.get("windows") != [[round(s, 2), round(e, 2)] for s, e in windows]:
+            bigger = transcript.fallback_model(settings) if said.get("broken") else None
+            said = transcript.retranscribe_windows(job.path("audio.wav"), windows,
+                                                   replace(settings, whisper_model=bigger) if bigger else settings, said)
             write_json(job.path("transcript.json"), said)
         package.decorate(ranked, info, said, settings)
         flagged = sum(1 for c in ranked if c["flags"])

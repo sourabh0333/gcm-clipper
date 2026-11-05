@@ -60,13 +60,14 @@ def speech_spans(sounds, start, end):
     return out
 
 
-def _load(settings):
-    """(model name, language, batched pipeline) for the configured Whisper model."""
+def _load(settings, batched=True):
+    """(model name, language, model) for the configured Whisper model: the batched pipeline for a whole
+    stream, or the plain model, which finds more words, for short windows."""
     from faster_whisper import BatchedInferencePipeline, WhisperModel
 
     name, language = resolve_model(settings)
     model = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=getattr(settings, "analysis_threads", 0))
-    return name, language, BatchedInferencePipeline(model=model)
+    return name, language, (BatchedInferencePipeline(model=model) if batched else model)
 
 
 def resolve_model(settings):
@@ -106,10 +107,11 @@ def looks_broken(transcript, sounds, min_coverage=0.5, min_speech_s=120):
 
 
 def retranscribe_windows(wav_path, windows, settings, transcript):
-    """Transcribe only the given [(start, end)] windows with `settings.whisper_model` and splice the result
-    into `transcript`, replacing whatever it had there. Used with the bigger Hinglish model, which is far too
-    slow for a whole stream (over 2x realtime on the laptop) but fine for a dozen clips."""
-    name, language, model = _load(settings)
+    """Transcribe only the given [(start, end)] windows with the plain (unbatched) pipeline and splice the
+    result into `transcript`, replacing whatever it had there. The batched whole-stream transcript finds
+    about 15% fewer words than the plain one; the chosen clips, a few minutes of audio, get the full read
+    for their captions and safety check. The same path serves a bigger model when one is installed."""
+    name, language, model = _load(settings, batched=False)
     with wave.open(str(wav_path), "rb") as w:
         rate = w.getframerate()
         samples = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32) / 32768.0
@@ -117,7 +119,7 @@ def retranscribe_windows(wav_path, windows, settings, transcript):
     for start, end in windows:
         a, b = int(start * rate), int(end * rate)
         parts, _ = model.transcribe(samples[a:b], language=language, word_timestamps=True, vad_filter=True,
-                                    beam_size=1, batch_size=BATCH_SIZE)
+                                    beam_size=1, condition_on_previous_text=False)
         for seg in parts:
             if seg.compression_ratio > MAX_COMPRESSION or seg.avg_logprob < MIN_LOGPROB:
                 continue
