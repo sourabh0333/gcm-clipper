@@ -4,7 +4,7 @@ AI that turns long BGMI gameplay recordings and livestreams into ranked, caption
 
 | Folder | What's in it |
 |---|---|
-| [reports](reports/) | Market validation report (competitors, Indian BGMI creator market, feasibility, risks, verdict), a follow-up on auto-posting, learning from past posts and other games, and a study of what gaming YouTubers need |
+| [reports](reports/) | Four research reports: market validation, auto-posting and other games, what gaming YouTubers need, and a 25-tool competitor feature audit with proven gaps |
 | [plans](plans/) | The master plan for the full app (features, milestones, owner tasks, costs, risks, launch checklist) and the earlier 6-week validation plan |
 | [research_notes](research_notes/) | Source notes behind the report, with links |
 | [ai-gcm](ai-gcm/) | Working prototype (Python): download, HUD and audio analysis, ranking, captions, 9:16 clips, review page |
