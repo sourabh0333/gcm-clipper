@@ -91,3 +91,16 @@ def test_remaining_ignores_dropped_digits():
     assert [c[2] for c in changes] == [60, 59]
     # "41" read as "141" on a stream that enlarged the HUD.
     assert feed(Counter("remaining"), [41, 41, 141, 141, 141, 141, 141, 141]) == [(0.0, None, 41)]
+
+
+def test_icon_hud_row_gives_remaining_and_elims_boxes():
+    from aigcm.vision import icon_row
+    # OCR lines from the top-left crop of a 1280x720 frame: three numbers on one row, plus a player name.
+    lines = [("36", 0.9, (60, 10, 95, 36)), ("20", 0.9, (150, 11, 185, 37)), ("2", 0.8, (240, 10, 258, 36)),
+             ("TAGLoLzZz", 0.9, (60, 60, 200, 80)), ("7", 0.3, (300, 200, 310, 215))]
+    boxes = icon_row(lines, 1280, 720)
+    assert set(boxes) == {"remaining", "elims"}
+    rx, ry, rw, rh = boxes["remaining"]
+    ex = boxes["elims"][0]
+    assert rx < ex and 0 < ry < 0.05 and rw * 1280 >= 1.9 * 26
+    assert icon_row([("36", 0.9, (60, 10, 95, 36))], 1280, 720) == {}

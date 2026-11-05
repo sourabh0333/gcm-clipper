@@ -72,6 +72,12 @@ def download(url, out_dir, height=720, section=None):
         if info.get("live_status") in ("is_live", "post_live"):
             raise RuntimeError("This stream is live or still being processed by YouTube. Try again a few hours "
                                "after it ends.")
+        # A vertical stream usually holds a small 16:9 gameplay window whose HUD text is about 8 px tall at
+        # 720x1280, too small to read; those come down at 1080x1920 when available.
+        if (info.get("height") or 0) > (info.get("width") or 0) and height < VERTICAL_HEIGHT:
+            opts["format_sort"][0] = f"res:{VERTICAL_HEIGHT}"
+            ydl.params["format_sort"] = opts["format_sort"]
+            ydl.format_selector = ydl.build_format_selector(opts["format"])
         info = ydl.process_ie_result(info, download=True)
     path = Path(out_dir) / "source.mp4"
     if not path.exists():

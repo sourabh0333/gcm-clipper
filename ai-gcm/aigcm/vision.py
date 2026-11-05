@@ -49,6 +49,11 @@ MAX_REMAINING_DROP = 30
 COUNTER_LABELS = {"elims": "eliminations", "remaining": "remaining"}
 COUNTER_SEARCH = (0.0, 0.0, 0.5, 0.12)   # top-left area searched for the counter labels
 CALIBRATION_FRAMES = 24
+VERTICAL_ANALYSIS = 1080
+# BGMI's compact HUD shows the counters as icon + number (person 36, crosshair 20, wings 2) with no text
+# labels, in one row at the top left. The numbers are found as a row of 2-3 short numbers; left to right
+# they are players remaining, eliminations, assists.
+ICON_ROW_MAX_DIGITS = 3
 # OCR confusions between letters and the HUD's condensed digits.
 DIGIT_FIX = str.maketrans({"O": "0", "o": "0", "D": "0", "Q": "0", "U": "0", "I": "1", "l": "1", "|": "1",
                            "i": "1", "J": "1", "S": "5", "s": "5", "B": "8", "Z": "2", "z": "2", "G": "6",
@@ -196,8 +201,56 @@ def locate_counters(src, info, size, ocr):
     the gameplay is a smaller window) the whole frame is searched at higher resolution."""
     boxes = _locate_counters(src, info, size, ocr, COUNTER_SEARCH, ocr.lines)
     if not boxes:
+        boxes = _locate_icon_counters(src, info, size, ocr)
+    if not boxes:
         log("vision: counters not in the top-left corner, searching the whole frame")
         boxes = _locate_counters(src, info, size, ocr, (0.0, 0.0, 1.0, 1.0), ocr.lines_hires, frames=12)
+    return boxes
+
+
+def icon_row(lines, frame_w, frame_h, search=COUNTER_SEARCH):
+    """The compact HUD's number row from OCR lines of the search crop: 2-3 short numbers on one line, left to
+    right. Returns {"remaining": box, "elims": box} in frame fractions, or {} when there is no such row."""
+    sx, sy, sw, sh = search
+    numbers = []
+    for text, conf, (x0, y0, x1, y1) in lines:
+        digits = text.strip().translate(DIGIT_FIX)
+        if digits.isdigit() and 0 < len(digits) <= ICON_ROW_MAX_DIGITS and conf >= 0.5:
+            numbers.append((x0, y0, x1, y1))
+    numbers.sort()
+    best = []
+    for i, box in enumerate(numbers):
+        row = [box]
+        for other in numbers[i + 1:]:
+            if abs(other[1] - box[1]) < (box[3] - box[1]) * 0.8:
+                row.append(other)
+        if len(row) > len(best):
+            best = row
+    if len(best) < 2:
+        return {}
+    boxes = {}
+    for name, (x0, y0, x1, y1) in zip(("remaining", "elims"), best[:2]):
+        lh = y1 - y0
+        # The number box widened to three digits, so a kill count can grow without leaving it.
+        width = max(x1 - x0, 1.9 * lh)
+        boxes[name] = ((sx * frame_w + x0 - 0.15 * lh) / frame_w, (sy * frame_h + y0 - 0.2 * lh) / frame_h,
+                       (width + 0.3 * lh) / frame_w, (lh * 1.4) / frame_h)
+    return boxes
+
+
+def _locate_icon_counters(src, info, size, ocr, frames=12):
+    w, h = size
+    found = {"remaining": [], "elims": []}
+    for t in np.linspace(info["duration"] * 0.03, info["duration"] * 0.97, frames):
+        frame = grab_frame(src, float(t), size)
+        if frame is None:
+            continue
+        for name, box in icon_row(ocr.lines(crop_region(frame, COUNTER_SEARCH)), w, h).items():
+            found[name].append(box)
+    if len(found["elims"]) < 3:
+        return {}
+    boxes = {name: tuple(float(v) for v in np.median(np.array(items), axis=0)) for name, items in found.items() if len(items) >= 3}
+    log(f"vision: compact icon HUD found ({len(found['elims'])} frames): " + ", ".join(boxes))
     return boxes
 
 
@@ -320,7 +373,10 @@ def scan(src, info, settings, checkpoint=None):
     """Read the HUD through the whole video. With `checkpoint` (a file path), the scan state is saved every
     few minutes of video, and a scan that was stopped or crashed carries on from there."""
     fps = settings.vision_fps
-    size = frame_size(info, settings.vision_height)
+    # Vertical sources are analysed at 1080 on the shorter side, for the same reason they are downloaded at
+    # 1080: the gameplay window inside them is small.
+    size = frame_size(info, max(settings.vision_height, VERTICAL_ANALYSIS) if info["height"] > info["width"]
+                      else settings.vision_height)
     out_w, out_h = size
     ocr = Ocr(getattr(settings, "analysis_threads", None))
     saved = _load_checkpoint(checkpoint, src, info, fps)
