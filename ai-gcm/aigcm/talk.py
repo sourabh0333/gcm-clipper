@@ -158,6 +158,23 @@ def _lines(transcript, sounds, start, end):
     return "\n".join(out)
 
 
+def _ask_with_retry(client, model, prompt, types, attempts=4):
+    """Gemini's free tier answers 503 "high demand" and 429 often; wait and try again like the judge does."""
+    import time
+    for attempt in range(attempts):
+        try:
+            return client.models.generate_content(
+                model=model, contents=[prompt],
+                config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0.2))
+        except Exception as exc:
+            text = str(exc)
+            busy = any(code in text for code in ("429", "RESOURCE_EXHAUSTED", "500", "503", "UNAVAILABLE"))
+            if attempt == attempts - 1 or not busy:
+                raise
+            log(f"talk: Gemini busy, retrying in {30 * (attempt + 1)}s")
+            time.sleep(30 * (attempt + 1))
+
+
 def from_gemini(job, transcript, sounds, settings, duration):
     from google.genai import types
 
@@ -176,9 +193,7 @@ def from_gemini(job, transcript, sounds, settings, duration):
             done[key] = []
             continue
         prompt = PROMPT.format(minutes=(end - start) / 60, types=", ".join(TYPES), lines=lines)
-        response = client.models.generate_content(
-            model=settings.gemini_model, contents=[prompt],
-            config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0.2))
+        response = _ask_with_retry(client, settings.gemini_model, prompt, types)
         done[key] = json.loads(response.text)
         write_json(cache, done)
         log(f"talk: Gemini read {_clock(start)}-{_clock(end)}, {len(done[key])} moments")

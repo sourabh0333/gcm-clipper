@@ -16,9 +16,9 @@ Progress on building the complete GCM Clipper app, milestone by milestone from [
 
 | Step | What | Status |
 |---|---|---|
-| 1 | Full-length streams: resume after crash, bounded disk | Resume done and checked on a real cut. `aigcm cleanup` done. Full 3.1-hour stream (`jobs/vHLz6WDqJkk_full`, GtxPreet, 2.7 GB) downloaded in 8 min; the end-to-end run is next |
-| 2 | Speed: 3-hour stream in about 1 hour | **In progress.** Vision now runs alongside audio, sounds and transcript (`Job.run_parallel`). HUD reads at 1 fps instead of 2 (the reset hold is time-based, 10 s); banner text is read at most every 3 s. Being timed on the 10-minute cut (baseline 349 s = 0.58× realtime at 2 fps) |
-| 3 | Accuracy on 10 more streams, knock detection, bigger speech model fallback | Not started |
+| 1 | Full-length streams: resume after crash, bounded disk | **Done.** The full 3.1-hour GtxPreet stream (`jobs/vHLz6WDqJkk_full`, 2.7 GB) ran end to end on 5 Nov with no manual fixes: 59 kills, 1 chicken dinner, 8 accolades, 12 clips. The run was stopped once mid-way (to change thread limits) and resumed from the checkpoints. Two more full streams still to run for the "three streams" gate |
+| 2 | Speed: 3-hour stream in about 1 hour | **Close.** Measured on the 3.1-hour stream: download 8 min; HUD scan about 36 min (1 fps, 0.19× realtime); transcript 77 min; sounds 3 min; judge 7 min (Gemini busy-retries); render 4 min. Vision and the transcript run side by side with half the threads each, so analysis took about 70 min and the whole job about 85 min. **The transcript is the bottleneck**: 0.2× realtime alone, 0.5–0.75× while vision runs. Next idea: skip transcription of stretches the sound detector marks as no speech |
+| 3 | Accuracy on 10 more streams, knock detection, bigger speech model fallback | **Fallback done:** a transcript covering under half of the detected speech (ANJI 0.14; good streams 0.83–0.84) is redone with `models/hinglish-apex` (installed, 814 MB). Apex quality and speed on ANJI being measured. 10-stream test and knock detection not started |
 | 3a | Moment markers | **Done (file-based).** `markers.json` in the job folder (`{"t", "source": button/chat/voice, "by"}`); spoken "clip that / clip karo" found in the transcript; repeats within 5 s fold into one; a marked moment is always a clip and outranks a two-kill fight |
 | 6 | Post-ready output and brand-safe check | **Done.** `titles.py` (stat / Hinglish punchline / suspense, ≤45 chars, one emoji, series counter, hashtags by channel size, description with stream link and Krafton line), `safety.py` (gaali in Latin and Devanagari across word boundaries, slurs, betting, other games, title overclaims), bleeped "sponsor-safe" export with `--sponsor-safe`. `package.decorate` fills `titles`, `title`, `hashtags`, `description`, `flags`, `mute_spans`, `sponsor_safe` on every ranked clip |
 | 7 | Clip labels and "why this clip" | **Done.** Every clip has `labels` (type, game, kills, knocks, win, marked, talk, players_left, length) and `why` ("2 kills by the streamer at 1:12:40") |
@@ -31,19 +31,20 @@ Progress on building the complete GCM Clipper app, milestone by milestone from [
 
 ## Measurements
 
-- 10-min landscape cut, 2 fps HUD: 349 s (0.58× realtime), 3 kills. Change-detection on the counter crop was tried and dropped: the box sits over moving gameplay, so the pixels change every frame and OCR still ran on 1,133 of 1,200 frames.
+- 10-min landscape cut, 2 fps HUD: 349 s (0.58× realtime), 3 kills. **At 1 fps: 185 s (0.31×), same 3 kills** (first kill timestamp moved by 3 s, well inside the 12 s lead-in).
+- Full 3.1-hour stream, 5 Nov: see step 2 above. Titles on the 12 clips read like the top Shorts style after the fix (stat first for fights: "DOUBLE FINISH 💀", "4 FINISHES 1 FIGHT 🔥", "CHICKEN DINNER 1 FINISH LAST ZONE 🏆"; the judge's Hinglish line second). Gaali detector found 18 spoken gaali in the 3.1 h (gand, kutte, randi, saala); none fell inside the 12 clips, so 0 flags.
+- Gemini's free tier returned 503 "high demand" repeatedly during the judge; the talk scan now retries like the judge does. Change-detection on the counter crop was tried and dropped: the box sits over moving gameplay, so the pixels change every frame and OCR still ran on 1,133 of 1,200 frames.
 - Digit recognition: about 27 ms per crop at the padded 320-wide input. A narrower input is 15 ms but misreads some digits ("2" → "28"), so it was not adopted.
 - Full stream download (3.1 h, 720p): 8 min.
 
 ## Next
 
-1. Read the 1 fps timing on the cut; then run the full 3.1-hour stream end to end with the parallel stages and record the total time per stage.
-2. Kill the full run once during vision and once during the transcript and confirm both resume.
-3. Step 3: download 10 more streams (mix of layouts and games later), label 5 by hand, measure recall, add knock detection from the kill feed, and the Apex speech model fallback when a transcript looks broken.
+1. Transcript speed: skip stretches with no detected speech (the sound detector already knows), and measure Apex on ANJI (running).
+2. Two more full streams end to end (different streamers) for the step 1 gate.
+3. Step 3: download 10 more streams, label 5 by hand, measure recall, add knock detection from the kill feed.
 4. Then M2: database, API, worker, Google sign-in, upload, new web app.
 
 ## Not tested yet
 
-- The parallel stages on a real job (unit-tested only); CPU contention between OCR and Whisper may cut the gain.
-- `--sponsor-safe` export on a real clip with gaali (unit-tested filter only).
+- `--sponsor-safe` export on a real clip with gaali (no clip in the full run had any; the filter is unit-tested).
 - After `cleanup`, re-editing a clip needs the source again: the editor (step 5) must re-ingest or say the source is gone.

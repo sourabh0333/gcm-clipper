@@ -14,13 +14,17 @@ def test_titles_cover_the_three_families_and_stay_short():
     labels = {"type": "multi_kill", "kills": 3, "players_left": 8, "win": False, "marked": False}
     out = titles.suggest(labels, said="Are bhai ye kya tha? Camper ka bachcha.", series=7)
     assert out[0] == "3 FINISHES 1 FIGHT LAST ZONE #7 🔥"
-    assert any("?" in t or "🤣" in t for t in out)
+    assert out[1] == "Bhai ye kya tha? 😎"          # the question the streamer asked, with the last-zone emoji
     assert all(len(t) <= titles.MAX_LEN for t in out) and len(out) == 3
 
 
-def test_judge_title_becomes_the_punchline():
+def test_judge_title_becomes_the_punchline_with_an_emoji_for_the_kind():
     out = titles.suggest({"type": "rage", "talk": "rage", "kills": 0}, judge_title="Campers se pareshan")
-    assert out[0] == "Campers se pareshan 🤣"
+    assert out[0] == "Campers se pareshan 😡"
+    # A kill clip leads with its stat; the judge's line comes second with a kill emoji, not the laughing one.
+    out = titles.suggest({"type": "fight", "kills": 2, "players_left": 40}, judge_title="Clean Clutches in BGMI!")
+    assert out[0] == "DOUBLE FINISH 💀" and out[1] == "Clean Clutches in BGMI! 💀"
+    assert titles.clip_emoji({"win": True, "kills": 3}) == "🏆" and titles.clip_emoji({"kills": 1, "players_left": 4}) == "😎"
 
 
 def test_hashtags_depend_on_channel_size_and_description_carries_the_krafton_line():
