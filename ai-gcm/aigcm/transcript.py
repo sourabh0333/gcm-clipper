@@ -62,6 +62,39 @@ def looks_broken(transcript, sounds, min_coverage=0.5, min_speech_s=120):
     return cov is not None and cov < min_coverage
 
 
+def retranscribe_windows(wav_path, windows, settings, transcript):
+    """Transcribe only the given [(start, end)] windows with `settings.whisper_model` and splice the result
+    into `transcript`, replacing whatever it had there. Used with the bigger Hinglish model, which is far too
+    slow for a whole stream (over 2x realtime on the laptop) but fine for a dozen clips."""
+    from faster_whisper import WhisperModel
+
+    name, language = resolve_model(settings)
+    model = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=getattr(settings, "analysis_threads", 0))
+    with wave.open(str(wav_path), "rb") as w:
+        rate = w.getframerate()
+        samples = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32) / 32768.0
+    new = []
+    for start, end in windows:
+        a, b = int(start * rate), int(end * rate)
+        parts, _ = model.transcribe(samples[a:b], language=language, word_timestamps=True, vad_filter=True,
+                                    beam_size=1, condition_on_previous_text=False)
+        for seg in parts:
+            if seg.compression_ratio > MAX_COMPRESSION or seg.avg_logprob < MIN_LOGPROB:
+                continue
+            words = [{"start": round(start + w.start, 2), "end": round(start + w.end, 2), "word": w.word.strip()}
+                     for w in seg.words or [] if w.word.strip()]
+            for line in split_lines(words):
+                if not looping(line):
+                    new.append({"start": line[0]["start"], "end": line[-1]["end"],
+                                "text": " ".join(w["word"] for w in line), "words": line})
+    kept = [seg for seg in transcript["segments"]
+            if not any(seg["end"] > s and seg["start"] < e for s, e in windows)]
+    merged = dict(transcript, segments=sorted(kept + new, key=lambda s: s["start"]),
+                  windows_redone_with=name, windows=[[round(s, 2), round(e, 2)] for s, e in windows])
+    log(f"transcript: {len(windows)} clip windows redone with {Path(name).name}: {len(new)} lines")
+    return merged
+
+
 def fallback_model(settings):
     """A bigger Hinglish model to retry with when the default's transcript looks broken, if it is installed."""
     for name in ("hinglish-apex", "hinglish-prime"):

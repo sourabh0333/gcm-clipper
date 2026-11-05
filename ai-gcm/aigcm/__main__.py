@@ -83,16 +83,17 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
 
     def transcript_stage(job):
         said = transcript.transcribe(job.path("audio.wav"), settings, job.path("transcript.partial.json"))
-        # A noisy stream can defeat the small Hinglish model (ANJI: speech half the time, 309 words). When
-        # the sound detector has already run and the transcript misses most of the speech, retry once with
-        # the bigger model if it is installed.
+        # A noisy stream can defeat the small Hinglish model (ANJI: speech half the time, 309 words). The
+        # coverage is recorded here; the chosen clips are redone with the bigger model in the judge stage,
+        # because that model is too slow for a whole stream.
         heard_path = job.path("sounds.npz")
-        bigger = transcript.fallback_model(settings)
-        if bigger and heard_path.exists() and transcript.looks_broken(said, sounds.load(heard_path)):
-            log(f"transcript: looks broken (covers little of the detected speech); retrying with {bigger}")
-            retry = replace(settings, whisper_model=bigger)
-            said = transcript.transcribe(job.path("audio.wav"), retry, job.path("transcript.partial.json"))
-            said["retried_with"] = bigger
+        if heard_path.exists():
+            heard = sounds.load(heard_path)
+            said["coverage"] = transcript.coverage(said, heard)
+            said["broken"] = transcript.looks_broken(said, heard)
+            if said["broken"]:
+                log(f"transcript: covers only {said['coverage']:.0%} of the detected speech; clips will be redone "
+                    f"with the bigger model if one is installed")
         write_json(job.path("transcript.json"), said)
 
     def vision_stage(job):
@@ -122,7 +123,13 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
         ranked = judge.merge(job, found, settings)[: settings.top_n]
         for n, clip in enumerate(ranked, 1):
             clip["rank"] = n
-        package.decorate(ranked, info, read_json(job.path("transcript.json")), settings)
+        said = read_json(job.path("transcript.json"))
+        bigger = transcript.fallback_model(settings)
+        if said.get("broken") and bigger and not said.get("windows_redone_with"):
+            said = transcript.retranscribe_windows(job.path("audio.wav"), [(c["start"], c["end"]) for c in ranked],
+                                                   replace(settings, whisper_model=bigger), said)
+            write_json(job.path("transcript.json"), said)
+        package.decorate(ranked, info, said, settings)
         flagged = sum(1 for c in ranked if c["flags"])
         log(f"judge: {len(ranked)} clips packaged with titles; {flagged} carry safety flags")
         write_json(job.path("ranked.json"), ranked)

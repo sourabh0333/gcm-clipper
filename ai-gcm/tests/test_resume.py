@@ -78,6 +78,18 @@ def test_a_transcript_that_misses_detected_speech_looks_broken():
     assert not transcript.looks_broken(sparse, quiet)              # too little speech to judge
 
 
+def test_clip_windows_are_redone_and_spliced_into_the_transcript(tmp_path, monkeypatch):
+    monkeypatch.setitem(sys.modules, "faster_whisper", types.SimpleNamespace(WhisperModel=FakeWhisper))
+    wav = tmp_path / "audio.wav"
+    silent_wav(wav, 60)
+    old = {"segments": [{"start": 5.0, "end": 6.0, "text": "old a", "words": [{"start": 5.0, "end": 6.0, "word": "old"}]},
+                        {"start": 30.0, "end": 31.0, "text": "old b", "words": [{"start": 30.0, "end": 31.0, "word": "old"}]}]}
+    FakeWhisper.calls, FakeWhisper.crash_on = 0, None
+    new = transcript.retranscribe_windows(wav, [(20.0, 40.0)], Settings(whisper_model="small"), old)
+    assert [s["text"] for s in new["segments"]] == ["old a", "line1"]     # "old b" was inside the window
+    assert new["segments"][1]["start"] == 21.0 and new["windows"] == [[20.0, 40.0]]
+
+
 def test_cleanup_deletes_only_old_sources_of_finished_jobs(tmp_path):
     def job(name, rendered, age_days):
         j = Job(tmp_path / name)
