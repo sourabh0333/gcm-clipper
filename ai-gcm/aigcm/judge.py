@@ -100,7 +100,12 @@ def merge(job, candidates, settings):
         cand["judge"] = verdict
         if verdict:
             cand["final_score"] = round(0.6 * verdict["worth"] * 10 + 0.4 * cand["detector_score"], 1)
-            cand["type"] = verdict["type"] if verdict["type"] != "nothing" else cand["type"]
+            # The judge's kind is kept, but a clip with kills on the HUD stays a fight or multi-kill: a 4-kill
+            # fight the judge called "rage" was titled as a fight and must be labelled as one.
+            cand["judge_type"] = verdict["type"]
+            if verdict["type"] != "nothing" and not cand.get("events"):
+                cand["type"] = verdict["type"]
+                cand.setdefault("labels", {})["type"] = verdict["type"]
             start = cand["start"] + verdict["start_trim_s"]
             end = cand["end"] - verdict["end_trim_s"]
             if end - start >= settings.min_clip_s:

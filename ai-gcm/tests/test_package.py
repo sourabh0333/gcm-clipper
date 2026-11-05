@@ -66,3 +66,18 @@ def test_decorate_fills_every_post_field():
     package.decorate([clip], info, transcript, Settings())
     assert clip["title"] and len(clip["titles"]) >= 2 and clip["hashtags"][0] == "#bgmi"
     assert "watch?v=abc" in clip["description"] and clip["flags"] == [] and clip["sponsor_safe"]
+
+
+def test_judge_kind_does_not_relabel_a_kill_clip(tmp_path):
+    from aigcm import judge
+    from aigcm.jobs import Job, write_json
+    job = Job(tmp_path / "j")
+    write_json(job.path("judge", "m01.json"), {"worth": 7, "type": "rage", "start_trim_s": 0, "end_trim_s": 0})
+    write_json(job.path("judge", "m02.json"), {"worth": 6, "type": "banter", "start_trim_s": 0, "end_trim_s": 0})
+    fight = {"id": "m01", "start": 0.0, "end": 30.0, "score": 40, "type": "multi_kill", "events": [{"t": 10, "kind": "self_kill"}],
+             "labels": {"type": "multi_kill"}}
+    talk = {"id": "m02", "start": 100.0, "end": 130.0, "score": 20, "type": "talk", "events": [], "labels": {"type": "talk"}}
+    ranked = judge.merge(job, [fight, talk], Settings())
+    by_id = {c["id"]: c for c in ranked}
+    assert by_id["m01"]["type"] == "multi_kill" and by_id["m01"]["judge_type"] == "rage"
+    assert by_id["m02"]["type"] == "banter" and by_id["m02"]["labels"]["type"] == "banter"
