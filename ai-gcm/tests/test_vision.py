@@ -102,7 +102,9 @@ def test_icon_hud_row_gives_remaining_and_elims_boxes():
     assert set(boxes) == {"remaining", "elims"}
     rx, ry, rw, rh = boxes["remaining"]
     ex = boxes["elims"][0]
-    assert rx < ex and 0 < ry < 0.05 and rw * 1280 >= 1.9 * 26
+    assert rx < ex and 0 < ry < 0.05 and rw * 1280 >= 2.3 * 26
+    # A box ends just right of its number and starts left of a three-digit number, not at the icon.
+    assert abs((rx + rw) * 1280 - 95) < 5 and rx * 1280 > 20
     assert icon_row([("36", 0.9, (60, 10, 95, 36))], 1280, 720) == {}
     # The compass strip is a long row of three-digit headings; it must not be taken for the HUD.
     compass = [(str(v), 0.9, (300 + i * 40, 8, 330 + i * 40, 30)) for i, v in enumerate((105, 120, 135, 150, 165))]

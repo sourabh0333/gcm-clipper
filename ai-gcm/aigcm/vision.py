@@ -237,12 +237,14 @@ def icon_row(lines, frame_w, frame_h, search=ICON_SEARCH):
     if len(best) < 2:
         return {}
     boxes = {}
+    # OCR sometimes merges the icon into its number, giving a wider, taller box. The numbers are right-aligned
+    # next to their icons, so each box is anchored on the number's right edge, sized by the row's smallest
+    # line height, and wide enough for three digits so a kill count can grow without leaving it.
+    lh = min(y1 - y0 for _, y0, _, y1 in best)
     for name, (x0, y0, x1, y1) in zip(("remaining", "elims"), best[:2]):
-        lh = y1 - y0
-        # The number box widened to three digits, so a kill count can grow without leaving it.
-        width = max(x1 - x0, 1.9 * lh)
-        boxes[name] = ((sx * frame_w + x0 - 0.15 * lh) / frame_w, (sy * frame_h + y0 - 0.2 * lh) / frame_h,
-                       (width + 0.3 * lh) / frame_w, (lh * 1.4) / frame_h)
+        cy = (y0 + y1) / 2
+        boxes[name] = ((sx * frame_w + x1 - 2.3 * lh) / frame_w, (sy * frame_h + cy - 0.7 * lh) / frame_h,
+                       (2.45 * lh) / frame_w, (lh * 1.4) / frame_h)
     return boxes
 
 
