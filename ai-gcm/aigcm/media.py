@@ -8,6 +8,7 @@ from pathlib import Path
 
 # Checked when ffmpeg is not on PATH, e.g. a build unzipped to C:\ffmpeg.
 FFMPEG_DIRS = [os.environ.get("AIGCM_FFMPEG_DIR", ""), r"C:\ffmpeg\bin"]
+VERTICAL_HEIGHT = 1080   # shorter side for vertical sources; landscape ones use Settings.download_height
 
 
 def tool(name):
