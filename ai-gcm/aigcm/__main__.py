@@ -353,6 +353,10 @@ def main(argv=None):
     p.set_defaults(fn=cmd_serve)
 
     args = parser.parse_args(argv)
+    # Stream titles carry emoji; the Windows console's default code page can't print them.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     try:
         args.fn(args, Settings.from_env())
     except KeyboardInterrupt:
