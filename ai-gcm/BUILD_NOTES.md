@@ -43,7 +43,17 @@ Progress on building the complete GCM Clipper app, milestone by milestone from [
 
 ## Accuracy set (step 3)
 
-Ten 30-minute sections chosen for variety (`jobs/acc_*`): LoLzZz (big creator, landscape), YouTube SULTHAN (facecam), im_Trex (small, facecam), GoDsBrOtHeR (Malayalam), Aashi (vertical), Bixi OP (handcam, pro), Beast (vertical), SHLOK (solo vs squad), PABLO (Telugu and Hindi), Zx_Rajput (small, Hindi). Downloads started 5 Nov 15:32 (about 15 min each); each is processed as it lands.
+Ten 30-minute sections chosen for variety (`jobs/acc_*`): LoLzZz (big creator, landscape, compact icon HUD), YouTube SULTHAN (facecam, vertical), im_Trex (small, facecam, vertical), Aashi (vertical), Bixi OP (handcam, pro, landscape), Beast (vertical), SHLOK (solo vs squad, landscape), PABLO (Telugu and Hindi, vertical), Zx_Rajput (small, Hindi, vertical), NesaMani (Tamil). GoDsBrOtHeR and ESWAR were dropped: both streams had just ended (`post_live`) and YouTube only serves DASH segments then, so the section download fails; the pipeline now refuses those with a clear message. Processed on 5 Nov without the Gemini judge (its busy-retries were most of the time).
+
+**What the set found, and what was fixed:**
+
+- **7 of 10 worked first time:** counters found, 11–16 kills per 30 min, plausible clip mixes. Landscape sections scan in 5–6 min, vertical ones in 11–21 min (the whole-frame "Spectating" read).
+- **Compact icon HUD (LoLzZz):** BGMI's newer HUD shows person 36 · crosshair 20 · wings 2 with no text labels, so the label search found nothing and 0 kills. Fixed: the row is read as one OCR line and the numbers placed from its three fixed cells (`icon_row`); reads were right on all six checked frames (92/79/50/36/32/18 players, 9→26 kills). Two earlier attempts anchored on the OCR box edges and failed because OCR merges the icons into the number boxes unpredictably.
+- **Vertical streams with a small gameplay window (SULTHAN, Rajput):** at 720×1280 the HUD text is about 8 px tall; SULTHAN's "Remaining 52" read as "2" and Rajput's labels were never found although he had 3–4 kills a match. Fixed: vertical sources are downloaded and analysed at 1080×1920 (`VERTICAL_HEIGHT`, `VERTICAL_ANALYSIS`). SULTHAN's remaining counter then read correctly (52 → 15, new lobby 52); his section has 1 kill, which looks genuine (early deaths).
+- **Transcript coverage** is 0.84–0.86 on landscape streams and 0.38–0.54 on vertical ones; six of ten were flagged "broken" by the 0.5 rule. Either the rule is too strict for noisy phone streams or the batched spans miss speech under loud game audio; to be looked at with the owner's swipes.
+- **Gemini free tier** failed two jobs outright with 503 before the judge was made to leave a clip unrated instead of failing.
+
+Recall against hand-picked moments still needs the owner's strict swipes on five of these sections (their keeps are the "top moments").
 
 ## Next
 
