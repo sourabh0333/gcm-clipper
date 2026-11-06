@@ -47,9 +47,11 @@ SPECTATE_SEARCH = (0.35, 0.1, 0.3, 0.35)
 SPECTATE_SEARCH_EVERY_S = 1.0
 # Once the spot is known, OCR is not used on it again (it reads the tiny text on only a quarter of the
 # frames): the text's own pixels, taken at the moment OCR found it, are the template, and a frame matches
-# when enough of those pixels are lit again. The text is orange in most HUDs, else bright on dark.
+# when enough of those pixels are lit again. The text is orange in most HUDs, else bright on dark. Only
+# thin strokes count, so a character's skin or sandy ground in the same colour (PABLO's zoomed window)
+# neither gets into the template nor matches it.
 SPECTATE_MIN_PIXELS = 40
-SPECTATE_MATCH = {"orange": 0.5, "bright": 0.4}
+SPECTATE_MATCH = 0.3
 SPECTATE_EVERY_S = 1.0   # at most one Spectating check a second while the counter looks different
 SPECTATE_HOLD_S = 6.0
 # The "Spectating" text is read on only about a quarter of the frames, so a teammate's counter can slip
@@ -315,21 +317,30 @@ def _bright_mask(crop):
     return grey > grey.mean() + grey.std()
 
 
+def _strokes(mask):
+    """The thin parts of a mask: text strokes stay, blobs wider than about an eighth of the crop height go."""
+    import cv2
+    k = max(3, round(mask.shape[0] / 8))
+    m = mask.astype(np.uint8)
+    opened = cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((k, k), np.uint8))
+    return (m & ~opened).astype(bool)
+
+
 def spectate_template(crop):
-    """The "Spectating" text's pixels in the crop where OCR just read it, to match later frames against."""
+    """The "Spectating" text's stroke pixels in the crop where OCR just read it, to match later frames."""
     orange = _orange_mask(crop)
     if orange.sum() >= SPECTATE_MIN_PIXELS:
-        return {"kind": "orange", "mask": orange}
-    return {"kind": "bright", "mask": _bright_mask(crop)}
+        return {"kind": "orange", "mask": _strokes(orange)}
+    return {"kind": "bright", "mask": _strokes(_bright_mask(crop))}
 
 
 def spectate_match(crop, template):
-    """True when enough of the template's text pixels are lit in this crop of the same spot."""
+    """True when enough of the template's stroke pixels are lit in this crop of the same spot."""
     mask = _orange_mask(crop) if template["kind"] == "orange" else _bright_mask(crop)
     ref = template["mask"]
     if mask.shape != ref.shape:
         return False
-    return (mask & ref).sum() / max(1, ref.sum()) >= SPECTATE_MATCH[template["kind"]]
+    return (_strokes(mask) & ref).sum() / max(1, ref.sum()) >= SPECTATE_MATCH
 
 
 def _locate_icon_counters(src, info, size, ocr, frames=12):
@@ -348,6 +359,23 @@ def _locate_icon_counters(src, info, size, ocr, frames=12):
     return boxes
 
 
+def number_box(label, numbers):
+    """The crop-pixel box to read a counter's number from, given its label's OCR box and the digit-only
+    OCR boxes on the frame. The number is the nearest digits just right of the label on the same row,
+    and the box starts a little before its first digit and is wide enough for three digits; that keeps a
+    padded label box (common in the enlarged whole-frame search) from cutting off the first digit. With
+    no digits read on this frame, the number is assumed to start right at the label box's edge."""
+    x0, y0, x1, y1 = label
+    lh = y1 - y0
+    cy = (y0 + y1) / 2
+    near = [n for n in numbers if abs((n[1] + n[3]) / 2 - cy) < 0.6 * lh and -0.3 * lh <= n[0] - x1 < 2.0 * lh]
+    if near:
+        nx0, _, nx1, _ = min(near, key=lambda n: n[0])
+        left = nx0 - 0.3 * lh
+        return (left, cy - 0.7 * lh, max(2.2 * lh, nx1 + 0.3 * lh - left), 1.4 * lh)
+    return (x1, cy - 0.7 * lh, 2.2 * lh, 1.4 * lh)
+
+
 def _locate_counters(src, info, size, ocr, search, read, frames=CALIBRATION_FRAMES):
     w, h = size
     sx, sy, sw, sh = search
@@ -357,16 +385,16 @@ def _locate_counters(src, info, size, ocr, search, read, frames=CALIBRATION_FRAM
         frame = grab_frame(src, float(t), size)
         if frame is None:
             continue
-        for text, _, (x0, y0, x1, y1) in read(crop_region(frame, search)):
+        lines = read(crop_region(frame, search))
+        numbers = [box for text, _, box in lines if text.strip().translate(DIGIT_FIX).isdigit()]
+        for text, _, label in lines:
             letters = re.sub(r"[^a-z]", "", text.lower())
             if re.search(r"\d", text) or len(letters) < 6:
                 continue  # merged with its number, so the label's right edge is unreliable
-            for name, label in COUNTER_LABELS.items():
-                if difflib.SequenceMatcher(None, letters, label).ratio() >= 0.6:
-                    # Detection boxes are padded, so the number starts right at the label box's edge.
-                    lh = y1 - y0
-                    box = (sx * w + x1, sy * h + (y0 + y1) / 2 - 0.7 * lh, 2.2 * lh, 1.4 * lh)
-                    found[name].append(box)
+            for name, target in COUNTER_LABELS.items():
+                if difflib.SequenceMatcher(None, letters, target).ratio() >= 0.6:
+                    bx, by, bw, bh = number_box(label, numbers)
+                    found[name].append((sx * w + bx, sy * h + by, bw, bh))
     boxes = {}
     for name, items in found.items():
         if len(items) >= 3:
@@ -405,7 +433,9 @@ class Counter:
             return 2
         if self.kind == "elims":
             if 0 < value - old <= MAX_KILL_JUMP:
-                return 2
+                # One or two kills at once is normal; a bigger jump is usually a teammate's counter shown
+                # for a moment (PABLO: "0 -> 5" twice in a row, then 0 again), so it must hold longer.
+                return 2 if value - old <= 2 else 4
             if value < old:
                 # Eliminations never go down within a match. A drop is a teammate's counter (spectating),
                 # a transition screen or a misread, unless a new lobby has opened. With no lobby signal

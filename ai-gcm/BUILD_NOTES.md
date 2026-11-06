@@ -28,7 +28,7 @@ Progress on building the complete GCM Clipper app, milestone by milestone from [
 
 - 4 Nov: architecture (`docs/ARCHITECTURE.md`). Vision and transcript checkpoints; cleanup command.
 - 5 Nov: markers, labels, why, titles, safety and bleep, parallel analysis stages, 1 fps HUD reads. 50 tests pass.
-- 6 Nov: accuracy set of ten 30-min sections complete (icon HUD, 1080 vertical sources, 24-frame search). Vertical Spectating check rebuilt (template match, undo window, overlapping-box guard, 40-player lobbies). 60 tests pass.
+- 6 Nov: accuracy set of ten 30-min sections complete (icon HUD, 1080 vertical sources, 24-frame search). Vertical Spectating check rebuilt (stroke template match, undo window, overlapping-box guard, 40-player lobbies), counter boxes anchored on digits, four-read rule for big kill jumps. 62 tests pass.
 
 ## Measurements
 
@@ -64,36 +64,37 @@ Recall against hand-picked moments still needs the owner's strict swipes on five
 | Bixi OP (handcam, pro) | landscape 720 | both | 12 | 0.84 | 1 multi-kill, 7 fight, 2 talk, 2 reaction | 6 + 2 + 4 |
 | SHLOK (solo vs squad) | landscape 720 | both | 11 | 0.86 | 7 fight, 1 funny, 1 talk, 3 reaction | 6 + 3 + 4 |
 | NesaMani (Tamil) | landscape 720 | both | 5 (1 chicken dinner) | 0.32 | 1 win, 4 fight, 1 talk, 3 reaction | 5 + 3 + 4 |
-| Aashi | vertical 720 | both | 16 | 0.51 | 3 multi-kill, 4 fight, 5 talk | 13 + 4 + 2 |
-| Beast | vertical 720 | both | 12 | 0.48 | 1 multi-kill, 8 fight, 1 talk, 2 reaction | 18 + 4 + 2 |
-| PABLO (Telugu, Hindi) | vertical 720 | both | 13 | 0.41 | 1 multi-kill, 7 fight | 21 + 4 + 1 |
-| im_Trex (small, facecam) | vertical 720 | both | 14 | 0.40 | 1 multi-kill, 6 fight, 1 funny, 4 reaction | 20 + 3 + 2 |
+| Aashi | vertical 720 | both | 16 (same after the rebuild) | 0.51 | 3 multi-kill, 4 fight, 5 talk | 18 + 12 + 6 |
+| Beast | vertical 720 | both | 12 (same) | 0.48 | 1 multi-kill, 8 fight, 1 talk, 2 reaction | 19 + 9 + 5 |
+| PABLO (Telugu, Hindi) | vertical 720 | both (digit-anchored) | 13 → **8** (the 13 had a stuck counter and a teammate's 5) | 0.41 | 2 multi-kill, 4 fight | 21 → **8** + 8 + 1 |
+| im_Trex (small, facecam) | vertical 720 | both | 14 (same) | 0.40 | 1 multi-kill, 6 fight, 1 funny, 4 reaction | 17 + 11 + 2 |
 | SULTHAN (facecam) | vertical 1080 | both | 1 → **6** after the Spectating fix | 0.38 | 4 talk, 1 fight, 7 reaction | 18 → **13** + 4 + 1 |
-| Zx_Rajput (small, Hindi) | vertical 1080 | elims only (24-frame search) | 6 → **12** after the Spectating fix | 0.54 | 1 multi-kill, 2 fight, 2 talk, 3 reaction | 55 → **14** + 11 + 2 |
+| Zx_Rajput (small, Hindi) | vertical 1080 | elims only (24-frame search) | 6 → **12** after the Spectating fix | 0.54 | 1 multi-kill, 7 fight, 1 talk, 3 reaction | 55 → **9** + 4 + 1 |
 
 - **10 of 10 layouts handled** after the three fixes (icon HUD, 1080 for vertical sources, 24 calibration frames for the whole-frame search). Rajput's counters were found on 3 and 6 of the 24 frames; with 12 frames they were missed because most of his section is lobby time.
 - **The vertical "Spectating" check was rebuilt (6 Nov)** after Rajput's scan took 55 min for 30 min of video and his count was wrong in both directions. What was found and fixed, in `vision.py`:
   - His tiny HUD made OCR's "Remaining" box swallow its own number, so both counters sat on the Eliminations number: no lobby was ever seen, a new match's reset was refused and his later matches' kills were lost. Overlapping counter boxes now keep only Eliminations (`drop_overlapping`).
   - Every misread of the tiny digits triggered a whole-frame Spectating read (about 3 s each, 914 times). The check now waits for two agreeing reads, and on vertical frames looks for the text only in a band below the counters.
-  - OCR reads the tiny in-game "Spectating: Teammate" on only about a quarter of the frames (the text is on screen every second; the busy background defeats OCR), so the first find is a repeated enlarged search every second while a counter change looks possible, and from then on a **pixel template** of the text (orange mask, else bright mask) is matched on every frame at no cost (`spectate_template`, `spectate_match`). The results screen's "Spectating: 0/10" is skipped.
+  - OCR reads the tiny in-game "Spectating: Teammate" on only about a quarter of the frames (the text is on screen every second; the busy background defeats OCR), so the first find is a repeated enlarged search every second while a counter change looks possible, and from then on a **pixel template** of the text is matched on every frame at no cost (`spectate_template`, `spectate_match`). Only thin strokes go into the template and the match (orange mask, else bright mask): PABLO's first template included a character's skin, so every frame looked like spectating and his kills vanished. The results screen's "Spectating: 0/10" is skipped.
   - A teammate's counter can still be accepted in the seconds before the text is seen, so a change is **undone** if the text appears within 12 s of it (`SPECTATE_RETRACT_S`; longer would undo a real kill made just before dying).
   - A rise of 20 to at least 40 players now counts as a new lobby (SULTHAN's lobbies fill to about 52).
-  - Result: Rajput 55 → 14 min and 6 → 12 kills (6 + 2 + 4 over three matches, with three teammate changes undone); SULTHAN 18 → 13 min and 1 → 6 kills (his early kills had been suppressed by false "Spectating" matches from his facecam overlay text, and his second match was never reset).
-  - **Not yet re-run with this logic:** Aashi, Beast, PABLO, im_Trex (vertical 720) — queued on 6 Nov; their counts may drop if teammate counters were in them. Landscape streams are unaffected (fixed Spectating spot, cheap OCR).
+  - **Counter boxes are anchored on the digits** OCR finds next to the label (`number_box`): the enlarged whole-frame search pads the label box, which on PABLO cut off the first digit of "Remaining" (players read as 1–19, no lobby ever seen, resets refused, 1 kill found). With no digits on a calibration frame the old label-edge estimate is used.
+  - **A kill jump of 3 or more must hold for four reads** (two for 1–2): PABLO's HUD flashed a teammate's "5" for two seconds, which had become five kills at a wrong time.
+  - Result: Rajput 55 → 9 min and 6 → 12 kills (6 + 2 + 4 over three matches, teammate changes undone); SULTHAN 18 → 13 min and 1 → 6 kills (his early kills had been suppressed by false "Spectating" matches from his facecam overlay text, and his second match was never reset); PABLO 21 → 8 min and a clean 8 kills at the right seconds. Aashi, Beast and im_Trex re-ran with the same counts as before. All six vertical sections now have fresh clips. Landscape streams went through the same code paths only for the counter calibration (`number_box`) and the jump rule; they were not re-run and should be spot-checked once (GtxPreet's full job is the reference: 59 kills).
 - Kill counts: 11–16 per 30 min on most streams; LoLzZz 28 (big creator, aggressive); NesaMani 5 with a dinner.
 - The owner's strict swipes on five of these sections are still needed for the recall figure; the clips are in the app.
 
 ## Next
 
 1. Owner: strict swipes on five accuracy sections and the rebuilt GtxPreet job (recall figure, talk-vs-fight balance).
-1a. Finish the vertical re-runs (Aashi, Beast, PABLO, im_Trex) and refresh the table above.
+1a. Spot-check one landscape job (GtxPreet or Bixi) with `--force vision --until vision` after today's calibration and jump-rule changes; expect the same kill counts.
 2. Knock detection from the kill feed (step 3).
 3. Then M2: database, API, worker, Google sign-in, upload, new web app.
 
 ## Known slow spots
 
 - Gemini free tier: the judge spends most of its time in 503 "busy" retries (7–22 min per job). The paid tier at launch (M6) should remove that.
-- Vertical layouts at 1080 scan at about 0.45× realtime (13–14 min per 30 min) after the Spectating rebuild; the enlarged search for the text costs about 1 s per try until it is found. Landscape 720 is 0.2×.
+- Vertical layouts now scan at 0.25–0.65× realtime (8–19 min per 30 min) after the Spectating rebuild; the enlarged search for the text costs about 1 s per try until it is found, so streams where it is found late (Aashi, Beast: never found in 30 min) are the slower ones. Landscape 720 is 0.2×.
 
 ## Not tested yet
 

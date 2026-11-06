@@ -141,6 +141,8 @@ def test_spectating_template_matches_the_text_pixels_not_the_background():
     assert spectate_match(moved, template)
     assert not spectate_match(np.full((20, 80, 3), 200, np.uint8), template)
     assert not spectate_match(np.full((10, 80, 3), 200, np.uint8), template)
+    # A solid orange blob (skin, sand) over the whole spot is not the text.
+    assert not spectate_match(np.full((20, 80, 3), (30, 160, 240), np.uint8), template)
 
 
 def test_spectating_spot_ignores_the_results_screen():
@@ -149,3 +151,22 @@ def test_spectating_spot_ignores_the_results_screen():
     assert spectate_spot([("Spectating: 0/10", 0.9, (10, 10, 100, 30))], search, 1080, 1920) is None
     assert spectate_spot([("Spectating: D/ID", 0.9, (10, 10, 100, 30))], search, 1080, 1920) is None
     assert spectate_spot([("Spectating: Teammata", 0.9, (10, 10, 100, 30))], search, 1080, 1920)
+
+
+def test_number_box_starts_at_the_digits_not_the_padded_label():
+    from aigcm.vision import number_box
+    label = (10, 100, 110, 120)   # "Remaining", 20 px tall, padded 6 px past the text
+    # Digits "92" start 4 px before the label box ends; a far-away number on the row is ignored.
+    numbers = [(106, 101, 128, 119), (400, 101, 420, 119)]
+    x, y, w, h = number_box(label, numbers)
+    assert x == 100 and y == 96 and w == 44 and h == 28
+    # Without digits on this frame the box starts at the label's edge.
+    assert number_box(label, [(400, 101, 420, 119)]) == (110, 96, 44, 28)
+
+
+def test_big_kill_jump_needs_four_reads():
+    # A teammate's counter flashing "5" for two seconds must not become five kills; a real jump that
+    # stays counts, with its first time.
+    assert feed(Counter("elims"), [0, 0, 5, 5, 0, 0, 0]) == [(0.0, None, 0)]
+    changes = feed(Counter("elims"), [0, 0, 5, 5, 5, 5])
+    assert changes == [(0.0, None, 0), (2.0, 0, 5)] and len(counter_events(changes[1])) == 5
