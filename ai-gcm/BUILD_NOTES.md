@@ -87,7 +87,7 @@ Recall against hand-picked moments still needs the owner's strict swipes on five
 ## Next
 
 1. Owner: strict swipes on five accuracy sections and the rebuilt GtxPreet job (recall figure, talk-vs-fight balance).
-1a. Spot-check one landscape job (GtxPreet or Bixi) with `--force vision --until vision` after today's calibration and jump-rule changes; expect the same kill counts.
+1a. (Done 6 Nov) Bixi re-scanned after the calibration and jump-rule changes: same 12 kills, 2 matches, 1 accolade, 5.7 min. Landscape is unaffected.
 2. Knock detection from the kill feed (step 3).
 3. Then M2: database, API, worker, Google sign-in, upload, new web app.
 
