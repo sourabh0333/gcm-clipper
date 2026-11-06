@@ -37,9 +37,15 @@ PATTERNS = [
 NEEDS_NAME = {"knock", "kill"}
 DEDUPE_S = 8.0
 SPECTATE_REGION = (0.36, 0.64, 0.28, 0.08)
+# On a vertical stream the gameplay window can be anywhere and its text is tiny, so the "Spectating" text is
+# first searched for (enlarged) in a wide area below the counters: x from 0.3 to 0.7 of the frame, y from
+# 0.05 to 0.5 below the counter row. Once seen, only a small crop around it is read, which is fast.
+SPECTATE_SEARCH = (0.3, 0.05, 0.4, 0.45)
+SPECTATE_SEARCH_EVERY_S = 15.0   # the wide search costs seconds, so it runs rarely until the text is found
 SPECTATE_EVERY_S = 1.0   # at most one Spectating check a second while the counter looks different
 SPECTATE_HOLD_S = 6.0
 LOBBY_PLAYERS = 80        # Remaining at or above this means a fresh match
+LOBBY_MIN_PLAYERS = 40    # a rise of LOBBY_JUMP to at least this is a fresh match too (some lobbies fill to 50-60)
 LOBBY_JUMP = 20
 MAX_PLAYERS = 100
 UNCONFIRMED_RESET_S = 10.0   # how long a reset must hold when there is no lobby signal
@@ -216,7 +222,41 @@ def locate_counters(src, info, size, ocr):
         # Small streamers spend long stretches in lobbies with no counters on screen, so more frames are
         # sampled here than for the corner search.
         boxes = _locate_counters(src, info, size, ocr, (0.0, 0.0, 1.0, 1.0), ocr.lines_hires, frames=24)
+    return drop_overlapping(boxes)
+
+
+def drop_overlapping(boxes):
+    """On a tiny HUD the "Remaining" label's OCR box can swallow its own number, so both counters land on
+    the Eliminations number: then every "players left" read is really the kill count, no lobby is ever seen
+    and a new match's reset is refused. Only the Eliminations counter is kept in that case."""
+    if "elims" in boxes and "remaining" in boxes:
+        ex, ey, ew, eh = boxes["elims"]
+        rx, ry, rw, rh = boxes["remaining"]
+        overlap = max(0.0, min(ex + ew, rx + rw) - max(ex, rx)) * max(0.0, min(ey + eh, ry + rh) - max(ey, ry))
+        if overlap > 0.5 * min(ew * eh, rw * rh):
+            log("vision: the Remaining counter sits on the Eliminations box, dropped")
+            boxes = {"elims": boxes["elims"]}
     return boxes
+
+
+def spectate_search(counter_boxes):
+    """The area of a vertical frame searched for the "Spectating" text, below the counter row."""
+    sx, dy, sw, sh = SPECTATE_SEARCH
+    top = round(min(1.0, counter_boxes["elims"][1] + dy), 4)
+    return (sx, top, sw, round(min(sh, 1.0 - top), 4))
+
+
+def spectate_spot(lines, search, frame_w, frame_h):
+    """A padded box (frame fractions) around the "Spectating" line among OCR lines of the `search` crop,
+    or None. The text keeps its place for the whole stream, so later checks read only this box."""
+    sx, sy, _, _ = search
+    for text, _, (x0, y0, x1, y1) in lines:
+        if is_spectating(text):
+            px, py = (x1 - x0) * 0.3, (y1 - y0) * 1.0
+            left, top = sx * frame_w + x0 - px, sy * frame_h + y0 - py
+            return (round(max(0.0, left) / frame_w, 4), round(max(0.0, top) / frame_h, 4),
+                    round((x1 - x0 + 2 * px) / frame_w, 4), round((y1 - y0 + 2 * py) / frame_h, 4))
+    return None
 
 
 def icon_row(lines, frame_w, frame_h, search=ICON_SEARCH):
@@ -396,8 +436,12 @@ def scan(src, info, settings, checkpoint=None):
     counters = {name: Counter(name, fps) for name in counter_boxes}
     remaining = []          # [(t, players left)] whenever it changes
     spectating_until, last_spectate_read = -1.0, -1e9
-    # Vertical streams put the gameplay window anywhere, so the whole frame is checked there.
-    spectate_region = (0.0, 0.0, 1.0, 1.0) if out_h > out_w else SPECTATE_REGION
+    # Landscape: a fixed spot read at normal size. Vertical: the spot is found during the scan (see
+    # SPECTATE_SEARCH) and read enlarged, because the gameplay window's text is tiny.
+    vertical = out_h > out_w
+    spectate_box = None if vertical else SPECTATE_REGION
+    spectate_read = ocr.lines_hires if vertical else ocr.lines
+    previous_elims = None   # last frame's raw Eliminations read
     lobby_open = False      # the Remaining counter jumped to a fresh lobby since the last Eliminations change
     history = {name: deque(maxlen=int(fps * 10)) for name in settings.regions}
     last_read = {name: -1e9 for name in settings.regions}
@@ -409,6 +453,8 @@ def scan(src, info, settings, checkpoint=None):
             counters[name].restore(state)
         remaining = [tuple(r) for r in saved["remaining"]]
         spectating_until, last_spectate_read = saved["spectating_until"], saved["last_spectate_read"]
+        if "spectate_box" in saved:
+            spectate_box = tuple(saved["spectate_box"]) if saved["spectate_box"] else None
         lobby_open, last_read = saved["lobby_open"], saved["last_read"]
         recent = {(kind, text): t for kind, text, t in saved["recent"]}
         events, ocr_calls, index, next_report = saved["events"], saved["ocr_calls"], saved["index"], saved["next_report"]
@@ -420,6 +466,7 @@ def scan(src, info, settings, checkpoint=None):
             "source": [str(src), info["duration"], fps], "counter_boxes": counter_boxes,
             "counters": {name: c.state() for name, c in counters.items()}, "remaining": remaining,
             "spectating_until": spectating_until, "last_spectate_read": last_spectate_read,
+            "spectate_box": spectate_box,
             "lobby_open": lobby_open, "last_read": last_read,
             "recent": [[kind, text, t] for (kind, text), t in recent.items()],
             "events": events, "ocr_calls": ocr_calls, "index": index, "next_report": next_report})
@@ -447,15 +494,30 @@ def scan(src, info, settings, checkpoint=None):
                     value = parse_number(text) if conf >= 0.2 else None
                     if name == "elims" and value is not None and value != counters[name].value:
                         # Only a changing counter can be a teammate's, so "Spectating" is looked for only
-                        # then: a whole-frame read every few seconds tripled the time on vertical streams.
-                        if t >= spectating_until and t - last_spectate_read >= SPECTATE_EVERY_S:
-                            last_spectate_read = t
-                            ocr_calls += 1
-                            if any(is_spectating(line) for line, _, _ in
-                                   ocr.lines(crop_region(frame, spectate_region))):
-                                spectating_until = t + SPECTATE_HOLD_S
+                        # then, and only once two reads in a row agree on the new value: a teammate's
+                        # counter holds steady, while a lone misread of tiny digits does not. (A whole-frame
+                        # read on every misread made a 30-min vertical section take 55 min.)
+                        steady = value == previous_elims
+                        previous_elims = value
+                        if steady and t >= spectating_until and t - last_spectate_read >= SPECTATE_EVERY_S:
+                            if spectate_box:
+                                last_spectate_read = t
+                                ocr_calls += 1
+                                if any(is_spectating(line) for line, _, _ in
+                                       spectate_read(crop_region(frame, spectate_box))):
+                                    spectating_until = t + SPECTATE_HOLD_S
+                            elif t - last_spectate_read >= SPECTATE_SEARCH_EVERY_S:
+                                last_spectate_read = t
+                                ocr_calls += 1
+                                search = spectate_search(counter_boxes)
+                                spectate_box = spectate_spot(ocr.lines_hires(crop_region(frame, search)), search, out_w, out_h)
+                                if spectate_box:
+                                    log(f"vision: Spectating text found at {spectate_box} ({t / 60:.1f} min)")
+                                    spectating_until = t + SPECTATE_HOLD_S
                         if t < spectating_until:
                             continue
+                    elif name == "elims":
+                        previous_elims = value
                     # Without a Remaining counter there is no lobby signal (None): resets must last longer.
                     change = counters[name].update(t, value, lobby_open if "remaining" in counters else None)
                     if not change:
@@ -466,7 +528,9 @@ def scan(src, info, settings, checkpoint=None):
                     else:
                         remaining.append((round(change[0], 2), change[2]))
                         # A real new lobby jumps by dozens of players; 79 -> 80 is just a misread.
-                        if change[2] >= LOBBY_PLAYERS and (change[1] is None or change[2] - change[1] >= LOBBY_JUMP):
+                        if ((change[1] is None and change[2] >= LOBBY_PLAYERS)
+                                or (change[1] is not None and change[2] >= LOBBY_MIN_PLAYERS
+                                    and change[2] - change[1] >= LOBBY_JUMP)):
                             lobby_open = True
 
             for name, region in settings.regions.items():

@@ -106,3 +106,23 @@ def test_icon_hud_row_gives_the_kill_counter_box():
     # The compass strip is a long row of three-digit headings; it must not be taken for the HUD.
     compass = [(str(v), 0.9, (300 + i * 40, 8, 330 + i * 40, 30)) for i, v in enumerate((105, 120, 135, 150, 165))]
     assert icon_row(compass, 1280, 720) == {}
+
+
+def test_remaining_box_on_top_of_the_eliminations_box_is_dropped():
+    from aigcm.vision import drop_overlapping
+    same = {"elims": (0.135, 0.286, 0.028, 0.010), "remaining": (0.135, 0.287, 0.028, 0.010)}
+    assert drop_overlapping(same) == {"elims": same["elims"]}
+    apart = {"elims": (0.235, 0.317, 0.062, 0.022), "remaining": (0.098, 0.317, 0.062, 0.022)}
+    assert drop_overlapping(dict(apart)) == apart
+
+
+def test_spectating_spot_is_found_below_the_counters_and_padded():
+    from aigcm.vision import spectate_search, spectate_spot
+    search = spectate_search({"elims": (0.135, 0.286, 0.028, 0.010)})
+    assert search == (0.3, 0.336, 0.4, 0.45)
+    # OCR lines of that crop on a 1080x1920 frame: compass numbers, then the tiny Spectating line.
+    lines = [("NE", 0.9, (100, 10, 130, 30)), ("Spectatig: Teaumoste", 0.8, (150, 320, 260, 332))]
+    x, y, w, h = spectate_spot(lines, search, 1080, 1920)
+    assert abs(x * 1080 - (0.3 * 1080 + 150 - 33)) < 1 and abs(y * 1920 - (0.336 * 1920 + 320 - 12)) < 1
+    assert abs(w * 1080 - (110 + 66)) < 1 and abs(h * 1920 - 36) < 1
+    assert spectate_spot(lines[:1], search, 1080, 1920) is None
