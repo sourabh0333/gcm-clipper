@@ -13,6 +13,7 @@ On-screen messages (chicken dinner, "You knocked out", accolades) are read from 
 when bright text appears in it, plus a safety read every few seconds."""
 
 import difflib
+import os
 import re
 import subprocess
 from collections import deque
@@ -38,12 +39,24 @@ NEEDS_NAME = {"knock", "kill"}
 DEDUPE_S = 8.0
 SPECTATE_REGION = (0.36, 0.64, 0.28, 0.08)
 # On a vertical stream the gameplay window can be anywhere and its text is tiny, so the "Spectating" text is
-# first searched for (enlarged) in a wide area below the counters: x from 0.3 to 0.7 of the frame, y from
-# 0.05 to 0.5 below the counter row. Once seen, only a small crop around it is read, which is fast.
-SPECTATE_SEARCH = (0.3, 0.05, 0.4, 0.45)
-SPECTATE_SEARCH_EVERY_S = 15.0   # the wide search costs seconds, so it runs rarely until the text is found
+# first searched for (enlarged) in a wide area below the counters: x from 0.35 to 0.65 of the frame, y from
+# 0.1 to 0.45 below the counter row. Once seen, only a small crop around it is read, which is fast. OCR
+# catches the tiny text on only about a quarter of the frames, so the search repeats every second
+# while a change looks possible (about 1 s each), and stops once the spot is known.
+SPECTATE_SEARCH = (0.35, 0.1, 0.3, 0.35)
+SPECTATE_SEARCH_EVERY_S = 1.0
+# Once the spot is known, OCR is not used on it again (it reads the tiny text on only a quarter of the
+# frames): the text's own pixels, taken at the moment OCR found it, are the template, and a frame matches
+# when enough of those pixels are lit again. The text is orange in most HUDs, else bright on dark.
+SPECTATE_MIN_PIXELS = 40
+SPECTATE_MATCH = {"orange": 0.5, "bright": 0.4}
 SPECTATE_EVERY_S = 1.0   # at most one Spectating check a second while the counter looks different
 SPECTATE_HOLD_S = 6.0
+# The "Spectating" text is read on only about a quarter of the frames, so a teammate's counter can slip
+# through the check at the moment it changes. Checks go on for this long after any accepted Eliminations
+# change, and the change is undone if the text then appears. Longer would undo a real kill made just before
+# the streamer died.
+SPECTATE_RETRACT_S = 12.0
 LOBBY_PLAYERS = 80        # Remaining at or above this means a fresh match
 LOBBY_MIN_PLAYERS = 40    # a rise of LOBBY_JUMP to at least this is a fresh match too (some lobbies fill to 50-60)
 LOBBY_JUMP = 20
@@ -251,7 +264,9 @@ def spectate_spot(lines, search, frame_w, frame_h):
     or None. The text keeps its place for the whole stream, so later checks read only this box."""
     sx, sy, _, _ = search
     for text, _, (x0, y0, x1, y1) in lines:
-        if is_spectating(text):
+        # The match results screen also says "Spectating: 0/10" (OCR may read "D/ID"); only the in-game
+        # label counts, so a line with a digit or a slash is skipped.
+        if is_spectating(text) and not re.search(r"[\d/]", text):
             px, py = (x1 - x0) * 0.3, (y1 - y0) * 1.0
             left, top = sx * frame_w + x0 - px, sy * frame_h + y0 - py
             return (round(max(0.0, left) / frame_w, 4), round(max(0.0, top) / frame_h, 4),
@@ -286,6 +301,35 @@ def icon_row(lines, frame_w, frame_h, search=ICON_SEARCH):
     cy = (y0 + y1) / 2
     return {"elims": ((sx * frame_w + x1 - 2.3 * lh) / frame_w, max(0.0, (sy * frame_h + cy - 0.7 * lh) / frame_h),
                       (2.45 * lh) / frame_w, (lh * 1.4) / frame_h)}
+
+
+def _orange_mask(crop):
+    import cv2
+    hsv = cv2.cvtColor(np.ascontiguousarray(crop), cv2.COLOR_BGR2HSV)
+    return (hsv[..., 0] >= 10) & (hsv[..., 0] <= 35) & (hsv[..., 1] >= 100) & (hsv[..., 2] >= 140)
+
+
+def _bright_mask(crop):
+    import cv2
+    grey = cv2.cvtColor(np.ascontiguousarray(crop), cv2.COLOR_BGR2GRAY).astype(float)
+    return grey > grey.mean() + grey.std()
+
+
+def spectate_template(crop):
+    """The "Spectating" text's pixels in the crop where OCR just read it, to match later frames against."""
+    orange = _orange_mask(crop)
+    if orange.sum() >= SPECTATE_MIN_PIXELS:
+        return {"kind": "orange", "mask": orange}
+    return {"kind": "bright", "mask": _bright_mask(crop)}
+
+
+def spectate_match(crop, template):
+    """True when enough of the template's text pixels are lit in this crop of the same spot."""
+    mask = _orange_mask(crop) if template["kind"] == "orange" else _bright_mask(crop)
+    ref = template["mask"]
+    if mask.shape != ref.shape:
+        return False
+    return (mask & ref).sum() / max(1, ref.sum()) >= SPECTATE_MATCH[template["kind"]]
 
 
 def _locate_icon_counters(src, info, size, ocr, frames=12):
@@ -440,8 +484,9 @@ def scan(src, info, settings, checkpoint=None):
     # SPECTATE_SEARCH) and read enlarged, because the gameplay window's text is tiny.
     vertical = out_h > out_w
     spectate_box = None if vertical else SPECTATE_REGION
-    spectate_read = ocr.lines_hires if vertical else ocr.lines
+    spectate_ref, template = None, None   # the crop OCR found the text in, and the mask made from it
     previous_elims = None   # last frame's raw Eliminations read
+    last_change = None      # (t, counter state before, events before, lobby_open before) of the last change
     lobby_open = False      # the Remaining counter jumped to a fresh lobby since the last Eliminations change
     history = {name: deque(maxlen=int(fps * 10)) for name in settings.regions}
     last_read = {name: -1e9 for name in settings.regions}
@@ -455,6 +500,10 @@ def scan(src, info, settings, checkpoint=None):
         spectating_until, last_spectate_read = saved["spectating_until"], saved["last_spectate_read"]
         if "spectate_box" in saved:
             spectate_box = tuple(saved["spectate_box"]) if saved["spectate_box"] else None
+        if saved.get("spectate_ref"):
+            spectate_ref = np.array(saved["spectate_ref"], np.uint8)
+            template = spectate_template(spectate_ref)
+        last_change = tuple(saved["last_change"]) if saved.get("last_change") else None
         lobby_open, last_read = saved["lobby_open"], saved["last_read"]
         recent = {(kind, text): t for kind, text, t in saved["recent"]}
         events, ocr_calls, index, next_report = saved["events"], saved["ocr_calls"], saved["index"], saved["next_report"]
@@ -466,7 +515,8 @@ def scan(src, info, settings, checkpoint=None):
             "source": [str(src), info["duration"], fps], "counter_boxes": counter_boxes,
             "counters": {name: c.state() for name, c in counters.items()}, "remaining": remaining,
             "spectating_until": spectating_until, "last_spectate_read": last_spectate_read,
-            "spectate_box": spectate_box,
+            "spectate_box": spectate_box, "last_change": last_change,
+            "spectate_ref": spectate_ref.tolist() if spectate_ref is not None else None,
             "lobby_open": lobby_open, "last_read": last_read,
             "recent": [[kind, text, t] for (kind, text), t in recent.items()],
             "events": events, "ocr_calls": ocr_calls, "index": index, "next_report": next_report})
@@ -492,37 +542,62 @@ def scan(src, info, settings, checkpoint=None):
                 reads = ocr.read_digits(crop_region(frame, counter_boxes[n]) for n in names)
                 for name, (text, conf) in zip(names, reads):
                     value = parse_number(text) if conf >= 0.2 else None
-                    if name == "elims" and value is not None and value != counters[name].value:
-                        # Only a changing counter can be a teammate's, so "Spectating" is looked for only
-                        # then, and only once two reads in a row agree on the new value: a teammate's
-                        # counter holds steady, while a lone misread of tiny digits does not. (A whole-frame
-                        # read on every misread made a 30-min vertical section take 55 min.)
-                        steady = value == previous_elims
-                        previous_elims = value
-                        if steady and t >= spectating_until and t - last_spectate_read >= SPECTATE_EVERY_S:
+                    if name == "elims":
+                        # Only a changing counter can be a teammate's, so "Spectating" is looked for when
+                        # two reads in a row agree on a new value (a teammate's counter holds steady, a lone
+                        # misread of tiny digits does not), and for a while after a change was accepted.
+                        # (A whole-frame read on every misread made a 30-min vertical section take 55 min.)
+                        differs = value is not None and value != counters[name].value
+                        steady = differs and value == previous_elims
+                        if value is not None:
+                            previous_elims = value
+                        recent_change = last_change is not None and t - last_change[0] <= SPECTATE_RETRACT_S
+                        seen = False
+                        if template is not None:
+                            # Known spot on a vertical stream: a pixel match, cheap enough for every frame.
+                            seen = spectate_match(crop_region(frame, spectate_box), template)
+                        elif ((steady or recent_change) and t >= spectating_until
+                                and t - last_spectate_read >= SPECTATE_EVERY_S):
                             if spectate_box:
                                 last_spectate_read = t
                                 ocr_calls += 1
-                                if any(is_spectating(line) for line, _, _ in
-                                       spectate_read(crop_region(frame, spectate_box))):
-                                    spectating_until = t + SPECTATE_HOLD_S
+                                seen = any(is_spectating(line) for line, _, _ in
+                                           ocr.lines(crop_region(frame, spectate_box)))
                             elif t - last_spectate_read >= SPECTATE_SEARCH_EVERY_S:
                                 last_spectate_read = t
                                 ocr_calls += 1
                                 search = spectate_search(counter_boxes)
-                                spectate_box = spectate_spot(ocr.lines_hires(crop_region(frame, search)), search, out_w, out_h)
-                                if spectate_box:
-                                    log(f"vision: Spectating text found at {spectate_box} ({t / 60:.1f} min)")
-                                    spectating_until = t + SPECTATE_HOLD_S
-                        if t < spectating_until:
+                                found = ocr.lines_hires(crop_region(frame, search))
+                                spectate_box = spectate_spot(found, search, out_w, out_h)
+                                seen = spectate_box is not None
+                                found_text = next((l for l, _, _ in found if is_spectating(l)), "")
+                                if seen:
+                                    spectate_box = tuple(float(v) for v in spectate_box)
+                                    spectate_ref = np.array(crop_region(frame, spectate_box))
+                                    template = spectate_template(spectate_ref)
+                                    log(f"vision: Spectating text found at {spectate_box} ({t / 60:.1f} min), "
+                                        f"{template['kind']} template, read as {found_text!r}")
+                                elif os.environ.get("AIGCM_DEBUG_VISION"):
+                                    log(f"vision: no Spectating text at {t:.0f}s (read {value}, counter {counters[name].value})")
+                        if seen:
+                            spectating_until = t + SPECTATE_HOLD_S
+                            if recent_change:
+                                # The change just accepted was a teammate's counter: undo it.
+                                counters[name].restore(last_change[1])
+                                counters[name].pending, counters[name].pending_n = None, 0
+                                del events[last_change[2]:]
+                                lobby_open = last_change[3]
+                                log(f"vision: change at {last_change[0] / 60:.1f} min was a teammate's counter, undone")
+                                last_change = None
+                        if differs and t < spectating_until:
                             continue
-                    elif name == "elims":
-                        previous_elims = value
                     # Without a Remaining counter there is no lobby signal (None): resets must last longer.
+                    before = counters[name].state()
                     change = counters[name].update(t, value, lobby_open if "remaining" in counters else None)
                     if not change:
                         continue
                     if name == "elims":
+                        last_change = (t, before, len(events), lobby_open)
                         events.extend(counter_events(change))
                         lobby_open = False
                     else:

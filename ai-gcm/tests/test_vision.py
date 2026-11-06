@@ -119,10 +119,33 @@ def test_remaining_box_on_top_of_the_eliminations_box_is_dropped():
 def test_spectating_spot_is_found_below_the_counters_and_padded():
     from aigcm.vision import spectate_search, spectate_spot
     search = spectate_search({"elims": (0.135, 0.286, 0.028, 0.010)})
-    assert search == (0.3, 0.336, 0.4, 0.45)
+    assert search == (0.35, 0.386, 0.3, 0.35)
     # OCR lines of that crop on a 1080x1920 frame: compass numbers, then the tiny Spectating line.
     lines = [("NE", 0.9, (100, 10, 130, 30)), ("Spectatig: Teaumoste", 0.8, (150, 320, 260, 332))]
     x, y, w, h = spectate_spot(lines, search, 1080, 1920)
-    assert abs(x * 1080 - (0.3 * 1080 + 150 - 33)) < 1 and abs(y * 1920 - (0.336 * 1920 + 320 - 12)) < 1
+    assert abs(x * 1080 - (0.35 * 1080 + 150 - 33)) < 1 and abs(y * 1920 - (0.386 * 1920 + 320 - 12)) < 1
     assert abs(w * 1080 - (110 + 66)) < 1 and abs(h * 1920 - 36) < 1
     assert spectate_spot(lines[:1], search, 1080, 1920) is None
+
+
+def test_spectating_template_matches_the_text_pixels_not_the_background():
+    import numpy as np
+    from aigcm.vision import spectate_match, spectate_template
+    # Orange text (BGR) on a dark background, then the same text over a bright background, then no text.
+    ref = np.full((20, 80, 3), 40, np.uint8)
+    ref[6:14, 10:70:2] = (30, 160, 240)
+    template = spectate_template(ref)
+    assert template["kind"] == "orange" and template["mask"].sum() == 8 * 30
+    moved = np.full((20, 80, 3), 200, np.uint8)
+    moved[6:14, 10:70:2] = (30, 160, 240)
+    assert spectate_match(moved, template)
+    assert not spectate_match(np.full((20, 80, 3), 200, np.uint8), template)
+    assert not spectate_match(np.full((10, 80, 3), 200, np.uint8), template)
+
+
+def test_spectating_spot_ignores_the_results_screen():
+    from aigcm.vision import spectate_spot
+    search = (0.35, 0.386, 0.3, 0.35)
+    assert spectate_spot([("Spectating: 0/10", 0.9, (10, 10, 100, 30))], search, 1080, 1920) is None
+    assert spectate_spot([("Spectating: D/ID", 0.9, (10, 10, 100, 30))], search, 1080, 1920) is None
+    assert spectate_spot([("Spectating: Teammata", 0.9, (10, 10, 100, 30))], search, 1080, 1920)
