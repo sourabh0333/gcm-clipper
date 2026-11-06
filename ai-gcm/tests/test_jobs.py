@@ -70,3 +70,10 @@ def test_invalidate_marks_later_stages_stale(tmp_path):
     job.invalidate_from("audio")
     assert job.done("ingest") and job.done("vision")
     assert not job.done("audio") and not job.done("moments")
+
+
+def test_forcing_the_scan_leaves_the_audio_chain_alone():
+    from aigcm.jobs import stages_from
+    assert "transcript" not in stages_from("vision") and "moments" in stages_from("vision")
+    assert "vision" not in stages_from("audio") and stages_from("audio")[:3] == ["audio", "sounds", "transcript"]
+    assert stages_from("moments")[0] == "moments" and "render" in stages_from("moments")

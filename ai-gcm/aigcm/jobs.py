@@ -31,6 +31,22 @@ def write_json(path, data):
     os.replace(tmp, path)
 
 
+# The frame scan and the audio chain (wav, sounds, transcript) run side by side and do not depend on each
+# other, so redoing one must not redo the other: forcing vision used to run Whisper again (12 min on a
+# 30-min section) and halve the CPU the scan got.
+AUDIO_CHAIN = ("audio", "sounds", "transcript")
+
+
+def stages_from(stage):
+    """The stages to redo when `stage` is redone: itself and everything downstream of it."""
+    names = STAGES[STAGES.index(stage):]
+    if stage == "vision":
+        return [n for n in names if n not in AUDIO_CHAIN]
+    if stage in AUDIO_CHAIN:
+        return [n for n in names if n != "vision"]
+    return names
+
+
 class Job:
     def __init__(self, root):
         self.root = Path(root)
@@ -52,8 +68,8 @@ class Job:
             write_json(self.manifest_path, self.manifest)
 
     def invalidate_from(self, stage):
-        """Mark a stage and everything after it as not done, so they run again."""
-        for name in STAGES[STAGES.index(stage):]:
+        """Mark a stage and everything that depends on it as not done, so they run again."""
+        for name in stages_from(stage):
             if name in self.manifest["stages"]:
                 self._set(name, status="stale")
 

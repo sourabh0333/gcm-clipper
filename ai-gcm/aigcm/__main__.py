@@ -11,7 +11,7 @@ from pathlib import Path
 
 from . import audio, captions, judge, markers, moments, package, render, review, sounds, talk, transcript, vision
 from .config import Settings
-from .jobs import STAGES, Job, log, read_json, write_json
+from .jobs import STAGES, Job, log, read_json, stages_from, write_json
 from .media import download, extract_audio, extract_frame, is_url, parse_time, probe, search
 
 # Folders and files each stage writes, removed when that stage is forced to run again.
@@ -51,7 +51,7 @@ def clear_from(job, stage):
         if job.path("ranked.json").exists():
             shutil.copyfile(job.path("ranked.json"), archive / "ranked.json")
         log(f"earlier keep/reject decisions moved to {archive}")
-    for name in STAGES[STAGES.index(stage):]:
+    for name in stages_from(stage):
         for item in OUTPUTS[name]:
             path = job.path(item)
             if path.is_dir():

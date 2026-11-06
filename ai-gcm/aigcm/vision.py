@@ -68,14 +68,22 @@ BANNER_MIN_GAP_S = 3.0       # message text is read at most this often, even whi
 MAX_REMAINING_DROP = 30
 
 COUNTER_LABELS = {"elims": "eliminations", "remaining": "remaining"}
-# BGMI's kill feed sits under the teammate list, top left of the gameplay window: "<killer> <icon> <victim>"
-# with a knock or weapon icon and no words, so knocks can't be read from text. The feed is placed from the
-# counter row, in units of the label height (lh): x from 4 lh before the Remaining number to 18 lh after
-# it, y from 4 lh to 12 lh below the row. A feed line that starts with the streamer's name without the
-# Eliminations counter rising soon after is a knock; one that ends with it is the streamer going down.
-FEED_BOX_LH = (-4.0, 4.0, 22.0, 8.0)
+# BGMI's kill feed sits under the teammate list at the left edge of the gameplay window, one row per
+# event: "<killer> <weapon icon> [<kneeling icon>] <victim>", no words, so OCR gives the two names as
+# separate boxes on one row. The feed is placed from the counter row in units of the label height (lh):
+# from the frame's left edge to 18 lh past the Remaining number, y from 4 lh to 12 lh below the row.
+# A row that starts with the streamer's name without the Eliminations counter rising soon after is a
+# knock; one that ends with it is the streamer going down. It is read every few seconds while any text
+# shows there (each read costs about 0.3 s, whatever the crop size).
+FEED_BOX_LH = (4.0, 18.0, 8.0)    # y offset, x extent past the Remaining number, height
+FEED_EVERY_S = 4.0                # a row stays about 5 s, so this still sees each one
+# Some layouts draw the feed too faint for OCR (GtxPreet: half-transparent rows over a bright map, no
+# name read at any zoom) or hide it under an overlay (DIPENDU). After this many reads, the feed is
+# given up unless enough of them produced a full "killer > victim" row.
+FEED_TRIAL_READS = 120
+FEED_MIN_ROW_RATE = 0.08
 FEED_MIN_CONF = 0.5
-FEED_KILL_WINDOW = (-2.0, 4.0)    # a feed line this close to a counter rise is the kill itself, not a knock
+FEED_KILL_WINDOW = (-2.0, 4.0)    # a feed row this close to a counter rise is the kill itself, not a knock
 NAME_MATCH = 0.75                 # OCR mangles names, so they are compared loosely
 COUNTER_SEARCH = (0.0, 0.0, 0.5, 0.12)   # top-left area searched for the counter labels
 CALIBRATION_FRAMES = 24
@@ -322,16 +330,42 @@ def feed_region(counter_boxes, frame_w, frame_h):
     lh = eh / 1.4                      # label height as a fraction of the frame height
     lhx = lh * frame_h / frame_w       # the same length as a fraction of the width
     rx = counter_boxes["remaining"][0] if "remaining" in counter_boxes else ex - 4.0 * lhx
-    dx, dy, w, h = FEED_BOX_LH
-    x0 = max(0.0, rx + dx * lhx)
+    dy, w, h = FEED_BOX_LH
     y0 = ey + dy * lh
     if y0 >= 1.0:
         return None
-    return (round(x0, 4), round(y0, 4), round(min(w * lhx, 1.0 - x0), 4), round(min(h * lh, 1.0 - y0), 4))
+    return (0.0, round(y0, 4), round(min(rx + w * lhx, 1.0), 4), round(min(h * lh, 1.0 - y0), 4))
 
 
-def _name_tokens(text):
-    return [tok for tok in normalise(text).split() if len(tok) >= 3 and not tok.endswith("m")]
+def feed_rows(lines, crop_w):
+    """Kill-feed rows from the OCR lines of the feed crop: (left name, right name) per row, with boxes
+    grouped by their vertical centre and split at the crop's middle (the icons sit there)."""
+    boxes = sorted(((x0, y0, x1, y1, text) for text, conf, (x0, y0, x1, y1) in lines if conf >= FEED_MIN_CONF),
+                   key=lambda b: (b[1] + b[3]) / 2)
+    rows, out = [], []
+    for box in boxes:
+        cy, h = (box[1] + box[3]) / 2, box[3] - box[1]
+        for row in rows:
+            if abs(row["cy"] - cy) < 0.6 * max(h, row["h"]):
+                row["boxes"].append(box)
+                break
+        else:
+            rows.append({"cy": cy, "h": h, "boxes": [box]})
+    for row in rows:
+        left = " ".join(b[4] for b in sorted(row["boxes"]) if (b[0] + b[2]) / 2 < crop_w / 2)
+        right = " ".join(b[4] for b in sorted(row["boxes"]) if (b[0] + b[2]) / 2 >= crop_w / 2)
+        if left or right:
+            out.append((normalise(left), normalise(right)))
+    return out
+
+
+def feed_worth_reading(reads, full_rows):
+    """False once a trial of reads shows the feed is unreadable in this layout."""
+    return reads < FEED_TRIAL_READS or full_rows >= FEED_MIN_ROW_RATE * reads
+
+
+def _is_name(text):
+    return len(text) >= 3 and not re.fullmatch(r"\d+m?", text)
 
 
 def _same_name(a, b):
@@ -339,17 +373,15 @@ def _same_name(a, b):
 
 
 def knocks_from_feed(feed, events, player_names=()):
-    """Knock and down events from kill-feed lines. The streamer's in-game name is learned from the lines
-    that appear when the Eliminations counter rises (their own kills name them first), unless
-    `player_names` gives it. Returns (name, new events)."""
+    """Knock and down events from kill-feed rows ({"t", "left", "right", "conf"}). The streamer's in-game
+    name is learned from the rows that appear when the Eliminations counter rises (their own kills name
+    them on the left), unless `player_names` gives it. Returns (name, new events)."""
     kill_times = sorted(e["t"] for e in events if e["kind"] == "self_kill")
     names = [normalise(n) for n in player_names if normalise(n)]
     if not names:
         seen = Tally()
         for kt in kill_times:
-            firsts = {_name_tokens(line["text"])[0] for line in feed
-                      if kt - 4 <= line["t"] <= kt + 2 and _name_tokens(line["text"])}
-            seen.update(firsts)
+            seen.update({row["left"] for row in feed if kt - 6 <= row["t"] <= kt + 3 and _is_name(row["left"])})
         groups = []   # [(representative, count)]
         for tok, n in seen.most_common():
             for i, (rep_tok, total) in enumerate(groups):
@@ -364,25 +396,22 @@ def knocks_from_feed(feed, events, player_names=()):
     if not names:
         return None, []
     out, recent = [], {}
-    for line in sorted(feed, key=lambda l: l["t"]):
-        toks = _name_tokens(line["text"])
-        if len(toks) < 2:
-            continue
-        t = line["t"]
-        if any(_same_name(toks[0], n) for n in names):
+    for row in sorted(feed, key=lambda r: r["t"]):
+        left, right, t = row["left"], row["right"], row["t"]
+        if _is_name(left) and any(_same_name(left, n) for n in names):
             if any(kt + FEED_KILL_WINDOW[0] <= t <= kt + FEED_KILL_WINDOW[1] for kt in kill_times):
                 continue   # the kill itself; the counter already counted it
             kind = "self_knock"
-        elif any(_same_name(toks[-1], n) for n in names):
+        elif _is_name(right) and any(_same_name(right, n) for n in names):
             kind = "self_down"
         else:
             continue
-        key = (kind, " ".join(toks)[:40])
+        key = (kind, f"{left} {right}"[:40])
         if t - recent.get(key, -1e9) < DEDUPE_S:
             recent[key] = t
             continue
         recent[key] = t
-        out.append({"t": round(t, 2), "kind": kind, "text": line["text"], "region": "feed", "conf": line["conf"]})
+        out.append({"t": round(t, 2), "kind": kind, "text": f"{left} > {right}", "region": "feed", "conf": row["conf"]})
     return names[0], out
 
 
@@ -601,9 +630,8 @@ def scan(src, info, settings, checkpoint=None):
     lobby_open = False      # the Remaining counter jumped to a fresh lobby since the last Eliminations change
     regions = dict(settings.regions)
     feed_box = feed_region(counter_boxes, out_w, out_h)
-    if feed_box:
-        regions["feed"] = feed_box
-    feed = []               # every kill-feed line read: {"t", "text", "conf"}
+    feed = []               # every kill-feed row read: {"t", "left", "right", "conf"}
+    last_feed_read, feed_reads, feed_full = -1e9, 0, 0
     history = {name: deque(maxlen=int(fps * 10)) for name in regions}
     last_read = {name: -1e9 for name in regions}
     recent = {}
@@ -737,13 +765,7 @@ def scan(src, info, settings, checkpoint=None):
                 last_read[name] = t
                 ocr_calls += 1
                 if name == "feed":
-                    for text, conf, _ in ocr.lines(crop):
-                        key = ("feed", normalise(text)[:40])
-                        if conf < FEED_MIN_CONF or t - recent.get(key, -1e9) < DEDUPE_S:
-                            continue
-                        recent[key] = t
-                        feed.append({"t": round(t, 2), "text": text, "conf": round(conf, 3)})
-                    continue
+                    continue   # read on its own schedule below
                 for text, conf, _ in ocr.lines(crop):
                     kind = classify(text, settings.player_names)
                     # The counter is the trusted source of the streamer's own kills.
@@ -756,6 +778,25 @@ def scan(src, info, settings, checkpoint=None):
                     recent[key] = t
                     events.append({"t": round(t, 2), "kind": kind, "text": text, "region": name,
                                    "conf": round(conf, 3)})
+            if feed_box and t - last_feed_read >= FEED_EVERY_S:
+                crop = crop_region(frame, feed_box)
+                if text_ratio(crop) >= 0.002:
+                    last_feed_read = t
+                    ocr_calls += 1
+                    feed_reads += 1
+                    lines = ocr.lines(crop)
+                    for left, right in feed_rows(lines, crop.shape[1]):
+                        if _is_name(left) and _is_name(right):
+                            feed_full += 1
+                        key = ("feed", f"{left} {right}"[:40])
+                        if t - recent.get(key, -1e9) < DEDUPE_S:
+                            continue
+                        recent[key] = t
+                        conf = min((c for _, c, _ in lines), default=0.0)
+                        feed.append({"t": round(t, 2), "left": left, "right": right, "conf": round(conf, 3)})
+                    if not feed_worth_reading(feed_reads, feed_full):
+                        log(f"vision: kill feed unreadable in this layout ({feed_full} full rows in {feed_reads} reads), skipped from here")
+                        feed_box = None
             if t >= next_report:
                 kills = sum(e["kind"] == "self_kill" for e in events)
                 log(f"vision: {t / 60:.0f} min scanned, {kills} kills, {len(events)} events")
@@ -771,8 +812,8 @@ def scan(src, info, settings, checkpoint=None):
         Path(checkpoint).unlink(missing_ok=True)
     player_name, extra = knocks_from_feed(feed, events, settings.player_names)
     events.extend(extra)
-    if feed_box:
-        log(f"vision: kill feed: {len(feed)} lines, streamer name {player_name!r}, "
+    if feed:
+        log(f"vision: kill feed: {len(feed)} rows, streamer name {player_name!r}, "
             f"{sum(e['kind'] == 'self_knock' for e in extra)} knocks, {sum(e['kind'] == 'self_down' for e in extra)} downs")
     events.sort(key=lambda e: e["t"])
     return {"events": events, "remaining": remaining, "counter_boxes": counter_boxes, "frames": index,
