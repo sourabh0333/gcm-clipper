@@ -18,7 +18,7 @@ Progress on building the complete GCM Clipper app, milestone by milestone from [
 |---|---|---|
 | 1 | Full-length streams: resume after crash, bounded disk | **Done: 3 of 3 streams.** GtxPreet 3.1 h (`jobs/vHLz6WDqJkk_full`, landscape): 59 kills, 1 chicken dinner, 12 clips, about 55 min with the final code. DIPENDU 2.06 h (`jobs/Pylusnav-1Q_full`, vertical): 21 kills over 3 matches, **78 min** (vision 47 min = 0.38× realtime: vertical layouts do a whole-frame "Spectating" read). ANJI 2.15 h (`jobs/utvX-jHSFi8_full`, vertical, noisy): 20 kills over 6 matches, **67 min** (vision 21 min, transcript 15 min with coverage 0.23 flagged as broken, judge 22 min of mostly Gemini busy-retries). All three with no manual fixes |
 | 2 | Speed: 3-hour stream in about 1 hour | **Done for the transcript; the whole job is now bounded by the 36-min HUD scan.** On the 3.1-hour stream: download 8 min; HUD scan about 36 min (1 fps, 0.19× realtime); sounds 3 min; **transcript 18 min** (was 77: faster-whisper's batched pipeline driven by the sound detector's speech spans); judge 7 min (Gemini busy-retries); render 4 min. Vision and the transcript run side by side with half the threads each. Expected whole job: about 55 min |
-| 3 | Accuracy on 10 more streams, knock detection, bigger speech model fallback | **Bigger model dropped.** The Apex (large-v3-turbo) conversion ran at 19× realtime on the laptop and produced garbage ("nan nan nan"), so it was removed. The code path stays: a transcript covering under half of the detected speech (ANJI 0.14; good streams 0.83–0.84) is marked `broken`, and the chosen clips' windows are redone with a bigger model if one is ever installed in `models/` (`transcript.retranscribe_windows`). For ANJI-type noisy streams the realistic fix later is a paid API (Sarvam, about ₹30 per hour of speech). 10-stream test and knock detection not started |
+| 3 | Accuracy on 10 more streams, knock detection, bigger speech model fallback | **10-stream set done (see below): all layouts handled, kills plausible, recall awaits the owner's swipes.** Bigger model dropped. The Apex (large-v3-turbo) conversion ran at 19× realtime on the laptop and produced garbage ("nan nan nan"), so it was removed. The code path stays: a transcript covering under half of the detected speech (ANJI 0.14; good streams 0.83–0.84) is marked `broken`, and the chosen clips' windows are redone with a bigger model if one is ever installed in `models/` (`transcript.retranscribe_windows`). For ANJI-type noisy streams the realistic fix later is a paid API (Sarvam, about ₹30 per hour of speech). Knock detection not started |
 | 3a | Moment markers | **Done (file-based).** `markers.json` in the job folder (`{"t", "source": button/chat/voice, "by"}`); spoken "clip that / clip karo" found in the transcript; repeats within 5 s fold into one; a marked moment is always a clip and outranks a two-kill fight |
 | 6 | Post-ready output and brand-safe check | **Done.** `titles.py` (stat / Hinglish punchline / suspense, ≤45 chars, one emoji, series counter, hashtags by channel size, description with stream link and Krafton line), `safety.py` (gaali in Latin and Devanagari across word boundaries, slurs, betting, other games, title overclaims), bleeped "sponsor-safe" export with `--sponsor-safe`. `package.decorate` fills `titles`, `title`, `hashtags`, `description`, `flags`, `mute_spans`, `sponsor_safe` on every ranked clip |
 | 7 | Clip labels and "why this clip" | **Done.** Every clip has `labels` (type, game, kills, knocks, win, marked, talk, players_left, length) and `why` ("2 kills by the streamer at 1:12:40") |
@@ -28,6 +28,7 @@ Progress on building the complete GCM Clipper app, milestone by milestone from [
 
 - 4 Nov: architecture (`docs/ARCHITECTURE.md`). Vision and transcript checkpoints; cleanup command.
 - 5 Nov: markers, labels, why, titles, safety and bleep, parallel analysis stages, 1 fps HUD reads. 50 tests pass.
+- 6 Nov: accuracy set of ten 30-min sections complete (icon HUD, 1080 vertical sources, 24-frame search). 56 tests pass.
 
 ## Measurements
 
@@ -55,22 +56,37 @@ Ten 30-minute sections chosen for variety (`jobs/acc_*`): LoLzZz (big creator, l
 
 Recall against hand-picked moments still needs the owner's strict swipes on five of these sections (their keeps are the "top moments").
 
-**Paused 5 Nov 20:40 at the owner's request.** State when paused:
-- LoLzZz: the kills-only icon HUD scan was at 20 of 30 min with 25 kills when stopped (vision checkpoint kept; `python -m aigcm run <url> --job acc_lolzzz_landscape_bigcreator --section 1:00:00-1:30:00 --no-judge` resumes it and makes its clips).
-- Rajput: the 1080 run finished with no counters found (mostly lobby time in that section); a re-scan with the 24-frame whole-frame search was queued and not started (`... --job acc_rajput_small_hindi --section 0:15:00-0:45:00 --no-judge --force vision`).
-- SULTHAN: 1080 run complete (1 kill, counters read correctly).
-- The app server is still up on the laptop for the owner's swipes.
+**Final per-stream results (6 Nov, all ten complete, no Gemini judge):**
+
+| Section | Layout | Counters | Kills / 30 min | Transcript coverage | Clip mix | Minutes (HUD + transcript + render) |
+|---|---|---|---|---|---|---|
+| LoLzZz (big creator) | landscape 720 | icon HUD, kills only | 28 (3 accolades) | 0.60 | 3 multi-kill, 6 fight, 2 rage, 1 funny | 12 + 14 + 10 |
+| Bixi OP (handcam, pro) | landscape 720 | both | 12 | 0.84 | 1 multi-kill, 7 fight, 2 talk, 2 reaction | 6 + 2 + 4 |
+| SHLOK (solo vs squad) | landscape 720 | both | 11 | 0.86 | 7 fight, 1 funny, 1 talk, 3 reaction | 6 + 3 + 4 |
+| NesaMani (Tamil) | landscape 720 | both | 5 (1 chicken dinner) | 0.32 | 1 win, 4 fight, 1 talk, 3 reaction | 5 + 3 + 4 |
+| Aashi | vertical 720 | both | 16 | 0.51 | 3 multi-kill, 4 fight, 5 talk | 13 + 4 + 2 |
+| Beast | vertical 720 | both | 12 | 0.48 | 1 multi-kill, 8 fight, 1 talk, 2 reaction | 18 + 4 + 2 |
+| PABLO (Telugu, Hindi) | vertical 720 | both | 13 | 0.41 | 1 multi-kill, 7 fight | 21 + 4 + 1 |
+| im_Trex (small, facecam) | vertical 720 | both | 14 | 0.40 | 1 multi-kill, 6 fight, 1 funny, 4 reaction | 20 + 3 + 2 |
+| SULTHAN (facecam) | vertical 1080 | both | 1 | 0.38 | 4 talk, 1 fight, 7 reaction | 18 + 4 + 1 |
+| Zx_Rajput (small, Hindi) | vertical 1080 | both (24-frame search) | 6 | 0.54 | 1 multi-kill, 2 fight, 2 talk, 3 reaction | **55** + 11 + 2 |
+
+- **10 of 10 layouts handled** after the three fixes (icon HUD, 1080 for vertical sources, 24 calibration frames for the whole-frame search). Rajput's counters were found on 3 and 6 of the 24 frames; with 12 frames they were missed because most of his section is lobby time.
+- **Rajput's HUD scan took 55 min for 30 min of video** (1.8× realtime): a vertical 1080 frame with the whole-frame "Spectating" read on every frame, slower still while he is dead. SULTHAN at the same size took 18 min. This is the worst case so far and must be fixed before full-length vertical streams at 1080 are practical (limit the Spectating read to the gameplay window, or read it every few seconds instead of every frame).
+- Kill counts: 11–16 per 30 min on most streams; LoLzZz 28 (big creator, aggressive); NesaMani 5 with a dinner; SULTHAN 1 and Rajput 6 look genuine (early deaths, lobby time).
+- The owner's strict swipes on five of these sections are still needed for the recall figure; the clips are in the app.
 
 ## Next
 
-1. Process the 10 accuracy sections; write down per stream: kills found, layout handled or not, transcript coverage, anything odd. The owner swipes 5 of them strictly; their keeps are the "top moments" for the recall figure.
+1. Owner: strict swipes on five accuracy sections and the rebuilt GtxPreet job (recall figure, talk-vs-fight balance).
+1a. Speed up the vertical Spectating read (Rajput: 55 min HUD scan for 30 min of video).
 2. Knock detection from the kill feed (step 3).
 3. Then M2: database, API, worker, Google sign-in, upload, new web app.
 
 ## Known slow spots
 
 - Gemini free tier: the judge spends most of its time in 503 "busy" retries (7–22 min per job). The paid tier at launch (M6) should remove that.
-- Vertical layouts: the whole-frame "Spectating" check makes vision 2× slower than on landscape streams. Could be limited to the detected gameplay window later.
+- Vertical layouts: the whole-frame "Spectating" check makes vision 2× slower than on landscape streams at 720, and up to 1.8× realtime at 1080 (Rajput). Limit it to the detected gameplay window or read it every few seconds.
 
 ## Not tested yet
 
