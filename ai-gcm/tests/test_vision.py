@@ -170,3 +170,31 @@ def test_big_kill_jump_needs_four_reads():
     assert feed(Counter("elims"), [0, 0, 5, 5, 0, 0, 0]) == [(0.0, None, 0)]
     changes = feed(Counter("elims"), [0, 0, 5, 5, 5, 5])
     assert changes == [(0.0, None, 0), (2.0, 0, 5)] and len(counter_events(changes[1])) == 5
+
+
+def test_feed_region_sits_below_the_counters():
+    from aigcm.vision import feed_region
+    boxes = {"elims": (0.152, 0.008, 0.031, 0.035), "remaining": (0.077, 0.011, 0.026, 0.029)}
+    x, y, w, h = feed_region(boxes, 1280, 720)
+    # GtxPreet's feed lines sit at x 0.03-0.26, y 0.17-0.25 of the frame.
+    assert x <= 0.03 and x + w >= 0.26 and y <= 0.17 and y + h >= 0.25
+    assert feed_region({}, 1280, 720) is None
+
+
+def test_knocks_are_feed_lines_with_the_streamer_first_and_no_kill():
+    from aigcm.vision import knocks_from_feed
+    kills = [{"t": 100.0, "kind": "self_kill"}, {"t": 300.0, "kind": "self_kill"}]
+    feed = [{"t": 99.0, "text": "GTXPreetLive chandrakal85", "conf": 0.9},     # the kill at 100
+            {"t": 298.0, "text": "GtxPreatLive porkash819", "conf": 0.8},      # the kill at 300, mangled
+            {"t": 200.0, "text": "GTXPreetLive RauzzGaming", "conf": 0.9},     # a knock
+            {"t": 201.0, "text": "GTXPreetLive RauzzGaming", "conf": 0.9},     # same line again
+            {"t": 250.0, "text": "ATANKWADI GTXPreetLive", "conf": 0.9},       # the streamer goes down
+            {"t": 260.0, "text": "BaDungaChaca porkash819", "conf": 0.9}]      # someone else
+    name, extra = knocks_from_feed(feed, kills)
+    assert name == "gtxpreetlive"
+    assert [(e["kind"], e["t"]) for e in extra] == [("self_knock", 200.0), ("self_down", 250.0)]
+    # With too few kills to learn the name, nothing is guessed.
+    assert knocks_from_feed(feed[:1], kills[:1]) == (None, [])
+    # A given name is used as is.
+    name, extra = knocks_from_feed(feed, [], player_names=("GTXPreetLive",))
+    assert name == "gtxpreetlive" and len(extra) == 4

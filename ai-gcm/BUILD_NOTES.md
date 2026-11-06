@@ -7,7 +7,7 @@ Progress on building the complete GCM Clipper app, milestone by milestone from [
 ## Decisions (owner, 4–5 Nov 2026)
 
 - Build the **full** app, all phases, before contacting streamers; money can come slowly.
-- Own brand, not Cevrynt; the seller is the owner as a sole proprietor for now. Product name still open (D0).
+- Own brand, not Cevrynt; the seller is the owner as a sole proprietor for now. **Product name: Kaatclip** (D0, chosen 6 Nov after the naming study in `reports/Product name research.md`; domains and YouTube handle were free, to be registered by the owner).
 - YouTube first; Instagram optional after launch. **Upload only**, no YouTube link import (YouTube's developer policies).
 - Spend nothing until it earns; free tiers and the laptop.
 - Prices ₹99 first month, ₹499 / ₹999, ₹49–99 per stream, editor tier about ₹2,499 after launch.

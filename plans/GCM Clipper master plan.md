@@ -2,7 +2,7 @@
 
 The single plan for building the complete, ready-to-sell app. Written 5 November 2026 and revised the same day after the competitor audit. It folds in all four research reports ([market validation](../reports/BGMI%20AI%20clipper%20market%20validation.md), [auto-posting and more games](../reports/AI%20clipper%20autoposting%20and%20multigame%20gaps.md), [what gaming YouTubers need](../reports/Gaming%20YouTuber%20content%20workflow%20needs.md), [competitor feature audit and creator gaps](../reports/Competitor%20feature%20audit%20and%20creator%20gaps.md)) and the [architecture](../docs/ARCHITECTURE.md). Progress is tracked in [ai-gcm/BUILD_NOTES.md](../ai-gcm/BUILD_NOTES.md).
 
-"GCM Clipper" is the working name until the product name is chosen (decision D0).
+"GCM Clipper" was the working name; the product is **Kaatclip** (decision D0, 6 Nov 2026; see `reports/Product name research.md`). Folder and plan names keep "gcm-clipper" until renamed.
 
 ---
 
@@ -53,7 +53,7 @@ The single plan for building the complete, ready-to-sell app. Written 5 November
 
 | # | Decision | Status |
 |---|---|---|
-| D0 | **Product name** (needed for the domain, the Google sign-in consent screen and legal pages; must not contain "YouTube") | **Open. Needed before milestone M2.** |
+| D0 | **Product name** (needed for the domain, the Google sign-in consent screen and legal pages; must not contain "YouTube") | **Kaatclip** (6 Nov 2026). kaatclip.com / .in / .app unregistered and @kaatclip free on YouTube when checked; owner registers them before M4. Instagram handle to confirm by hand. |
 | D1 | Own brand, not under Cevrynt; seller is the owner as a sole proprietor (PAN, bank account, free Udyam registration); a company only if it takes off | Decided 4 Nov |
 | D2 | Plans, all GST-inclusive and with **no per-game or per-feature locks**: **₹99 first month**, then **Starter ₹499** (8 stream hours a month) or **Pro ₹999** (20 hours, results page); **₹49–99 per stream** by UPI payment link for creators who won't subscribe; **Editor ₹2,499** (several channels, seats, client approval) after launch; first stream free. Ceiling set by StreamLadder (₹1,455–3,783 in India) and Eklipse (about $24.99) | Revised 5 Nov |
 | D3 | Laptop is the first server; cloud GPU worker once revenue covers it | Decided 4 Nov |
@@ -249,7 +249,7 @@ Milestones are gated by their "done when", not by dates. Week numbers are estima
 
 | When | Task | Why |
 |---|---|---|
-| Week 1 | Choose the product name (D0), without "YouTube" in it | Domain, consent screen, legal pages |
+| Week 1 | ~~Choose the product name (D0)~~ Done: Kaatclip. Register kaatclip.com, kaatclip.in, kaatclip.app and @kaatclip on YouTube; check Instagram | Domain, consent screen, legal pages |
 | Week 1 | Udyam registration (free), then start Razorpay KYC | Can take days to approve |
 | Week 1 | Create a test YouTube channel and a Telegram account for the bot | Posting and message tests before any creator is involved |
 | Week 1–2 | Review clips strictly; try the live marker button during a real session | Tunes ranking and markers |
