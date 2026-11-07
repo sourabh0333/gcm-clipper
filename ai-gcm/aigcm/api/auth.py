@@ -81,7 +81,8 @@ def start_session(request, response, db, user):
     user.last_seen_at = utcnow()
     db.add(AuditEntry(user_id=user.id, action="sign_in", detail={"via": "google" if user.google_sub else "dev"}))
     db.commit()
-    secure = request.app.state.settings.public_url.startswith("https://")
+    # Secure when the request came over HTTPS (through the tunnel: uvicorn trusts its X-Forwarded-Proto).
+    secure = request.url.scheme == "https"
     response.set_cookie(SESSION_COOKIE, token, max_age=days * 86400, httponly=True, secure=secure,
                         samesite="lax", path="/")
 
@@ -115,7 +116,7 @@ def google_start(request: Request, next: str = "/"):
     pending = base64.urlsafe_b64encode(json.dumps(
         {"state": state, "verifier": verifier, "nonce": nonce, "next": safe_next(next)}).encode()).decode()
     response.set_cookie(LOGIN_COOKIE, pending, max_age=LOGIN_TTL_S, httponly=True, samesite="lax",
-                        secure=settings.public_url.startswith("https://"), path="/auth/")
+                        secure=request.url.scheme == "https", path="/auth/")
     return response
 
 

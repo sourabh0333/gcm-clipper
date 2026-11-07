@@ -226,3 +226,9 @@ def test_google_start_explains_when_not_set_up(tmp_path, google):
     client = TestClient(build(tmp_path, google, google_client_id=""))
     response = client.get("/auth/google/start", follow_redirects=False)
     assert response.status_code == 503 and "GOOGLE_CLIENT_ID" in response.json()["detail"]
+
+
+def test_cookies_are_secure_over_https(tmp_path, google):
+    client = TestClient(build(tmp_path, google), base_url="https://kc.example")
+    done, _ = sign_in(client, google)
+    assert "secure" in done.headers["set-cookie"].lower()

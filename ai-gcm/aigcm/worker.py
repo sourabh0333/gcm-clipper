@@ -101,8 +101,10 @@ def kill_tree(proc):
 
 
 class Worker:
-    def __init__(self, settings, command=engine_command, notify=()):
+    def __init__(self, settings, command=engine_command, notify=(), bot=None):
         self.settings = settings
+        self.bot = bot   # for owner alerts (low disk); per-stream messages go through `notify`
+        self.last_disk_alert = 0.0
         self.engine = database.make_engine(settings.db_url)
         database.migrate(self.engine)
         self.sessions = database.session_factory(self.engine)
@@ -129,7 +131,25 @@ class Worker:
             removed = expire_uploads(s, self.settings)
         if removed:
             log(f"worker: removed {len(removed)} unfinished uploads untouched for days")
+        self.check_disk()
         self.last_housekeeping = time.time()
+
+    def check_disk(self):
+        """Tell the owner (at most once a day) when the jobs disk runs low: uploads are refused then."""
+        import shutil
+
+        free = shutil.disk_usage(self.settings.jobs_dir).free
+        if free >= self.settings.min_free_bytes or time.time() - self.last_disk_alert < 86400:
+            return False
+        log(f"worker: only {free / 1024**3:.0f} GB free on the jobs disk")
+        if self.bot is not None:
+            from .telegram import alert_owners
+
+            with self.sessions() as s:
+                alert_owners(s, self.bot, self.settings, f"only {free / 1024**3:.0f} GB free on the laptop; uploads "
+                                                         "are refused below the limit. Run python -m aigcm cleanup.")
+        self.last_disk_alert = time.time()
+        return True
 
     def other_worker(self):
         """The pid of another worker that is alive and beating, or None. Only one worker may run: a second
@@ -235,7 +255,18 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog="aigcm.worker", description=__doc__.split("\n\n")[0])
     parser.add_argument("--once", action="store_true", help="run at most one queued stream, then exit")
     args = parser.parse_args(argv)
-    worker = Worker(ApiSettings.from_env())
+    settings = ApiSettings.from_env()
+    worker = Worker(settings)
+    if settings.telegram_bot_token:
+        import threading
+
+        from .telegram import Bot, notifier, poll
+
+        bot = Bot(settings.telegram_bot_token)
+        worker.bot = bot
+        worker.notify.append(notifier(worker.sessions, bot, settings.public_url))
+        threading.Thread(target=poll, args=(worker.sessions, bot, threading.Event()), daemon=True).start()
+        log("worker: Telegram messages on")
     if args.once:
         worker.start()
         worker.step()
