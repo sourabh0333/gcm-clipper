@@ -108,6 +108,8 @@ cd ai-gcm && .venv/Scripts/python -m aigcm.api      # API + web app on http://lo
 cd ai-gcm && .venv/Scripts/python -m aigcm.worker   # processes uploaded streams, one at a time
 ```
 
+Owner's one-time setup: double-click `ai-gcm/Setup Kaatclip.cmd` (Telegram token, Tailscale Funnel phone address, Google client, owner email and job import, build, start). After a restart: `ai-gcm/Start Kaatclip.cmd`. Both tested on the laptop 7 Nov except the parts that need the owner's sign-ins (Tailscale, Google, Telegram).
+
 `.env` keys: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (see `docs/Google sign-in setup.md`), `AIGCM_ADMINS` (owner's Google email), `AIGCM_INVITES`, `AIGCM_PUBLIC_URL`, `TELEGRAM_BOT_TOKEN`, and for laptop-only testing `AIGCM_DEV_LOGIN=1`. The old app (`python -m aigcm serve`, port 8765) keeps working until M2.9.
 
 ## Kill feed and knocks (6–7 Nov)

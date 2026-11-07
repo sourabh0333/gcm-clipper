@@ -2,6 +2,8 @@
 
 Kaatclip signs creators in with Google. Google needs to know the app first. This is done once, in your own Google account. Claude can't do it for you, but can walk through it with you in the browser if you say so.
 
+**Easiest:** double-click `ai-gcm/Setup Kaatclip.cmd`. It does Telegram and the phone address first, then prints the exact redirect URIs for step 5 and asks for the values from step 6, so nothing has to be typed into `.env` by hand.
+
 Sign-in asks only for name, email and profile picture. With only those, Google needs no tester list and no review (M2 plan, finding R2). YouTube permissions come later, in M4, with their own steps.
 
 ## Steps
@@ -19,9 +21,9 @@ Sign-in asks only for name, email and profile picture. With only those, Google n
    - Application type: **Web application**
    - Name: `Kaatclip web`
    - Authorised redirect URIs → Add URI: `http://localhost:8770/auth/google/callback`
-   - (Later, when the phone address exists, add `https://<laptop>.<tailnet>.ts.net/auth/google/callback` here too.)
+   - Add a second one for the phone: `https://<laptop>.<tailnet>.ts.net/auth/google/callback` (the setup script prints the exact address).
    - Create. A box shows the **Client ID** and **Client secret**.
-6. Open `ai-gcm/.env` on the laptop in Notepad and add these lines. Paste your own values, and put your Google email after `AIGCM_ADMINS`:
+6. Paste the Client ID, Client secret and your Google email into the setup window when it asks. (Or by hand: open `ai-gcm/.env` in Notepad and add these lines with your own values.)
 
    ```
    GOOGLE_CLIENT_ID=...apps.googleusercontent.com

@@ -75,6 +75,8 @@ Each step ends with tests green, notes updated, and a commit to `main`.
 
 ## 5. What the owner does for M2 (all free, only when the step needs it)
 
+**One script does the laptop side of all of it:** double-click `ai-gcm/Setup Kaatclip.cmd` (asks for the Telegram token, installs Tailscale with winget and turns on Funnel, prints the Google redirect URIs, asks for the Google client ID, secret and owner email, imports the old jobs, builds the web app if needed, starts the API and worker). `ai-gcm/Start Kaatclip.cmd` starts the API and worker after a restart. Order chosen so Google is set up once with the final phone address: Telegram, then Tailscale, then Google.
+
 | Step | Task | Claude prepares |
 |---|---|---|
 | M2.2 | Create a Google Cloud project "Kaatclip" and a web OAuth client; consent screen with app name, support email, scopes `openid email profile` only; add `http://localhost:8770/auth/google/callback` and later the Funnel address as redirect URIs; paste the client id and secret into `ai-gcm/.env` | Exact click path and every field's text; can be done together in the browser with your OK |
