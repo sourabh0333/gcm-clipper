@@ -40,6 +40,10 @@ def stat_title(labels, series=None):
         base, emoji = "DOUBLE FINISH", EMOJI["kill"]
     elif kills == 1:
         base, emoji = "PATT SE HEADSHOT" if labels.get("type") == "fight" else "ONE SHOT", EMOJI["kill"]
+    elif (labels.get("knocks") or 0) >= 2:
+        base, emoji = f"{labels['knocks']} KNOCKS NO FINISH", EMOJI["kill"]
+    elif labels.get("knocks") == 1:
+        base, emoji = "KNOCK DIYA PHIR", EMOJI["kill"]
     else:
         return None
     if left is not None and left <= 10:

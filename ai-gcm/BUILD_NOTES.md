@@ -84,7 +84,7 @@ Recall against hand-picked moments still needs the owner's strict swipes on five
 - Kill counts: 11–16 per 30 min on most streams; LoLzZz 28 (big creator, aggressive); NesaMani 5 with a dinner.
 - The owner's strict swipes on five of these sections are still needed for the recall figure; the clips are in the app.
 
-## Kill feed and knocks (6 Nov evening, in progress)
+## Kill feed and knocks (6–7 Nov)
 
 BGMI's kill feed sits under the teammate list at the left edge of the gameplay window, one row per event: "killer, weapon icon, kneeling icon for a knock, victim" (no words; the own rows are highlighted). Built in `vision.py`:
 
@@ -92,15 +92,16 @@ BGMI's kill feed sits under the teammate list at the left edge of the gameplay w
 - `feed_rows` pairs the two names per row (OCR returns them as separate boxes split by the icons).
 - `knocks_from_feed` learns the streamer's in-game name from the rows at the counter's kill times (fuzzy, since OCR mangles names), then: own row with no counter rise within −2..+4 s = `self_knock`; row ending with the name = `self_down`. `AIGCM_PLAYER_NAMES` still overrides.
 - Results so far: **Bixi** learned "Sutli Bomb" by itself and found 2 knocks and 1 down beside his 12 kills. **GtxPreet**: the feed rows are half-transparent over a bright map and OCR reads none of them at any zoom (name None, 0 knocks). **Aashi** (vertical): 22 junk rows. **DIPENDU**: an overlay covers the feed. So knocks are a bonus signal on layouts with a readable feed, not a guarantee. The moments already weight `self_knock` (7) and label knocks; `self_down` is stored but not scored yet.
-- **Stopped 6 Nov 18:35 (owner shutting down) before the confirmation run finished**: the adaptive give-up and the 4 s interval were coded and unit-tested (67 pass) but not yet timed on GtxPreet and Bixi. First thing tomorrow: `bash` the two HUD-only scans (`--force vision --until vision` on `vHLz6WDqJkk_1800-4200` and `acc_bixi_handcam_pro`), expect GtxPreet to give the feed up after about 8 min of video and Bixi to keep it with the same 2 knocks; then record the times here.
+- **Confirmed 7 Nov:** GtxPreet's section gives the feed up after 120 reads (1 full row) at 3 min of video and scans in 10.9 min for 40 min; Bixi keeps it and scans in 9.0 min for 30 min (5.7 without the feed, 11.3 with 3 s reads), learning "sutli bamb" and finding 1 knock and 1 down (a second knock seen with 3 s reads is missed at 4 s; accepted). Knocks and downs are a bonus on readable layouts.
+- Downs are used in moments (7 Nov): a `self_down` within 15 s after a fight's last event is attached to it, the clip runs on to it, the reason says "then the streamer goes down" and the label `down` is set; a down alone is never a clip. Knock-only clips get stat titles ("2 KNOCKS NO FINISH", "KNOCK DIYA PHIR").
 
-Also fixed today: `--force vision` used to mark the audio chain stale too, so Whisper re-ran beside every scan and halved its CPU (`jobs.stages_from`); forcing vision now leaves audio/sounds/transcript alone, and vice versa.
+Also fixed 6 Nov: `--force vision` used to mark the audio chain stale too, so Whisper re-ran beside every scan and halved its CPU (`jobs.stages_from`); forcing vision now leaves audio/sounds/transcript alone, and vice versa.
 
 ## Next
 
 1. Owner: strict swipes on five accuracy sections and the rebuilt GtxPreet job (recall figure, talk-vs-fight balance).
 1a. (Done 6 Nov) Bixi re-scanned after the calibration and jump-rule changes: same 12 kills, 2 matches, 1 accolade, 5.7 min. Landscape is unaffected.
-2. Finish the knock confirmation run (above), then use `self_down` in moments (a death right after a fight is a story beat), and decide the transcript "broken" threshold from the owner's swipes.
+2. Decide the transcript "broken" threshold from the owner's swipes; then M2 (database, API, worker, Google sign-in, upload, new web app).
 3. Then M2: database, API, worker, Google sign-in, upload, new web app.
 
 ## Known slow spots

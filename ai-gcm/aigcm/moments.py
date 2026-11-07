@@ -11,6 +11,9 @@ import numpy as np
 from .markers import describe
 
 WEIGHTS = {"self_kill": 12, "self_knock": 7, "accolade": 5, "dinner": 20}
+# The streamer going down (kill feed) is not a moment by itself, but when it ends a fight it is the story's
+# last beat: the clip runs on to it and says so. It must come within this long of the fight's last event.
+DOWN_AFTER_S = 15.0
 EXCITEMENT_PEAK = 2.5
 DENSITY_WINDOW_S = 20.0
 BACKTRACK_S = 20.0
@@ -135,6 +138,8 @@ def _score(cand, audio, settings, remaining=()):
         reasons.append(f"{' and '.join(parts)} by the streamer")
     if counts["accolade"]:
         reasons.append("Ace Eliminator")
+    if counts["self_down"]:
+        reasons.append("then the streamer goes down")
     dense = _densest([e for e in cand["events"] if e["kind"] in ("self_kill", "self_knock")], DENSITY_WINDOW_S)
     if dense >= 4:
         score += 25
@@ -190,6 +195,7 @@ def _score(cand, audio, settings, remaining=()):
                 why=f"{', '.join(reasons) or 'loud moment'} at {_clock(anchor)}",
                 labels={"type": kind, "game": settings.game, "kills": own_kills, "knocks": own_knocks,
                         "win": bool(counts["dinner"]), "marked": bool(marks), "talk": cand.get("talk_type"),
+                        "down": bool(counts["self_down"]),
                         "players_left": cand.get("players_left"), "length_s": round(length, 1)})
     return cand
 
@@ -221,7 +227,12 @@ def _overlap(a, b):
 def build(events, audio, settings, duration, remaining=(), sounds=None, talks=(), markers=()):
     candidates = [dict(t, events=[]) for t in talks]
     useful = [e for e in events if e["kind"] in WEIGHTS]
+    downs = sorted((e for e in events if e["kind"] == "self_down"), key=lambda e: e["t"])
     for cluster in _cluster(useful, settings.merge_gap_s):
+        last_t = cluster[-1]["t"]
+        fell = next((d for d in downs if last_t < d["t"] <= last_t + DOWN_AFTER_S), None)
+        if fell:
+            cluster = cluster + [fell]
         first, last = cluster[0]["t"], cluster[-1]["t"]
         start, end = _bounds(first, last, audio, settings, sounds)
         anchor = float(np.median([e["t"] for e in cluster]))

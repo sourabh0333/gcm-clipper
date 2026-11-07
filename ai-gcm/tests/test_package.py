@@ -82,3 +82,10 @@ def test_judge_kind_does_not_relabel_a_kill_clip(tmp_path):
     by_id = {c["id"]: c for c in ranked}
     assert by_id["m01"]["type"] == "multi_kill" and by_id["m01"]["judge_type"] == "rage"
     assert by_id["m02"]["type"] == "banter" and by_id["m02"]["labels"]["type"] == "banter"
+
+
+def test_knock_only_clips_get_a_stat_title():
+    from aigcm.titles import stat_title
+    assert stat_title({"kills": 0, "knocks": 2, "type": "fight"}).startswith("2 KNOCKS NO FINISH")
+    assert stat_title({"kills": 0, "knocks": 1, "type": "fight"}).startswith("KNOCK DIYA PHIR")
+    assert stat_title({"kills": 0, "knocks": 0, "type": "fight"}) is None

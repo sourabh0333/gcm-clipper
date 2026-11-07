@@ -100,3 +100,14 @@ def test_captions_split_into_short_timed_chunks():
     chunks = chunk_words(words)
     assert [c["text"] for c in chunks] == ["w0 w1 w2", "w3 w4 w5", "w6"]
     assert "Dialogue: 0,0:00:00.00,0:00:00.85,Caption,,0,0,0,,W0 W1 W2" in to_ass(chunks, 300)
+
+
+def test_a_down_right_after_a_fight_ends_the_clip_but_is_no_clip_alone():
+    settings = Settings()
+    audio = quiet_audio(900)
+    found = moments.build([ev(100, "self_kill"), ev(104, "self_kill"), ev(112, "self_down"), ev(500, "self_down")],
+                          audio, settings, 900)
+    assert len(found) == 1
+    fight = found[0]
+    assert fight["end"] >= 112 and fight["labels"]["down"] and "goes down" in fight["why"]
+    assert fight["labels"]["kills"] == 2 and fight["type"] == "fight"
