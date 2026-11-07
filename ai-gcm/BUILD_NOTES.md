@@ -31,8 +31,8 @@ Reviewed before any code: [plans/M2 platform core plan.md](../plans/M2%20platfor
 | Step | Status |
 |---|---|
 | M2.1 Foundation | **Done 7 Nov.** `requirements-api.txt` (pinned, light); `aigcm/db/` models for 11 tables, Alembic migration `0001` applied automatically at start, SQLite in WAL with BEGIN IMMEDIATE for the API and worker writing together; `aigcm/api/` FastAPI app with `/api/health`, started by `python -m aigcm.api` on port 8770; database in `ai-gcm/data/` (git-ignored). 6 new tests, including one that the API imports no engine code |
-| M2.2 Sign-in | Next |
-| M2.3 Upload and streams | — |
+| M2.2 Sign-in | **Done 7 Nov, except the real Google check** (needs the owner's OAuth client: `docs/Google sign-in setup.md`). `aigcm/api/auth.py`: Google code flow with PKCE, state and nonce (pending login in a 10-min HttpOnly cookie), ID token checked against Google's cached certificates (signature, audience, issuer, expiry, nonce, verified email); invite-only (`AIGCM_INVITES`, `AIGCM_ADMINS`, invites table, owner-only invite routes); sessions stored as a hash of a random cookie token, 30 days sliding, sign-out kills a replayed cookie; every POST/PUT/PATCH/DELETE needs the `X-Kaatclip: 1` header and a matching Origin; `next` redirects refuse other sites, backslashes and control characters; dev sign-in only with `AIGCM_DEV_LOGIN=1` on localhost with no forwarding headers; `own_stream` gives 404 for anyone else's stream. 18 tests against a fake Google (local signing key); checked with curl on a real server. Not yet: rate limits (M6 security list) |
+| M2.3 Upload and streams | Next |
 | M2.4 Worker | — |
 | M2.5 Review API and migration | — |
 | M2.6 Web app | — |

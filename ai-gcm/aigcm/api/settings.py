@@ -51,6 +51,4 @@ class ApiSettings:
         )
         for key, value in overrides.items():
             setattr(s, key, value)
-        if s.db_url.startswith("sqlite:///"):
-            Path(s.db_url.removeprefix("sqlite:///")).parent.mkdir(parents=True, exist_ok=True)
         return s

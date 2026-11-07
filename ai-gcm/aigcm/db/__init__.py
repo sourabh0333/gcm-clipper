@@ -14,6 +14,8 @@ MIGRATIONS = Path(__file__).resolve().parent / "migrations"
 
 
 def make_engine(url):
+    if url.startswith("sqlite:///"):
+        Path(url.removeprefix("sqlite:///")).parent.mkdir(parents=True, exist_ok=True)
     engine = create_engine(url, connect_args={"timeout": 15} if url.startswith("sqlite") else {})
     if url.startswith("sqlite"):
         @event.listens_for(engine, "connect")
