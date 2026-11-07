@@ -1,4 +1,6 @@
-# PWA progress notes
+# PWA progress notes (retired)
+
+**Retired 7 Nov 2026.** The stdlib server (`aigcm/server.py`) and plain-JS app (`app/`) described here were replaced by the M2 platform: the API in `aigcm/api/`, the worker in `aigcm/worker.py` and the React app in `web/`. Progress is in [BUILD_NOTES.md](BUILD_NOTES.md); this file is kept for history only.
 
 Shared notes between the laptop and phone sessions. Update before every push (see `CLAUDE.md`).
 

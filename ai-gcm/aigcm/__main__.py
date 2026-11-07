@@ -316,8 +316,12 @@ def cmd_eval(args, settings):
 
 
 def cmd_serve(args, settings):
-    from . import server
-    server.serve(settings, args.host, args.port)
+    """The old stdlib app was retired on 7 Nov 2026 (M2.9); `serve` now starts the platform API and web app.
+    The worker runs separately: python -m aigcm.worker (or double-click Start Kaatclip.cmd for both)."""
+    from .api.__main__ import main as api_main
+
+    log("serve: starting the Kaatclip API and web app; start the worker too (python -m aigcm.worker)")
+    api_main(["--host", args.host, "--port", str(args.port)])
 
 
 def main(argv=None):
@@ -363,9 +367,9 @@ def main(argv=None):
     p.add_argument("--dry-run", action="store_true", help="only list what would be deleted")
     p.set_defaults(fn=cmd_cleanup)
 
-    p = sub.add_parser("serve", help="run the app: start jobs, watch progress, review and share clips")
-    p.add_argument("--host", default="0.0.0.0", help="0.0.0.0 lets a phone on the same Wi-Fi connect")
-    p.add_argument("--port", type=int, default=8765)
+    p = sub.add_parser("serve", help="run the Kaatclip API and web app (same as python -m aigcm.api)")
+    p.add_argument("--host", default="127.0.0.1", help="127.0.0.1: this laptop and the Tailscale Funnel address")
+    p.add_argument("--port", type=int, default=8770)
     p.set_defaults(fn=cmd_serve)
 
     args = parser.parse_args(argv)
