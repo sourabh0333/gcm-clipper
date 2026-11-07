@@ -28,6 +28,7 @@ def create_app(settings: ApiSettings | None = None, http: httpx.Client | None = 
     app.middleware("http")(csrf_guard)
     for module in (auth, admin, streams, uploads):
         app.include_router(module.router)
+    app.include_router(streams.worker_router)
 
     @app.get("/api/health")
     def health():

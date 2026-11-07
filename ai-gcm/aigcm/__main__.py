@@ -13,6 +13,7 @@ from . import audio, captions, judge, markers, moments, package, render, review,
 from .config import Settings
 from .jobs import STAGES, Job, log, read_json, stages_from, write_json
 from .media import download, extract_audio, extract_frame, is_url, parse_time, probe, search
+from .procs import Busy, FolderLock
 
 # Folders and files each stage writes, removed when that stage is forced to run again.
 OUTPUTS = {
@@ -232,7 +233,12 @@ def cmd_run(args, settings):
     if args.force:
         clear_from(job, args.force)
     log(f"job folder: {job.root}")
-    pipeline(job, args.source, section, settings, not args.no_judge, not args.no_captions, args.until)
+    try:
+        with FolderLock(job.root):
+            pipeline(job, args.source, section, settings, not args.no_judge, not args.no_captions, args.until)
+    except Busy as exc:
+        log(f"refused: {exc}")
+        sys.exit(3)
 
 
 def cmd_status(args, settings):
