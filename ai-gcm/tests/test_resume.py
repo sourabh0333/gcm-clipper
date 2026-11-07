@@ -119,3 +119,16 @@ def test_cleanup_deletes_only_old_sources_of_finished_jobs(tmp_path):
     job("old_unfinished", False, 20)
     names = sorted((p.parent.name, p.name) for p in stale_sources(tmp_path, 14))
     assert names == [("old_done", "audio.wav"), ("old_done", "source.mp4")]
+
+
+def test_an_upload_in_the_job_folder_is_used_in_place_and_others_are_copied(tmp_path):
+    from aigcm.__main__ import local_source
+    from aigcm.jobs import Job
+    job = Job(tmp_path / "st_1")
+    upload = job.path("source.mkv")
+    upload.write_bytes(b"video")
+    assert local_source(upload, job) == upload and [p.name for p in job.root.iterdir()] == ["source.mkv"]
+    elsewhere = tmp_path / "My Stream.MP4"
+    elsewhere.write_bytes(b"other")
+    copied = local_source(elsewhere, job)
+    assert copied == job.path("source.mp4") and copied.read_bytes() == b"other" and elsewhere.exists()

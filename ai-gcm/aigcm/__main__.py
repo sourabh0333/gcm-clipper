@@ -61,6 +61,17 @@ def clear_from(job, stage):
     job.invalidate_from(stage)
 
 
+def local_source(source, job):
+    """The job's copy of a local video. An upload is written straight into the job folder (M2 review R6),
+    so it is used where it is; copying an 8 GB recording would double the disk it takes."""
+    source = Path(source)
+    if source.parent.resolve() == job.root.resolve() and source.stem == "source":
+        return source
+    path = job.path("source" + source.suffix.lower())
+    shutil.copyfile(source, path)
+    return path
+
+
 def pipeline(job, source, section, settings, use_judge, use_captions, until=None):
     def ingest(job):
         info = {"source": source}
@@ -68,8 +79,7 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
             path, meta = download(source, job.root, settings.download_height, section)
             info.update(meta)
         else:
-            path = job.path("source" + Path(source).suffix.lower())
-            shutil.copyfile(source, path)
+            path = local_source(source, job)
             info["title"] = Path(source).stem
         info.update(probe(path), path=str(path), section=section)
         extract_audio(path, job.path("audio.wav"))
