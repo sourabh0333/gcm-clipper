@@ -24,6 +24,22 @@ Progress on building the complete GCM Clipper app, milestone by milestone from [
 | 7 | Clip labels and "why this clip" | **Done.** Every clip has `labels` (type, game, kills, knocks, win, marked, talk, players_left, length) and `why` ("2 kills by the streamer at 1:12:40") |
 | 4, 5, 8 | Upload, edit model, delivery | M2/M3 |
 
+## Milestone M2: platform core (started 7 Nov)
+
+Reviewed before any code: [plans/M2 platform core plan.md](../plans/M2%20platform%20core%20plan.md) (13 findings, decisions, steps M2.1–M2.9, owner tasks). M1 stays open only for what the owner's swipes decide (recall figure, transcript threshold).
+
+| Step | Status |
+|---|---|
+| M2.1 Foundation | In progress |
+| M2.2 Sign-in | — |
+| M2.3 Upload and streams | — |
+| M2.4 Worker | — |
+| M2.5 Review API and migration | — |
+| M2.6 Web app | — |
+| M2.7 Telegram | — |
+| M2.8 Marker-window upload | — |
+| M2.9 Go live, retire old app | — |
+
 ## Done
 
 - 4 Nov: architecture (`docs/ARCHITECTURE.md`). Vision and transcript checkpoints; cleanup command.

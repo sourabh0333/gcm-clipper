@@ -61,3 +61,5 @@ docs/ARCHITECTURE.md
 ```
 
 The current stdlib server (`aigcm/server.py`) and plain-JS PWA (`app/`) keep working until the new API and web app replace them.
+
+**M2 review (7 Nov 2026):** the concrete choices for M2 (sign-in flow and sessions, tus-style 8 MB chunked upload, SQLite settings for two writers, worker design, pinned versions, Tailscale Funnel for phone tests until the domain) are in [plans/M2 platform core plan.md](../plans/M2%20platform%20core%20plan.md).
