@@ -30,7 +30,7 @@ Written 7 November 2026 before any M2 code, after reviewing the [master plan](GC
 
 - **Sign-in:** Google authorization-code flow with PKCE, `state` and `nonce`, written with `httpx`; the ID token verified with `google-auth` (certificates cached). No Authlib, no signed-cookie sessions: a random session id in an HttpOnly, Secure, SameSite=Lax cookie, looked up in a `sessions` table, 30 days sliding. A "dev sign-in" exists only when `AIGCM_DEV_LOGIN=1` and the request comes to `localhost` with no tunnel headers, for tests and laptop development.
 - **Upload:** tus semantics, own server code (about 150 lines), `tus-js-client` 4.3.1, 8 MB chunks, up to 10 GB, MP4, MKV or MOV, checked with ffprobe when complete.
-- **Worker:** `python -m aigcm worker`, one job at a time, runs the pipeline as a child process (as the old server does, so a crash or Stop can't take the worker down), heartbeat in the database, re-queues jobs left running after a crash (they resume from checkpoints).
+- **Worker:** `python -m aigcm.worker` (a separate entry point, so it starts without the engine's models), one job at a time, runs the pipeline as a child process (as the old server does, so a crash or Stop can't take the worker down), heartbeat in the database, re-queues jobs left running after a crash (they resume from checkpoints).
 - **Web app:** React 19 + TypeScript + Vite in `ai-gcm/web/`, React Router 7, Vitest; a hand-written service worker (no PWA plugin); the built files served by FastAPI, later by Cloudflare Pages.
 - **Marker windows in the browser:** Mediabunny's low-level packet copy (reads only the needed bytes, MP4/MOV/MKV, no re-encode). ffmpeg.wasm is the fallback (30 MB download, 2 GB limit without WORKERFS); mp4box.js is out (no writer, keeps media in memory when the index is at the end).
 - **Telegram:** long polling (`getUpdates`) from the worker, no public webhook needed; linking by `t.me/<bot>?start=<one-time token>` (up to 64 characters of `A–Z a–z 0–9 _ -`); about one message a second per chat is the limit, far above our needs.
@@ -43,7 +43,7 @@ Each step ends with tests green, notes updated, and a commit to `main`.
 
 | Step | What | Done when |
 |---|---|---|
-| **M2.1 Foundation** | `requirements-api.txt`; settings from `.env`; SQLAlchemy models (`users`, `sessions`, `invites`, `streams`, `uploads`, `clips`, `live_sessions`, `markers`, `telegram_links`, `audit_log`); Alembic migration; SQLite pragmas; FastAPI app in `aigcm/api/` with `/api/health`; `python -m aigcm api` | A fresh database is created by the migration; the API answers on localhost; tests pass without the engine's models installed |
+| **M2.1 Foundation** | `requirements-api.txt`; settings from `.env`; SQLAlchemy models (`users`, `sessions`, `invites`, `streams`, `uploads`, `clips`, `live_sessions`, `markers`, `telegram_links`, `audit_log`); Alembic migration; SQLite pragmas; FastAPI app in `aigcm/api/` with `/api/health`; `python -m aigcm.api` (port 8770 until M2.9, so the old app on 8765 keeps working) | A fresh database is created by the migration; the API answers on localhost; tests pass without the engine's models installed |
 | **M2.2 Sign-in** | Google code flow with PKCE, invite list, sessions, sign-out, `/api/me`, dev sign-in for localhost; owner-only admin flag; per-user data access helper used by every query | Mocked Google flow test passes; a second user gets 404 on the first user's streams and media; real Google sign-in tested on localhost once the OAuth client exists |
 | **M2.3 Upload and streams** | tus create/HEAD/PATCH/DELETE, 8 MB chunks, size and disk guard, ffprobe check; stream rows with title, game, recorded date; upload lands in the job folder; engine ingest skips the copy | An upload interrupted halfway resumes and queues the stream; the engine ingests the file without copying it |
 | **M2.4 Worker** | Claim, child-process run, Stop, crash re-queue, heartbeat, progress from the manifest, clip import on success, error on failure | A real uploaded section runs end to end through the worker; killing the worker mid-scan and restarting it resumes from the checkpoint |
@@ -77,8 +77,8 @@ Each step ends with tests green, notes updated, and a commit to `main`.
 
 | Step | Task | Claude prepares |
 |---|---|---|
-| M2.2 | Create a Google Cloud project "Kaatclip" and a web OAuth client; consent screen with app name, support email, scopes `openid email profile` only; add `http://localhost:8765/auth/google/callback` and later the Funnel address as redirect URIs; paste the client id and secret into `ai-gcm/.env` | Exact click path and every field's text; can be done together in the browser with your OK |
-| M2.6 | Install Tailscale on the laptop, sign in, and turn on Funnel for port 8765 | The commands and a check script |
+| M2.2 | Create a Google Cloud project "Kaatclip" and a web OAuth client; consent screen with app name, support email, scopes `openid email profile` only; add `http://localhost:8770/auth/google/callback` and later the Funnel address as redirect URIs; paste the client id and secret into `ai-gcm/.env` | Exact click path and every field's text; can be done together in the browser with your OK |
+| M2.6 | Install Tailscale on the laptop, sign in, and turn on Funnel for the API's port | The commands and a check script |
 | M2.7 | Create the bot with @BotFather (name "Kaatclip", username like `kaatclip_bot`) and paste the token into `.env` | The bot's description and commands |
 | M2.9 | One more person (or a second Google account) signs in from another phone for the two-creator test | The test checklist |
 

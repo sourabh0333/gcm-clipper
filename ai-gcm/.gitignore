@@ -6,3 +6,4 @@ jobs/
 models/
 demo/*/decisions.json
 demo/*/run.log
+data/

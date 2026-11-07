@@ -30,8 +30,8 @@ Reviewed before any code: [plans/M2 platform core plan.md](../plans/M2%20platfor
 
 | Step | Status |
 |---|---|
-| M2.1 Foundation | In progress |
-| M2.2 Sign-in | — |
+| M2.1 Foundation | **Done 7 Nov.** `requirements-api.txt` (pinned, light); `aigcm/db/` models for 11 tables, Alembic migration `0001` applied automatically at start, SQLite in WAL with BEGIN IMMEDIATE for the API and worker writing together; `aigcm/api/` FastAPI app with `/api/health`, started by `python -m aigcm.api` on port 8770; database in `ai-gcm/data/` (git-ignored). 6 new tests, including one that the API imports no engine code |
+| M2.2 Sign-in | Next |
 | M2.3 Upload and streams | — |
 | M2.4 Worker | — |
 | M2.5 Review API and migration | — |

@@ -1,0 +1,12 @@
+# The platform (API, worker, database). Light on purpose: no engine models, so it installs and its tests
+# run anywhere, including the phone session. The engine's own packages are in requirements.txt.
+fastapi==0.162.0
+starlette==1.9.0
+uvicorn==0.54.0
+sqlalchemy==2.1.6
+alembic==1.20.1
+python-multipart==0.0.32
+httpx==0.28.1
+google-auth==2.62.0
+cryptography==50.0.2
+pytest>=8

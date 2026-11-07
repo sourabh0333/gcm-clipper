@@ -1,0 +1,29 @@
+"""The platform API (FastAPI): accounts, uploads, streams, clips and decisions. It never runs the pipeline
+itself; the worker does (aigcm.worker). See plans/M2 platform core plan.md."""
+
+from fastapi import FastAPI
+from sqlalchemy import text
+
+from .. import db
+from .settings import ApiSettings
+
+VERSION = "0.2.0"
+
+
+def create_app(settings: ApiSettings | None = None) -> FastAPI:
+    settings = settings or ApiSettings.from_env()
+    engine = db.make_engine(settings.db_url)
+    db.migrate(engine)
+
+    app = FastAPI(title="Kaatclip", version=VERSION, docs_url=None, redoc_url=None)
+    app.state.settings = settings
+    app.state.engine = engine
+    app.state.sessions = db.session_factory(engine)
+
+    @app.get("/api/health")
+    def health():
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        return {"ok": True, "version": VERSION}
+
+    return app
