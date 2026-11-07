@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from sqlalchemy import text
 
 from .. import db
-from . import admin, auth, streams, uploads
+from . import admin, auth, clips, streams, uploads
 from .deps import csrf_guard
 from .settings import ApiSettings
 
@@ -26,7 +26,7 @@ def create_app(settings: ApiSettings | None = None, http: httpx.Client | None = 
     app.state.http = http or httpx.Client(timeout=20)
     app.state.google_certs = auth.GoogleCerts(app.state.http.get)
     app.middleware("http")(csrf_guard)
-    for module in (auth, admin, streams, uploads):
+    for module in (auth, admin, streams, uploads, clips):
         app.include_router(module.router)
     app.include_router(streams.worker_router)
 
