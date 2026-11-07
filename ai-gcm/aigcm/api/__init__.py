@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from sqlalchemy import text
 
 from .. import db
-from . import admin, auth, clips, live, streams, uploads
+from . import admin, auth, clips, live, streams, uploads, web
 from .deps import csrf_guard
 from .settings import ApiSettings
 
@@ -36,4 +36,6 @@ def create_app(settings: ApiSettings | None = None, http: httpx.Client | None = 
             connection.execute(text("SELECT 1"))
         return {"ok": True, "version": VERSION}
 
+    # Last: the web app answers every path the API doesn't.
+    web.mount(app, settings.web_dir)
     return app

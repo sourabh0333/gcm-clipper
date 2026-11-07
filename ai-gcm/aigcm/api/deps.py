@@ -6,6 +6,7 @@ from datetime import timedelta
 
 from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError
 
 from ..db.models import Session as SessionRow
 from ..db.models import Stream, User, utcnow
@@ -23,7 +24,12 @@ def token_hash(token):
 
 
 def get_db(request: Request):
+    """A database session for the request. GET and HEAD requests read in a plain transaction that never
+    blocks a writer (the sign-in callback, a GET that writes, is the exception)."""
+    readonly = request.method in ("GET", "HEAD") and not request.url.path.startswith("/auth/")
     with request.app.state.sessions() as session:
+        if readonly:
+            session.connection(execution_options={"readonly": True})
         yield session
 
 
@@ -36,11 +42,18 @@ def optional_user(request: Request, db=Depends(get_db)) -> User | None:
     if row is None or row.expires_at <= now:
         return None
     if now - row.last_used_at >= SLIDE_EVERY:
-        # Sliding expiry, written at most once an hour so reads don't all become writes.
+        # Sliding expiry, written at most once an hour so reads don't all become writes. On a read-only
+        # request another writer may get there first; the slide then simply waits for the next request.
         row.last_used_at = now
         row.expires_at = now + timedelta(days=request.app.state.settings.session_days)
         row.user.last_seen_at = now
-        db.commit()
+        try:
+            db.commit()
+        except OperationalError:
+            db.rollback()
+            row = db.get(SessionRow, token_hash(token))
+            if row is None:
+                return None
     return row.user
 
 

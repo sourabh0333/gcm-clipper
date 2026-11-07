@@ -73,3 +73,43 @@ def test_the_api_package_imports_no_engine_code():
             "'faster_whisper', 'mediapipe') if m in sys.modules]; print(heavy)")
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True).stdout
     assert out.strip() == "[]"
+
+
+def test_a_long_read_never_blocks_a_writer(settings):
+    # A GET that streams a video keeps its read transaction open; writes must still go through at once
+    # (found in the M2.6 browser check: a playing clip blocked every keep and reject for 15 s).
+    import time
+    app = create_app(settings)
+    reader = app.state.sessions()
+    reader.connection(execution_options={"readonly": True})
+    reader.query(User).count()            # holds a read transaction open
+    started = time.time()
+    with app.state.sessions() as writer:
+        writer.add(User(email="w@example.com"))
+        writer.commit()
+    assert time.time() - started < 2
+    reader.close()
+
+
+def test_a_write_waits_for_another_write_instead_of_failing(settings):
+    import threading
+    import time
+    app = create_app(settings)
+    first = app.state.sessions()
+    first.add(User(email="first@example.com"))
+    first.flush()                          # holds the write lock
+    done = []
+
+    def second():
+        with app.state.sessions() as s:
+            s.add(User(email="second@example.com"))
+            s.commit()
+            done.append(time.time())
+
+    thread = threading.Thread(target=second)
+    thread.start()
+    time.sleep(0.5)
+    released = time.time()
+    first.commit()
+    thread.join(timeout=10)
+    assert done and done[0] >= released

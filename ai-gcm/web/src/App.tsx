@@ -1,0 +1,65 @@
+import { useEffect, useState } from "react";
+import { NavLink, Route, Routes, useLocation } from "react-router";
+import { api, ApiError, type Me } from "./api";
+import Kept from "./pages/Kept";
+import Live from "./pages/Live";
+import NewStream from "./pages/NewStream";
+import Review from "./pages/Review";
+import Settings from "./pages/Settings";
+import SignIn from "./pages/SignIn";
+import StreamPage from "./pages/StreamPage";
+import Streams from "./pages/Streams";
+
+export default function App() {
+  const [me, setMe] = useState<Me | null | undefined>(undefined);
+  const [offline, setOffline] = useState(false);
+  // Reviewing is full-screen: the tab bar would cover the Keep and Reject buttons on a phone.
+  const reviewing = useLocation().pathname.endsWith("/review");
+
+  useEffect(() => {
+    api<Me>("/api/me")
+      .then(setMe)
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 401) setMe(null);
+        else setOffline(true);
+      });
+  }, []);
+
+  if (offline)
+    return (
+      <div className="shell">
+        <h1>Can't reach the laptop</h1>
+        <p className="muted">Kaatclip runs on the laptop at home. Check that it's on and connected, then try again.</p>
+        <button onClick={() => location.reload()}>Try again</button>
+      </div>
+    );
+  if (me === undefined) return <div className="shell"><p className="muted">Loading…</p></div>;
+  if (me === null) return <SignIn />;
+
+  return (
+    <>
+      <header className="topbar">
+        <NavLink to="/" className="brand">Kaat<span>clip</span></NavLink>
+        <NavLink to="/new" className="button primary">+ Upload</NavLink>
+      </header>
+      <main className={reviewing ? "shell reviewing" : "shell"}>
+        <Routes>
+          <Route path="/" element={<Streams />} />
+          <Route path="/new" element={<NewStream />} />
+          <Route path="/streams/:id" element={<StreamPage />} />
+          <Route path="/streams/:id/review" element={<Review />} />
+          <Route path="/kept" element={<Kept />} />
+          <Route path="/live" element={<Live />} />
+          <Route path="/settings" element={<Settings me={me} />} />
+          <Route path="*" element={<p>Page not found. <NavLink to="/">Back to your streams</NavLink></p>} />
+        </Routes>
+      </main>
+      {!reviewing && <nav className="tabs">
+        <NavLink to="/" end><span className="icon">🎬</span>Streams</NavLink>
+        <NavLink to="/kept"><span className="icon">⭐</span>Kept</NavLink>
+        <NavLink to="/live"><span className="icon">🔴</span>Live</NavLink>
+        <NavLink to="/settings"><span className="icon">⚙️</span>Settings</NavLink>
+      </nav>}
+    </>
+  );
+}

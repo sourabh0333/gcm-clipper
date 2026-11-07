@@ -2,8 +2,12 @@
 Alembic migrations in db/migrations, so nobody has to run a setup step.
 
 Two processes write the same SQLite file (the API and the worker), so every connection uses WAL mode and
-a 15 s busy timeout, and every transaction starts with BEGIN IMMEDIATE: it takes the write lock up front
-instead of failing with "database is locked" when a read has to become a write half way through."""
+a 15 s busy timeout. A transaction that may write starts with BEGIN IMMEDIATE: it takes the write lock up
+front instead of failing with "database is locked" when a read has to become a write half way through.
+Read-only transactions (the `readonly` execution option, used for GET requests) start with a plain BEGIN:
+in WAL mode they never block a writer, which matters because a GET can last as long as a video download.
+Whatever the kind, no transaction may stay open across slow work (streaming a file, receiving an upload
+chunk, running ffprobe): commit or close first (found in the M2.6 browser check, 7 Nov)."""
 
 from pathlib import Path
 
@@ -29,7 +33,8 @@ def make_engine(url):
 
         @event.listens_for(engine, "begin")
         def _begin(connection):
-            connection.exec_driver_sql("BEGIN IMMEDIATE")
+            readonly = connection.get_execution_options().get("readonly", False)
+            connection.exec_driver_sql("BEGIN" if readonly else "BEGIN IMMEDIATE")
     return engine
 
 

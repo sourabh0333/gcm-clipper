@@ -82,6 +82,7 @@ def clip_video(clip_id: int, request: Request, safe: int = 0, download: int = 0,
         raise HTTPException(404, "Not found.")
     folder = (request.app.state.settings.jobs_dir / clip.stream.job_dir / "clips").resolve()
     path = (folder / Path(name).name).resolve()
+    db.close()  # the video may stream for minutes; no transaction may stay open that long
     if path.parent != folder or not path.is_file():
         raise HTTPException(404, "This clip's video is no longer on the laptop.")
     return FileResponse(path, media_type="video/mp4", filename=path.name if download else None,

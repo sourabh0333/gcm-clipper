@@ -114,22 +114,27 @@ def create_upload(request: Request, user=Depends(current_user), db=Depends(get_d
 def upload_offset(upload_id: str, user=Depends(current_user), db=Depends(get_db)):
     upload = own_upload(db, user, upload_id)
     return Response(status_code=200, headers={**TUS, "Upload-Offset": str(upload.offset),
-                                              "Upload-Length": str(upload.length), "Cache-Control": "no-store"})
+                                              "Upload-Length": str(upload.length), "Cache-Control": "no-store",
+                                              "X-Stream-Id": upload.stream_id})
 
 
-def _finish(request, db, upload, stream):
-    """Last byte in: check the file is a video the engine can read, then queue it."""
+def _finish(db, upload_id, path):
+    """Last byte in: check the file is a video the engine can read, then queue it. ffprobe runs before any
+    transaction opens, so the database isn't held while it reads the file."""
     from ..media import probe
 
-    path = source_path(request.app.state.settings, stream, upload)
-    upload.completed_at = utcnow()
     try:
         info = probe(path)
         if info["duration"] <= 0:
             raise ValueError("no duration")
     except Exception:  # ffprobe missing, unreadable file, no video stream...
-        stream.status, stream.error = "failed", "This file isn't a video we can read. Upload an MP4, MKV or MOV recording."
+        info = None
         path.unlink(missing_ok=True)
+    upload = db.get(Upload, upload_id)
+    stream = db.get(Stream, upload.stream_id)
+    upload.completed_at = utcnow()
+    if info is None:
+        stream.status, stream.error = "failed", "This file isn't a video we can read. Upload an MP4, MKV or MOV recording."
     else:
         stream.status, stream.duration_s, stream.queued_at = "queued", round(info["duration"], 1), utcnow()
     db.add(AuditEntry(user_id=upload.user_id, action="upload_done", detail={"stream": stream.id, "status": stream.status}))
@@ -155,13 +160,15 @@ async def append_chunk(upload_id: str, request: Request, user=Depends(current_us
             raise HTTPException(409, "Upload-Offset doesn't match; ask for the current offset.")
         stream = db.get(Stream, upload.stream_id)
         path = source_path(settings, stream, upload)
-        room = upload.length - upload.offset
+        start, length, stream_id = upload.offset, upload.length, upload.stream_id
+        # Receiving a chunk can take a minute on mobile data: no transaction stays open meanwhile.
+        db.commit()
         written = 0
         with open(path, "r+b") as f:
-            f.seek(upload.offset)
+            f.seek(start)
             try:
                 async for piece in request.stream():
-                    if written + len(piece) > min(room, settings.max_chunk_bytes):
+                    if written + len(piece) > min(length - start, settings.max_chunk_bytes):
                         raise HTTPException(413, "Too many bytes in this request.")
                     await run_in_threadpool(f.write, piece)
                     written += len(piece)
@@ -171,13 +178,17 @@ async def append_chunk(upload_id: str, request: Request, user=Depends(current_us
                 pass  # The connection dropped: keep what arrived; the browser resumes from the new offset.
             finally:
                 f.flush()
-                # Bytes that made it to the file count, even if the request failed half way.
-                upload.offset += written
+                # Bytes that made it to the file count, even if the request failed half way. The lock above
+                # keeps this the only writer of this upload's offset.
+                upload = db.get(Upload, upload_id)
+                upload.offset = start + written
                 upload.updated_at = utcnow()
                 db.commit()
-        if upload.offset == upload.length:
-            await run_in_threadpool(_finish, request, db, upload, stream)
-    return Response(status_code=204, headers={**TUS, "Upload-Offset": str(upload.offset)})
+        offset = start + written
+        if offset == length:
+            await run_in_threadpool(_finish, db, upload_id, path)
+            _locks.pop(upload_id, None)
+    return Response(status_code=204, headers={**TUS, "Upload-Offset": str(offset), "X-Stream-Id": stream_id})
 
 
 def remove_stream_files(settings, stream):

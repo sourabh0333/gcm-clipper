@@ -7,3 +7,5 @@ models/
 demo/*/decisions.json
 demo/*/run.log
 data/
+web/node_modules/
+web/dist/
