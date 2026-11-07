@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
 
-from ..db.models import AuditEntry, Stream, Upload, new_id, utcnow
+from ..db.models import AuditEntry, LiveSession, Stream, Upload, new_id, utcnow
 from .deps import current_user, get_db
 
 router = APIRouter(prefix="/api/uploads")
@@ -91,9 +91,13 @@ def create_upload(request: Request, user=Depends(current_user), db=Depends(get_d
     recorded_on = meta.get("recorded_on") or None
     if recorded_on and (len(recorded_on) != 10 or recorded_on[4] != "-" or recorded_on[7] != "-"):
         recorded_on = None
+    live = db.get(LiveSession, meta["live_session"]) if meta.get("live_session") else None
+    if live is not None and live.user_id != user.id:
+        live = None
     stream_id = new_id("st")
     stream = Stream(id=stream_id, job_dir=stream_id, user_id=user.id, title=title, game=game,
-                    recorded_on=recorded_on, source_name=filename, size_bytes=length, status="uploading")
+                    recorded_on=recorded_on, source_name=filename, size_bytes=length, status="uploading",
+                    live_session_id=live.id if live else None)
     upload = Upload(user_id=user.id, stream_id=stream.id, filename=filename, length=length)
     db.add_all([stream, upload])
     db.flush()

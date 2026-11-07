@@ -76,6 +76,16 @@ def engine_command(stream, folder):
     return [sys.executable, "-m", "aigcm", "run", str(source_file(folder)), "--job", folder.name, "--game", stream.game]
 
 
+def write_markers(session, stream, folder):
+    """The Live screen's marks for this stream, in the engine's markers.json, so each becomes a clip."""
+    from .api.live import markers_file
+    from .jobs import write_json
+
+    found = markers_file(session, stream)
+    if found:
+        write_json(folder / "markers.json", found)
+
+
 def kill_tree(proc):
     if proc.poll() is not None:
         return
@@ -167,6 +177,7 @@ class Worker:
                 stream.status, stream.error = "failed", "The recording is missing from the laptop."
                 s.commit()
                 return
+            write_markers(s, stream, folder)
             cmd = self.command(stream, folder)
         log(f"worker: starting {stream_id}")
         self.heartbeat(stream_id, force=True)
