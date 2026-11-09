@@ -125,7 +125,7 @@ export default function Review() {
         <p>You kept {kept} of {clips.length} clips.</p>
         {reasonBar}
         <div className="row">
-          <Link className="button primary" to="/kept">See kept clips</Link>
+          <Link className="button primary" to="/library?decision=keep">See kept clips</Link>
           {history.length > 0 && <button onClick={undo}>Undo last</button>}
           <Link className="button" to={`/streams/${id}`}>Back to the stream</Link>
         </div>

@@ -5,6 +5,10 @@ import { clock } from "../format";
 
 const POLL_MS = 3000;
 
+async function copyText(text: string) {
+  await navigator.clipboard.writeText(text);
+}
+
 async function shareVideo(url: string, name: string) {
   const blob = await (await fetch(url, { credentials: "same-origin" })).blob();
   const file = new File([blob], name, { type: "video/mp4" });
@@ -19,6 +23,7 @@ export default function StudioPage() {
   const [studio, setStudio] = useState<Studio | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
   const asked = useRef(false);
 
   const load = useCallback(() => {
@@ -66,13 +71,13 @@ export default function StudioPage() {
   const name = `${(clip.title ?? `clip-${clip.id}`).replace(/[^\w\- ]+/g, "").trim() || "clip"}.mp4`;
   return (
     <>
-      <p className="small"><Link to="/kept">← Kept clips</Link></p>
+      <p className="small"><Link to="/library">← Library</Link></p>
       <h1>{clip.title ?? `Clip ${clip.rank}`}</h1>
       <p className="small muted">{clip.why}</p>
 
       {win.status === "missing" && (
         <div className="banner">The stream's recording is no longer on the laptop, so this clip can't be edited.
-          The original clip can still be downloaded from Kept.</div>
+          The original clip can still be downloaded below.</div>
       )}
       {(win.status === "preparing" || win.status === "none") && (
         <div className="card">
@@ -112,6 +117,21 @@ export default function StudioPage() {
           </div>
         </>
       )}
+
+      <h2>Original clip</h2>
+      <div className="card">
+        <div className="small muted">The clip as the engine cut it, before any studio changes.</div>
+        <div className="row" style={{ marginTop: 10 }}>
+          <a className="button" href={`${clip.video}?download=1`}>Download</a>
+          {clip.safe_video && <a className="button" href={`${clip.safe_video}&download=1`}>Sponsor-safe copy</a>}
+          <button onClick={() => shareVideo(clip.video, name).catch((err) => setError((err as Error).message))}>Share</button>
+          <button onClick={() => copyText([clip.title, clip.description, clip.hashtags.join(" ")].filter(Boolean).join("\n\n"))
+            .then(() => setNote("Title, description and hashtags copied"), () => setNote("Couldn't copy here"))}>
+            Copy text
+          </button>
+        </div>
+        {note && <p className="small">{note}</p>}
+      </div>
 
       {studio.exports.length > 0 && <h2>Exports</h2>}
       {studio.exports.map((job) => (

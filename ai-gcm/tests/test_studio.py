@@ -117,6 +117,8 @@ def studio_app(tmp_path):
     app = create_app(settings)
     with app.state.sessions() as s:
         import_jobs(s, settings, "owner@example.com")
+        s.query(Render).filter_by(kind="posters").delete()   # library posters are tested in test_library
+        s.commit()
     return app
 
 

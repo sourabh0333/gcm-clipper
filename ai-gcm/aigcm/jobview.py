@@ -54,10 +54,21 @@ def failure(folder):
     return (last_line(read_text(folder / "run.log")) or "The job stopped without a reason.")[:500]
 
 
+def spoken_between(transcript, start, end, limit=4000):
+    """What was said between start and end (source seconds), for search. The transcript's segments are
+    joined, so a few words either side of the clip may be included."""
+    if not transcript:
+        return None
+    text = " ".join(seg.get("text", "").strip() for seg in transcript.get("segments", [])
+                    if seg.get("end", 0) > start and seg.get("start", 0) < end)
+    return " ".join(text.split())[:limit] or None
+
+
 def finished_clips(folder):
     """The job's rendered clips, best first, as plain dicts ready for the clips table."""
     folder = Path(folder)
     files = read_json(folder / "clips.json", {})
+    transcript = read_json(folder / "transcript.json")
     out = []
     for clip in read_json(folder / "ranked.json", []):
         if clip["id"] not in files or not (folder / "clips" / files[clip["id"]]).exists():
@@ -69,5 +80,6 @@ def finished_clips(folder):
                     "end_s": clip["end"], "type": clip.get("type", "moment"),
                     "score": clip.get("final_score", clip.get("score")), "file_name": files[clip["id"]],
                     "safe_file_name": safe if safe and (folder / "clips" / safe).exists() else None,
-                    "title": clip.get("title"), "why": clip.get("why"), "details": details})
+                    "title": clip.get("title"), "why": clip.get("why"), "details": details,
+                    "spoken": spoken_between(transcript, clip["start"], clip["end"])})
     return out

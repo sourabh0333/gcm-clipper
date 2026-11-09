@@ -247,6 +247,9 @@ class Worker:
             elif returncode == 0:
                 count = import_clips(s, stream, folder)
                 stream.status, stream.error = "done", None
+                from .studio.project import queue_posters
+
+                queue_posters(s, stream)
                 event = "done"
                 log(f"worker: {stream_id} done, {count} clips")
             else:

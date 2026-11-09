@@ -33,7 +33,7 @@ Written 9 November 2026 before any M3 code, after reviewing the [master plan](GC
 3. **Length presets:** "moment" 20–45 s around the events; "full fight" 60–120 s covering the whole fight (events chained with gaps under 30 s, within one match); up to 180 s by hand.
 4. **Layout templates:** band (black hook band, gameplay full width, blurred or black below), facecam top (cam 35–45% + gameplay), blur (gameplay over a blurred copy), native (vertical streams as they are). Each is just a starting set of panels the creator can move and resize.
 5. **Captions:** word-level, 3 words at a time, in the transcript's script, on talk clips by default. Converting between Latin Hinglish and Devanagari uses Gemini (a few hundred words per clip, inside the free tier), with word editing for fixes.
-6. **Library replaces the Kept tab:** all clips with a poster image, filters (stream, type, decision, flag, edited, exported) and search by what was said (SQLite FTS5).
+6. **Library replaces the Kept tab:** all clips with a poster image, filters (stream, type, decision, flag, edited, exported) and search by what was said. Built (9 Nov) as a plain word match, which takes milliseconds for a creator's hundreds of clips; SQLite FTS5 only if libraries grow far beyond thousands.
 7. **Export:** rendered files stay 30 days in the stream's folder. The phone can download, share through Android's share sheet, download all as a zip, and copy the title and description.
 8. **Exports and preview copies count toward the 20 GB free-disk guard**; a kept clip's working window is deleted with the stream.
 

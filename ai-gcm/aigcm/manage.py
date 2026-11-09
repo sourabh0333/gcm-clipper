@@ -2,6 +2,7 @@
 
     python -m aigcm.manage import-jobs --owner you@gmail.com
     python -m aigcm.manage prepare-kept
+    python -m aigcm.manage backfill-library
 
 import-jobs: brings job folders made before the platform existed (the old app and the command line) into
 the database under one account, with their clips and the keep or reject decisions in decisions.json.
@@ -9,7 +10,10 @@ Folders already in the database are skipped, so it can be run again safely.
 
 prepare-kept: queues the studio's working window for every kept clip that doesn't have one yet (clips kept
 before the studio existed), while their streams' recordings are still on the laptop. The worker makes
-them. Safe to run again."""
+them. Safe to run again.
+
+backfill-library: fills in what was said in each clip (for the library's search) from the job's transcript,
+and queues posters for every finished stream; the worker makes the posters. Safe to run again."""
 
 import argparse
 import sys
@@ -19,7 +23,7 @@ from sqlalchemy import select
 from . import db as database
 from .db.models import AuditEntry, Clip, Stream, User, new_id, utcnow
 from .jobs import STAGES, read_json
-from .jobview import failure, finished_clips
+from .jobview import failure, finished_clips, spoken_between
 
 
 def folder_status(manifest):
@@ -61,10 +65,32 @@ def import_jobs(session, settings, owner_email):
                     clip.decision, clip.decided_at = verdict["verdict"], utcnow()
                     clip.decision_reason = (verdict.get("reason") or None) and verdict["reason"][:300]
                 session.add(clip)
+            from .studio.project import queue_posters
+
+            queue_posters(session, stream)
         imported.append(folder.name)
     session.add(AuditEntry(user_id=user.id, action="import_jobs", detail={"folders": imported}))
     session.commit()
     return imported
+
+
+def backfill_library(session, settings):
+    """Spoken text for clips that have none, and posters queued for every finished stream. Returns
+    (clips updated, streams queued)."""
+    from .studio.project import queue_posters
+
+    updated = queued = 0
+    for stream in session.scalars(select(Stream).where(Stream.status == "done")).all():
+        transcript = read_json(settings.jobs_dir / stream.job_dir / "transcript.json")
+        for clip in stream.clips:
+            if clip.spoken is None and transcript:
+                clip.spoken = spoken_between(transcript, clip.start_s, clip.end_s)
+                updated += clip.spoken is not None
+        if stream.clips:
+            queue_posters(session, stream)
+            queued += 1
+    session.commit()
+    return updated, queued
 
 
 def prepare_kept(session, settings):
@@ -87,12 +113,17 @@ def main(argv=None):
     p = sub.add_parser("import-jobs", help="bring existing job folders into the database under one account")
     p.add_argument("--owner", required=True, help="the Google email of the account that will own them")
     sub.add_parser("prepare-kept", help="queue studio footage for kept clips that have none yet")
+    sub.add_parser("backfill-library", help="spoken text and posters for the library, for existing streams")
     args = parser.parse_args(argv)
 
     settings = ApiSettings.from_env()
     engine = database.make_engine(settings.db_url)
     database.migrate(engine)
     with database.session_factory(engine)() as session:
+        if args.command == "backfill-library":
+            updated, queued = backfill_library(session, settings)
+            print(f"spoken text for {updated} clips; posters queued for {queued} streams (the worker makes them)")
+            return 0
         if args.command == "prepare-kept":
             print(f"queued {prepare_kept(session, settings)} kept clips for the studio; the worker prepares them")
             return 0

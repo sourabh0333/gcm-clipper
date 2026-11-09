@@ -8,7 +8,7 @@ the M2 lesson), then recorded in a second short transaction."""
 import shutil
 from pathlib import Path
 
-from ..db.models import Clip, Render, utcnow
+from ..db.models import Clip, Render, Stream, utcnow
 from ..jobs import log, read_json
 from . import project
 from . import window as win
@@ -76,7 +76,37 @@ def plan_export(settings, session, render):
     return task
 
 
-PLANNERS = {"prepare": plan_prepare, "export": plan_export}
+def plan_posters(settings, session, render):
+    stream = session.get(Stream, (render.params or {}).get("stream_id"))
+    if stream is None:
+        raise RuntimeError("That stream no longer exists.")
+    folder = Path(settings.jobs_dir) / stream.job_dir
+    todo = [(folder / "clips" / Path(c.file_name).name, project.poster_path(settings, c), project.poster_time(c))
+            for c in stream.clips if not project.poster_path(settings, c).exists()]
+
+    def task(threads):
+        from ..media import run, tool
+
+        made = 0
+        for video, poster, at in todo:
+            if not video.exists():
+                continue
+            poster.parent.mkdir(exist_ok=True)
+            partial = poster.with_suffix(".part.jpg")
+            try:
+                run([tool("ffmpeg"), "-v", "error", "-y", "-ss", f"{at:.2f}", "-i", str(video), "-frames:v", "1",
+                     "-vf", f"scale={project.POSTER_W}:-2", "-q:v", "6", "-threads", str(threads), str(partial)])
+                partial.replace(poster)
+                made += 1
+            except RuntimeError as exc:   # one broken clip must not stop the others
+                log(f"studio: no poster for {video.name}: {exc}")
+                partial.unlink(missing_ok=True)
+        log(f"studio: {made} posters for {folder.name}")
+        return None
+    return task
+
+
+PLANNERS = {"prepare": plan_prepare, "export": plan_export, "posters": plan_posters}
 
 
 def run(settings, sessions, render_id, threads):

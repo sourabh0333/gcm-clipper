@@ -69,6 +69,15 @@ export type Clip = {
   stream_title?: string;
 };
 
+export type LibraryClip = Clip & { stream_title: string; poster: string | null; edited: boolean; exported: boolean };
+export type LibraryPage = {
+  items: LibraryClip[];
+  total: number;
+  offset: number;
+  limit: number;
+  facets: { streams: { id: string; title: string; count: number }[]; types: { type: string; count: number }[] };
+};
+
 export type LiveSession = { id: string; title: string | null; started_at: string; ended_at: string | null; markers: number[] };
 
 export type WorkerStatus = { online: boolean; busy: boolean; queue_waiting: boolean };

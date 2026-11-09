@@ -139,6 +139,7 @@ class Clip(Base):
     title: Mapped[str | None] = mapped_column(String(200))
     why: Mapped[str | None] = mapped_column(Text)
     details: Mapped[dict] = mapped_column(JSON, default=dict)  # titles, hashtags, description, labels, flags...
+    spoken: Mapped[str | None] = mapped_column(Text)   # what was said in the clip, for the library's search
     decision: Mapped[str | None] = mapped_column(String(8))  # keep, reject or none yet
     decision_reason: Mapped[str | None] = mapped_column(String(300))
     decided_at: Mapped[datetime | None] = mapped_column(DateTime)

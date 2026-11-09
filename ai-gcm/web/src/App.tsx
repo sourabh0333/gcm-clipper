@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { NavLink, Route, Routes, useLocation } from "react-router";
+import { Navigate, NavLink, Route, Routes, useLocation } from "react-router";
 import { api, ApiError, type Me } from "./api";
-import Kept from "./pages/Kept";
+import Library from "./pages/Library";
 import Live from "./pages/Live";
 import NewStream from "./pages/NewStream";
 import Review from "./pages/Review";
@@ -49,7 +49,8 @@ export default function App() {
           <Route path="/new" element={<NewStream />} />
           <Route path="/streams/:id" element={<StreamPage />} />
           <Route path="/streams/:id/review" element={<Review />} />
-          <Route path="/kept" element={<Kept />} />
+          <Route path="/library" element={<Library />} />
+          <Route path="/kept" element={<Navigate to="/library?decision=keep" replace />} />
           <Route path="/clips/:id/studio" element={<StudioPage />} />
           <Route path="/live" element={<Live />} />
           <Route path="/settings" element={<Settings me={me} />} />
@@ -58,7 +59,7 @@ export default function App() {
       </main>
       {!reviewing && <nav className="tabs">
         <NavLink to="/" end><span className="icon">🎬</span>Streams</NavLink>
-        <NavLink to="/kept"><span className="icon">⭐</span>Kept</NavLink>
+        <NavLink to="/library"><span className="icon">📚</span>Library</NavLink>
         <NavLink to="/live"><span className="icon">🔴</span>Live</NavLink>
         <NavLink to="/settings"><span className="icon">⚙️</span>Settings</NavLink>
       </nav>}

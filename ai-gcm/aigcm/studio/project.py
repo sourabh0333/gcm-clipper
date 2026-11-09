@@ -11,6 +11,7 @@ from . import window as win
 from .edit import EditData, default_edit
 
 KEEP_VERSIONS = 20
+POSTER_W = 270          # library posters: 270x480 JPEGs of about 15 KB, two to a row on a phone
 STUDIO_FILES = {"preview.mp4": "video/mp4", "strip.jpg": "image/jpeg", "wave.json": "application/json"}
 
 
@@ -20,6 +21,18 @@ def job_folder(settings, clip):
 
 def clip_folder(settings, clip):
     return win.studio_dir(job_folder(settings, clip), clip.clip_key)
+
+
+def poster_path(settings, clip):
+    return job_folder(settings, clip) / "posters" / f"{Path(clip.clip_key).name}.jpg"
+
+
+def poster_time(clip):
+    """Seconds into the engine's clip for its poster: the clip's key moment, else 40% in."""
+    length = max(0.1, clip.end_s - clip.start_s)
+    anchor = (clip.details or {}).get("anchor")
+    at = anchor - clip.start_s if isinstance(anchor, (int, float)) else length * 0.4
+    return min(max(at, 0.0), max(0.0, length - 0.1))
 
 
 def source_file(folder):
@@ -110,6 +123,17 @@ def queue_prepare(db, settings, clip):
     if status not in ("none", "failed"):
         return None
     render = Render(user_id=clip.stream.user_id, clip_id=clip.id, kind="prepare")
+    db.add(render)
+    return render
+
+
+def queue_posters(db, stream):
+    """Queue posters for a stream's clips (the worker skips clips that already have one)."""
+    for render in db.scalars(select(Render).where(Render.kind == "posters",
+                                                  Render.status.in_(("queued", "running")))).all():
+        if (render.params or {}).get("stream_id") == stream.id:
+            return render
+    render = Render(user_id=stream.user_id, kind="posters", params={"stream_id": stream.id})
     db.add(render)
     return render
 

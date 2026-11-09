@@ -56,10 +56,11 @@ describe("studio page", () => {
     expect(await screen.findByText(/Automatic edit · 30.0 s · 1 part · layout blur · 1 zoom on kills/)).toBeTruthy();
     expect(calls.filter((c) => c.url.endsWith("/prepare"))).toHaveLength(1);
 
+    expect(screen.getByText("Download").getAttribute("href")).toBe("/media/clips/7?download=1");   // the original
     fireEvent.click(screen.getByText("Export"));
-    expect(await screen.findByText("Download")).toBeTruthy();
-    await waitFor(() => expect(calls.find((c) => c.url.endsWith("/export"))?.body).toEqual({ sponsor_safe: false }));
-    expect(screen.getByText("Download").getAttribute("href")).toBe("/media/renders/rn_1?download=1");
+    await waitFor(() => expect(screen.getAllByText("Download")).toHaveLength(2));
+    expect(calls.find((c) => c.url.endsWith("/export"))?.body).toEqual({ sponsor_safe: false });
+    expect(screen.getAllByText("Download")[1].getAttribute("href")).toBe("/media/renders/rn_1?download=1");
   });
 
   it("explains when the recording is gone", async () => {
