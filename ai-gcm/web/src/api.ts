@@ -88,13 +88,16 @@ export type Panel = { role: "game" | "cam"; src: [number, number, number, number
 export type EditData = {
   v: 1;
   segments: Segment[];
-  layout: { template: "native" | "blur" | "band" | "split"; background: "blur" | "black"; panels: Panel[] };
+  layout: { template: Template; background: "blur" | "black"; band_h?: number; panels: Panel[] };
   zooms: { t: number; dur: number; scale: number }[];
   hook: { text: string; color: "white" | "yellow"; on: boolean };
   captions: { on: boolean };
   cover_t: number | null;
   sponsor_safe: boolean;
+  keep_hud?: boolean;
 };
+export type Template = "native" | "blur" | "band" | "split";
+export type Box = [number, number, number, number];
 export type StudioWindow = {
   status: "ready" | "preparing" | "failed" | "none" | "missing";
   error?: string | null;
@@ -126,6 +129,8 @@ export type Studio = {
   editor: {
     events: { t: number; kind: string }[];
     anchor: number | null;
+    facecam: Box | null;
+    facecam_source: "auto" | "manual" | null;
     presets: { moment: [number, number]; full_fight: [number, number]; suggested: "moment" | "full_fight" };
   } | null;
   exports: RenderJob[];

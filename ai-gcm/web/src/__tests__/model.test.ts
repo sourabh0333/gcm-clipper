@@ -73,3 +73,29 @@ describe("what the preview draws (the renderer's numbers)", () => {
     expect(tall[2] / tall[3]).toBeCloseTo(1080 / 1920);     // a wide source cropped to the tall panel
   });
 });
+
+describe("layouts and zoom controls (M3.4)", () => {
+  it("builds the same templates as the server's edit.py", async () => {
+    const { templateLayout } = await import("../studio/model");
+    const cam: [number, number, number, number] = [0, 0.56, 0.33, 0.44];
+    expect(templateLayout("split", 1280, 720, cam).panels.map((p) => p.dst)).toEqual([[0, 0, 1080, 760], [0, 760, 1080, 608]]);
+    const band = templateLayout("band", 1280, 720, cam);
+    expect(band.band_h).toBe(420);
+    expect(band.panels.map((p) => p.dst)).toEqual([[0, 420, 1080, 608], [0, 1028, 1080, 892]]);
+    expect(templateLayout("split", 1280, 720, null).template).toBe("blur");
+    expect(templateLayout("native", 720, 1280, null).panels[0].dst).toEqual([0, 0, 1080, 1920]);
+    expect(templateLayout("blur", 1280, 618, null).panels[0].dst).toEqual([0, 699, 1080, 522]);
+  });
+
+  it("sets the zoom strength for every kill in the parts, and toggles one", async () => {
+    const { setZoomStrength, toggleZoom, zoomStrength } = await import("../studio/model");
+    const events = [{ t: 12, kind: "self_kill" }, { t: 35, kind: "self_kill" }, { t: 25, kind: "self_kill" }];
+    const strong = setZoomStrength(edit, events, 1.3);
+    expect(strong.zooms.map((z) => [z.t, z.scale])).toEqual([[12, 1.3], [35, 1.3]]);   // 25 s is cut out
+    expect(zoomStrength(strong)).toBe(1.3);
+    expect(setZoomStrength(edit, events, 0).zooms).toEqual([]);
+    const fewer = toggleZoom(strong, 12.3);
+    expect(fewer.zooms.map((z) => z.t)).toEqual([35]);
+    expect(toggleZoom(fewer, 12).zooms.map((z) => [z.t, z.scale])).toEqual([[12, 1.3], [35, 1.3]]);
+  });
+});

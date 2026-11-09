@@ -21,6 +21,7 @@ ZOOM_IN_S = 0.25
 ZOOM_OUT_S = 0.35
 ZOOM_LEAD_S = 0.4      # the zoom starts this long before the kill
 CAPTION_MARGIN = {"native": 560, "blur": 380, "band": 380, "split": 260}
+HUD_STRIP = 0.13       # share of the game panel's height kept unzoomed at the top (the kill counters)
 
 
 def zoom_expr(edit):
@@ -35,15 +36,22 @@ def zoom_expr(edit):
     return "1+" + "+".join(terms) if terms else None
 
 
-def _panel_chain(panel, zoom):
+def _panel_lines(i, panel, zoom, keep_hud):
+    """Filter lines turning [ps{i}] into [p{i}]. A zoomed game panel grows its picture per frame and
+    crops it back, centred; with keep_hud its unzoomed top strip is laid back over it, which matches
+    exactly when there is no zoom, so the kill counters never leave the screen."""
     x, y, w, h = panel.src
     dw, dh = panel.dst[2] // 2 * 2, panel.dst[3] // 2 * 2
-    chain = (f"crop=iw*{w:.5f}:ih*{h:.5f}:iw*{x:.5f}:ih*{y:.5f},"
-             f"scale={dw}:{dh}:force_original_aspect_ratio=increase,crop={dw}:{dh},setsar=1")
-    if zoom and panel.role == "game":
-        chain += (f",scale=w='2*trunc({dw}*({zoom})/2)':h='2*trunc({dh}*({zoom})/2)':eval=frame,"
-                  f"crop={dw}:{dh}")
-    return chain
+    base = (f"crop=iw*{w:.5f}:ih*{h:.5f}:iw*{x:.5f}:ih*{y:.5f},"
+            f"scale={dw}:{dh}:force_original_aspect_ratio=increase,crop={dw}:{dh},setsar=1")
+    if not (zoom and panel.role == "game"):
+        return [f"[ps{i}]{base}[p{i}]"]
+    grow = f"scale=w='2*trunc({dw}*({zoom})/2)':h='2*trunc({dh}*({zoom})/2)':eval=frame,crop={dw}:{dh}"
+    if not keep_hud:
+        return [f"[ps{i}]{base},{grow}[p{i}]"]
+    strip = max(2, int(dh * HUD_STRIP) // 2 * 2)
+    return [f"[ps{i}]{base},split=2[pz{i}][ph{i}]", f"[pz{i}]{grow}[pg{i}]", f"[ph{i}]crop={dw}:{strip}:0:0[hud{i}]",
+            f"[pg{i}][hud{i}]overlay=0:0[p{i}]"]
 
 
 def build_graph(edit, input_start, has_audio, captions_name=None, mute=()):
@@ -77,10 +85,12 @@ def build_graph(edit, input_start, has_audio, captions_name=None, mute=()):
                      f"setsar=1[bg]")
     else:
         lines.append(f"[bgsrc]scale={W}:{H},setsar=1,drawbox=x=0:y=0:w=iw:h=ih:color=black:t=fill[bg]")
+    if layout.band_h:
+        lines[-1] = lines[-1][:-4] + f",drawbox=x=0:y=0:w=iw:h={layout.band_h}:color=black:t=fill[bg]"
     zoom = zoom_expr(edit)
     base = "[bg]"
     for i, panel in enumerate(layout.panels):
-        lines.append(f"[ps{i}]{_panel_chain(panel, zoom)}[p{i}]")
+        lines.extend(_panel_lines(i, panel, zoom, edit.keep_hud))
         lines.append(f"{base}[p{i}]overlay={panel.dst[0]}:{panel.dst[1]}[o{i}]")
         base = f"[o{i}]"
     tail = f",subtitles={captions_name}" if captions_name else ""

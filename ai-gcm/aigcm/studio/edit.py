@@ -17,6 +17,7 @@ MAX_SEGMENTS = 40
 KILL_KINDS = ("self_kill",)
 ZOOM_MERGE_S = 2.0        # kills closer than this share one zoom
 FACECAM_H = 760           # the split layout's camera band, as the engine's render.py had it
+BAND_H = 420              # the band layout's black hook band
 
 
 class Strict(BaseModel):
@@ -55,6 +56,7 @@ class Panel(Strict):
 class Layout(Strict):
     template: Literal["native", "blur", "band", "split"]
     background: Literal["blur", "black"] = "blur"
+    band_h: int = Field(0, ge=0, le=900)     # a black band across the top, for the hook (M3.5)
     panels: list[Panel] = Field(min_length=1, max_length=3)
 
 
@@ -83,6 +85,7 @@ class EditData(Strict):
     captions: Captions = Field(default_factory=Captions)
     cover_t: float | None = None
     sponsor_safe: bool = False
+    keep_hud: bool = True      # the game panel's top strip (kill counters) stays unzoomed during zooms
 
     @model_validator(mode="after")
     def _segments_in_order(self):
@@ -155,9 +158,13 @@ def template_layout(template, width, height, facecam=None):
             Panel(role="cam", src=tuple(facecam), dst=(0, 0, W, FACECAM_H)),
             Panel(role="game", src=full, dst=(0, FACECAM_H, W, min(game_h, H - FACECAM_H)))])
     if template == "band":
-        top = 480   # room for the 1-2 line hook band (M3.5)
-        return Layout(template="band", background="black",
-                      panels=[Panel(role="game", src=full, dst=(0, top, W, min(game_h, H - top)))])
+        # The hook band on top, the gameplay under it, and the camera filling the rest when there is one.
+        game = Panel(role="game", src=full, dst=(0, BAND_H, W, min(game_h, H - BAND_H)))
+        below = BAND_H + game.dst[3]
+        panels = [game]
+        if facecam and H - below >= 200:
+            panels.append(Panel(role="cam", src=tuple(facecam), dst=(0, below, W, H - below)))
+        return Layout(template="band", background="blur", band_h=BAND_H, panels=panels)
     return Layout(template="blur", background="blur",
                   panels=[Panel(role="game", src=full, dst=(0, (H - game_h) // 2, W, game_h))])
 
@@ -181,7 +188,8 @@ def default_edit(start, end, width, height, title=None, events=(), captions=Fals
     if window:
         start, end = max(start, window[0]), min(end, window[1])
     vertical = height > width
-    layout = template_layout("native" if vertical else "blur", width, height, facecam)
+    # Facecam on top for streams with a camera (the top Indian format); otherwise the blurred fill.
+    layout = template_layout("native" if vertical else ("split" if facecam else "blur"), width, height, facecam)
     return EditData(
         segments=[Segment(start=round(start, 3), end=round(end, 3))],
         layout=layout,

@@ -39,6 +39,9 @@ def plan_prepare(settings, session, render):
         events = (read_json(folder / "vision.json", {}) or {}).get("events") or []
         start, end = win.plan_window(start_s, end_s, duration, events)
         win.prepare(source, target, start, end, threads=threads)
+        from . import facecam
+
+        facecam.for_stream(folder, source)   # once per stream, about 4 s
         return None
     return task
 

@@ -91,6 +91,11 @@ def save(clip_id: int, body: EditBody, request: Request, user=Depends(current_us
         raise HTTPException(409, "This clip was changed somewhere else. Reload it to see the newest version.")
     version = project.save_edit(db, clip, edit)
     db.commit()
+    cam = next((p for p in edit.layout.panels if p.role == "cam"), None)
+    if cam is not None and list(cam.src) != (project.stream_facecam(settings, clip) or []):
+        from ..studio import facecam
+
+        facecam.set_manual(project.job_folder(settings, clip), cam.src)
     return {"version": version, "data": edit.model_dump(mode="json"), "length_s": round(output_length(edit.segments), 2)}
 
 

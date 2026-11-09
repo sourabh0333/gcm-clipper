@@ -50,6 +50,13 @@ def has_captions(folder, clip_key):
     return bool(chunks.get("chunks")) and (Path(folder) / "transcript.json").exists()
 
 
+def stream_facecam(settings, clip):
+    """The stream's camera box (frame fractions) if it has been worked out and one was found."""
+    from . import facecam
+
+    return ((facecam.for_stream(job_folder(settings, clip)) or {}).get("box")) or None
+
+
 def default_for(settings, clip, window=None):
     folder = job_folder(settings, clip)
     info = window or read_json(folder / "info.json", {}) or {}
@@ -57,7 +64,8 @@ def default_for(settings, clip, window=None):
     span = (window["start"], window["end"]) if window else None
     return default_edit(clip.start_s, clip.end_s, width, height, clip.title,
                         engine_clip(folder, clip.clip_key).get("events") or (),
-                        captions=has_captions(folder, clip.clip_key), window=span)
+                        captions=has_captions(folder, clip.clip_key), window=span,
+                        facecam=stream_facecam(settings, clip))
 
 
 MARKER_KINDS = ("self_kill", "knock", "accolade", "chicken_dinner")
@@ -72,7 +80,10 @@ def editor_extras(settings, clip, details):
     shown = [{"t": e["t"], "kind": e["kind"]} for e in events
              if e.get("kind") in MARKER_KINDS and lo <= e.get("t", -1) <= hi]
     anchor = (clip.details or {}).get("anchor")
-    return {"events": shown, "anchor": anchor,
+    from . import facecam
+
+    cam = facecam.for_stream(folder) or {}
+    return {"events": shown, "anchor": anchor, "facecam": cam.get("box"), "facecam_source": cam.get("source"),
             "presets": win.length_presets(clip.start_s, clip.end_s, anchor, events, lo, hi)}
 
 

@@ -1,7 +1,7 @@
 // The editor's arithmetic, kept apart from the screen so it can be tested. It mirrors the server:
 // aigcm/studio/edit.py (time mapping, limits) and aigcm/studio/render.py (zoom, panel crops), so the
 // preview shows what the export will be.
-import type { EditData, Panel, Segment } from "../api";
+import type { Box, EditData, Panel, Segment, Template } from "../api";
 
 export const W = 1080;
 export const H = 1920;
@@ -12,6 +12,10 @@ const ZOOM_IN_S = 0.25;
 const ZOOM_OUT_S = 0.35;
 const ZOOM_LEAD_S = 0.4;
 const ZOOM_MERGE_S = 2;
+export const FACECAM_H = 760;
+export const BAND_H = 420;
+export const HUD_STRIP = 0.13;
+export const ZOOM_STRENGTHS: [string, number][] = [["Off", 0], ["Light", 1.15], ["Strong", 1.3]];
 
 export const round = (x: number) => Math.round(x * 1000) / 1000;
 
@@ -89,13 +93,67 @@ export function addPart(segs: Segment[], t: number, lo: number, hi: number, leng
 }
 
 /** Zooms on each kill inside [a, b], kills close together sharing one (as the server's default edit). */
-export function killZooms(events: { t: number; kind: string }[], a: number, b: number) {
+export function killZooms(events: { t: number; kind: string }[], a: number, b: number, scale = 1.25) {
   const zooms: EditData["zooms"] = [];
   for (const t of events.filter((e) => e.kind === "self_kill" && e.t >= a && e.t <= b).map((e) => e.t).sort((x, y) => x - y)) {
     if (zooms.length && t - zooms[zooms.length - 1].t < ZOOM_MERGE_S) continue;
-    zooms.push({ t, dur: 1.2, scale: 1.25 });
+    zooms.push({ t, dur: 1.2, scale });
   }
   return zooms;
+}
+
+/** Zoom on every kill inside the edit's parts at this strength (0 = no zooms). */
+export function setZoomStrength(edit: EditData, events: { t: number; kind: string }[], scale: number): EditData {
+  if (!scale) return { ...edit, zooms: [] };
+  const zooms = edit.segments.flatMap((s) => killZooms(events, s.start, s.end, scale));
+  return { ...edit, zooms };
+}
+
+/** Add a zoom at kill time t, or take away the one already there. */
+export function toggleZoom(edit: EditData, t: number): EditData {
+  const near = edit.zooms.findIndex((z) => Math.abs(z.t - t) < 0.75);
+  if (near >= 0) return { ...edit, zooms: edit.zooms.filter((_, i) => i !== near) };
+  const scale = edit.zooms.length ? Math.max(...edit.zooms.map((z) => z.scale)) : 1.25;
+  return { ...edit, zooms: [...edit.zooms, { t, dur: 1.2, scale }].sort((a, b) => a.t - b.t) };
+}
+
+export function zoomStrength(edit: EditData): number {
+  return edit.zooms.length ? Math.max(...edit.zooms.map((z) => z.scale)) : 0;
+}
+
+const even = (x: number) => Math.round(x / 2) * 2;
+
+/** The starting panels of a layout template: the same numbers as edit.py's template_layout. "split"
+ *  needs the camera box (frame fractions); without one it falls back to "blur". */
+export function templateLayout(template: Template, width: number, height: number, facecam: Box | null): EditData["layout"] {
+  const aspect = width / height;
+  const full: Box = [0, 0, 1, 1];
+  if (template === "native") {
+    let w = W;
+    let h = even(W / aspect);
+    if (h > H) [w, h] = [even(H * aspect), H];
+    return { template: "native", background: "black", band_h: 0,
+             panels: [{ role: "game", src: full, dst: [Math.floor((W - w) / 2), Math.floor((H - h) / 2), w, h] }] };
+  }
+  const gameH = Math.min(even(W / aspect), H);
+  if (template === "split" && facecam) {
+    return { template: "split", background: "blur", band_h: 0, panels: [
+      { role: "cam", src: facecam, dst: [0, 0, W, FACECAM_H] },
+      { role: "game", src: full, dst: [0, FACECAM_H, W, Math.min(gameH, H - FACECAM_H)] }] };
+  }
+  if (template === "band") {
+    const game: Panel = { role: "game", src: full, dst: [0, BAND_H, W, Math.min(gameH, H - BAND_H)] };
+    const below = BAND_H + game.dst[3];
+    const panels = [game];
+    if (facecam && H - below >= 200) panels.push({ role: "cam", src: facecam, dst: [0, below, W, H - below] });
+    return { template: "band", background: "blur", band_h: BAND_H, panels };
+  }
+  return { template: "blur", background: "blur", band_h: 0,
+           panels: [{ role: "game", src: full, dst: [0, Math.floor((H - gameH) / 2), W, gameH] }] };
+}
+
+export function cameraBox(edit: EditData): Box | null {
+  return edit.layout.panels.find((p) => p.role === "cam")?.src ?? null;
 }
 
 /** A length preset: one part [a, b]; landscape layouts get a zoom on each kill inside it. */

@@ -261,3 +261,99 @@ def test_length_presets():
     assert p["moment"][1] - p["moment"][0] == 45 and p["moment"][0] >= 0
     p = W.length_presets(2, 8, None, [], 0, 300)
     assert p["moment"] == [0.0, 20.0]
+
+
+# --- M3.4: camera box, layouts, zoom with the HUD kept -----------------------------------------------------
+
+def test_a_steady_face_counts_and_a_passing_one_does_not():
+    from aigcm.studio import facecam as F
+
+    cam = (0.10, 0.80, 0.05, 0.09)
+    found = [[cam] if i % 3 == 0 else [] for i in range(24)]          # the streamer, 8 of 24 frames
+    found[5].append((0.5, 0.2, 0.02, 0.04))                          # a game character, once
+    found[6].append((0.7, 0.3, 0.02, 0.04))
+    assert F.steady_face(found) == pytest.approx(cam)
+    assert F.steady_face([[cam], [cam], [], [], [], [], [], [], [], [], [], []]) is None   # 2 sightings
+    box = F.box_around(cam, 16 / 9)
+    assert box[1] < cam[1] and box[1] + box[3] > cam[1] + cam[3]     # head room above, chest below
+    assert box[0] < cam[0] and box[0] + box[2] > cam[0] + cam[2]
+
+
+def test_the_box_snaps_to_a_camera_border_but_not_to_a_widget_edge():
+    import numpy as np
+    from aigcm.studio import facecam as F
+
+    h, w = 540, 960
+    gx, gy = np.ones((h, w), np.float32), np.ones((h, w), np.float32)
+    gy[300, 0:330] = 50          # the camera's top border, all along the box
+    gx[300:540, 330] = 50        # its right border
+    gy[280, 250:330] = 50        # a donation widget's edge, only along part of the side
+    face = (0.12, 0.70, 0.06, 0.12)
+    box = F.box_around(face, w / h)
+    snapped = F.snap(F.clamp(box), (gx, gy), face)
+    assert snapped[1] * h == pytest.approx(300, abs=1)
+    assert (snapped[0] + snapped[2]) * w == pytest.approx(330, abs=1)
+
+
+def test_templates_with_and_without_a_camera():
+    cam = (0.0, 0.56, 0.33, 0.44)
+    split = E.template_layout("split", 1280, 720, cam)
+    assert [p.role for p in split.panels] == ["cam", "game"] and split.band_h == 0
+    band = E.template_layout("band", 1280, 720, cam)
+    assert band.band_h == E.BAND_H and [p.dst for p in band.panels] == [(0, 420, 1080, 608), (0, 1028, 1080, 892)]
+    assert len(E.template_layout("band", 1280, 720).panels) == 1
+    assert E.default_edit(10, 40, 1280, 720, facecam=cam).layout.template == "split"
+    assert E.default_edit(10, 40, 1280, 720).layout.template == "blur"
+    assert E.default_edit(10, 40, 720, 1280, facecam=cam).layout.template == "native"
+
+
+def test_the_graph_draws_the_band_and_keeps_the_hud_over_a_zoom():
+    from aigcm.studio import render as R
+
+    edit = E.default_edit(10, 20, 1280, 720, events=[{"t": 15, "kind": "self_kill"}])
+    edit = edit.model_copy(update={"layout": E.template_layout("band", 1280, 720)})
+    graph = R.build_graph(edit, 0.0, True)
+    assert "drawbox=x=0:y=0:w=iw:h=420:color=black" in graph
+    assert "[ph0]crop=1080:78:0:0[hud0]" in graph and "[pg0][hud0]overlay=0:0[p0]" in graph
+    plain = R.build_graph(edit.model_copy(update={"keep_hud": False}), 0.0, True)
+    assert "hud0" not in plain and "eval=frame" in plain
+
+
+@needs_ffmpeg
+def test_landscape_layouts_render(tmp_path):
+    from aigcm.media import probe
+    from aigcm.studio import render as R
+
+    src = tmp_path / "land.mp4"
+    subprocess.run([ffmpeg(), "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=s=640x360:r=15:d=8",
+                    "-f", "lavfi", "-i", "sine=d=8", "-c:v", "libx264", "-preset", "ultrafast", "-g", "15",
+                    "-c:a", "aac", "-shortest", str(src)], check=True)
+    cam = (0.0, 0.6, 0.3, 0.4)
+    for template in ("split", "band"):
+        edit = E.default_edit(1, 6, 640, 360, events=[{"t": 3, "kind": "self_kill"}], facecam=cam)
+        edit = edit.model_copy(update={"layout": E.template_layout(template, 640, 360, cam)})
+        out = R.render(edit, src, 0.0, True, tmp_path / f"{template}.mp4", threads=2)
+        info = probe(out)
+        assert (info["width"], info["height"]) == (1080, 1920) and info["duration"] == pytest.approx(5, abs=0.1)
+
+
+@needs_ffmpeg
+def test_a_camera_box_set_by_hand_is_remembered_for_the_stream(studio_app):
+    from aigcm.studio import facecam as F
+
+    settings = studio_app.state.settings
+    folder = settings.jobs_dir / "demo-finished"
+    make_source(folder / "source.mp4")
+    worker = Worker(settings)
+    owner = client_for(studio_app, "owner@example.com")
+    clip = first_clip(owner)
+    owner.post(f"/api/clips/{clip['id']}/decision", json={"verdict": "keep"}, headers=APP)
+    worker.render_step()
+    assert F.for_stream(folder) == {"box": None, "source": "auto"}   # worked out once; the test video has no face
+    view = owner.get(f"/api/clips/{clip['id']}/studio").json()
+    assert view["editor"]["facecam"] is None
+    data = view["edit"]["data"]
+    data["layout"] = E.template_layout("split", 1280, 720, (0.05, 0.6, 0.3, 0.35)).model_dump(mode="json")
+    assert owner.put(f"/api/clips/{clip['id']}/edit", json={"base_version": 0, "data": data}, headers=APP).status_code == 200
+    assert F.for_stream(folder) == {"box": [0.05, 0.6, 0.3, 0.35], "source": "manual"}
+    assert owner.get(f"/api/clips/{clip['id']}/studio").json()["editor"]["facecam"] == [0.05, 0.6, 0.3, 0.35]

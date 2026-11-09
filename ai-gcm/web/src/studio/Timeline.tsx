@@ -6,11 +6,13 @@ type Props = {
   segments: Segment[];
   selected: number;
   events: { t: number; kind: string }[];
+  zooms: number[];                   // kill times that have a zoom
   pps: number;                       // pixels per second of footage
   playhead: React.RefObject<HTMLDivElement | null>;
   scroller: React.RefObject<HTMLDivElement | null>;
   onSeek: (t: number) => void;
   onSelect: (i: number) => void;
+  onEventTap: (t: number) => void;
   onTrimStart: () => void;
   onTrim: (i: number, edge: "start" | "end", t: number) => void;
   onTrimEnd: () => void;
@@ -108,10 +110,19 @@ export default function Timeline(p: Props) {
         </div>
         <canvas ref={wave} className="tlwave" height={WAVE_H} style={{ left: PAD, width, top: STRIP_H + 4 }} />
         {gaps.map(([a, b]) => <div key={a} className="tlgap" style={{ left: x(a), width: (b - a) * p.pps }} />)}
-        {p.events.map((e) => (
-          <div key={`${e.kind}${e.t}`} className={`tlevent ${e.kind}`} style={{ left: x(e.t) }}
-               title={e.kind === "self_kill" ? "Kill" : e.kind.replace("_", " ")} />
-        ))}
+        {p.events.map((e) => {
+          const zoomed = e.kind === "self_kill" && p.zooms.some((z) => Math.abs(z - e.t) < 0.75);
+          return (
+            <div key={`${e.kind}${e.t}`} className={`tlevent ${e.kind}${zoomed ? " zoomed" : ""}`} style={{ left: x(e.t) }}
+                 title={e.kind === "self_kill" ? (zoomed ? "Kill, zoomed: tap to remove the zoom" : "Kill: tap to zoom")
+                   : e.kind.replace("_", " ")}
+                 onPointerDown={(ev) => {
+                   if (e.kind !== "self_kill") return;
+                   ev.stopPropagation();
+                   p.onEventTap(e.t);
+                 }} />
+          );
+        })}
         {p.segments.map((s, i) => (
           // Keyed by position: a key from the start time would remount the part mid-drag and drop the finger.
           <div key={i} className={i === p.selected ? "tlpart on" : "tlpart"}

@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
-import { api, type EditData, type RenderJob, type Studio } from "../api";
+import { api, type Box, type EditData, type RenderJob, type Studio, type Template } from "../api";
 import { clock } from "../format";
 import {
-  addPart, applyPreset, outputLength, partAt, problems, removePart, setSpeed, SPEEDS, split, toOutput, trim,
+  addPart, applyPreset, cameraBox, outputLength, partAt, problems, removePart, setSpeed, setZoomStrength, SPEEDS, split,
+  templateLayout, toggleZoom, toOutput, trim, ZOOM_STRENGTHS, zoomStrength,
 } from "../studio/model";
+import CamBox from "../studio/CamBox";
 import { drawFrame, PREVIEW_H, PREVIEW_W } from "../studio/preview";
 import Timeline, { TIMELINE_PAD } from "../studio/Timeline";
 
 const POLL_MS = 2000;
+const TEMPLATES: [Template, string][] = [["native", "As streamed"], ["blur", "Blur fill"], ["band", "Hook band"], ["split", "Camera on top"]];
+const DEFAULT_CAMERA: Box = [0.02, 0.6, 0.3, 0.38];
 const ZOOMS = [4, 6, 10, 16, 24];   // timeline pixels per second
 
 function fileName(title: string | null, id: number) {
@@ -34,6 +38,8 @@ export default function Editor() {
   const [job, setJob] = useState<RenderJob | null>(null);
   const [shareFile, setShareFile] = useState<File | null>(null);
   const [cursor, setCursor] = useState(0);
+  const [tool, setTool] = useState<"cut" | "layout" | "zoom">("cut");
+  const [placing, setPlacing] = useState<{ box: Box; template: Template } | null>(null);
 
   const video = useRef<HTMLVideoElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -275,6 +281,18 @@ export default function Editor() {
   }
   const segs = edit.segments;
   const total = outputLength(segs);
+  const vertical = (win.height ?? 0) > (win.width ?? 0);
+  const camera = cameraBox(edit) ?? studio.editor.facecam;
+  const strength = zoomStrength(edit);
+
+  function applyTemplate(template: Template, box: Box | null = camera) {
+    if (!edit) return;
+    if (template === "split" && !box) {
+      setPlacing({ box: DEFAULT_CAMERA, template });   // no camera known yet: let the creator mark it
+      return;
+    }
+    commit({ ...edit, layout: templateLayout(template, win!.width ?? 1920, win!.height ?? 1080, box) });
+  }
   const part = segs[Math.min(selected, segs.length - 1)];
   const presets = studio.editor.presets;
   const inGap = partAt(segs, cursor) < 0;
@@ -310,6 +328,7 @@ export default function Editor() {
       </div>
 
       <Timeline win={timelineWin} segments={segs} selected={selected} events={studio.editor.events} pps={pps}
+                zooms={edit.zooms.map((z) => z.t)} onEventTap={(t) => commit(toggleZoom(edit, t))}
                 playhead={playhead} scroller={scroller} onSeek={seek} onSelect={setSelected}
                 onTrimStart={() => { if (playingRef.current) pause(); dragBase.current = edit; }}
                 onTrim={(i, edge, t) => {
@@ -327,7 +346,47 @@ export default function Editor() {
                   setCursor(cursorRef.current);
                 }} />
 
-      <div className="row edtools">
+      <div className="chips tooltabs" role="tablist">
+        {(["cut", "layout", "zoom"] as const).map((t) => (
+          <button key={t} role="tab" aria-selected={tool === t} className={tool === t ? "chip on" : "chip"}
+                  onClick={() => setTool(t)}>{t === "cut" ? "Cut" : t === "layout" ? "Layout" : "Zoom"}</button>
+        ))}
+      </div>
+
+      {placing && video.current && (
+        <CamBox video={video.current} box={placing.box} onCancel={() => setPlacing(null)}
+                onDone={(box) => { applyTemplate(placing.template, box); setPlacing(null); }} />
+      )}
+
+      {tool === "layout" && !placing && (
+        <div className="row edtools">
+          {TEMPLATES.filter(([t]) => (vertical ? t === "native" || t === "blur" : t !== "native")).map(([t, label]) => (
+            <button key={t} className={edit.layout.template === t ? "chip on" : "chip"} onClick={() => applyTemplate(t)}>{label}</button>
+          ))}
+          {!vertical && (
+            <button onClick={() => setPlacing({ box: camera ?? DEFAULT_CAMERA,
+                                                template: edit.layout.template === "band" ? "band" : "split" })}>
+              {camera ? "Move camera box" : "Mark camera"}
+            </button>
+          )}
+          {!vertical && !camera && <span className="small muted">No camera found in this stream.</span>}
+        </div>
+      )}
+
+      {tool === "zoom" && (
+        <div className="row edtools">
+          <span className="small muted">Zoom on kills</span>
+          {ZOOM_STRENGTHS.map(([label, scale]) => (
+            <button key={label} className={(scale ? Math.abs(strength - scale) < 0.01 : strength === 0) ? "chip on" : "chip"}
+                    onClick={() => commit(setZoomStrength(edit, studio.editor!.events, scale))}>{label}</button>
+          ))}
+          <button className={edit.keep_hud !== false ? "chip on" : "chip"}
+                  onClick={() => commit({ ...edit, keep_hud: edit.keep_hud === false })}>Keep HUD</button>
+          <span className="small muted">Tap a red kill mark to add or take away its zoom.</span>
+        </div>
+      )}
+
+      {tool === "cut" && <div className="row edtools">
         {inGap
           ? <button onClick={() => commit({ ...edit, segments: addPart(segs, cursor, lo, hi) })}>+ Bring back</button>
           : <button onClick={() => commit({ ...edit, segments: split(segs, cursor) })}>Split</button>}
@@ -342,7 +401,7 @@ export default function Editor() {
         <span className="grow" />
         <button aria-label="Zoom the timeline out" onClick={() => setZoomIndex((z) => Math.max(0, z - 1))}>−</button>
         <button aria-label="Zoom the timeline in" onClick={() => setZoomIndex((z) => Math.min(ZOOMS.length - 1, z + 1))}>+</button>
-      </div>
+      </div>}
 
       <div className="card edexport">
         {!job && <button className="primary" disabled={busy} onClick={exportNow}>Export{dirty ? " (saves first)" : ""}</button>}

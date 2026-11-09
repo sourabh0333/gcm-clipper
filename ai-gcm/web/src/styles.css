@@ -199,3 +199,15 @@ h2 { font-size: 1.1rem; margin: 1.4rem 0 0.6rem; }
 .tlhandle.end { right: -2px; }
 .tlhandle.end::after { right: 0; }
 .tlplayhead { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #fff; box-shadow: 0 0 4px #000; pointer-events: none; }
+
+/* Layout and zoom tools (M3.4) */
+.tooltabs { padding-top: 2px; }
+.tlevent { pointer-events: auto; cursor: pointer; }
+.tlevent::before { content: ""; position: absolute; left: -9px; top: -4px; width: 18px; height: 22px; }
+.tlevent.zoomed { border-top-color: var(--accent); }
+.cambox .camframe { position: relative; margin-top: 8px; touch-action: none; overflow: hidden; border-radius: 8px; }
+.cambox canvas { width: 100%; display: block; border-radius: 8px; }
+.camrect { position: absolute; border: 2px solid var(--accent); box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45); cursor: move; touch-action: none; }
+.camcorner { position: absolute; width: 26px; height: 26px; background: var(--accent); border-radius: 50%; touch-action: none; }
+.camcorner.tl { left: -13px; top: -13px; cursor: nwse-resize; }
+.camcorner.br { right: -13px; bottom: -13px; cursor: nwse-resize; }

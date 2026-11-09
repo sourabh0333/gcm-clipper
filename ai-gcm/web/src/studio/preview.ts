@@ -3,7 +3,7 @@
 // in its canvas rectangle, the game panel zoomed at kills. The canvas is half size (540x960) to stay
 // smooth on phones; every coordinate is scaled by the same factor.
 import type { EditData } from "../api";
-import { H, panelSource, toOutput, W, zoomAt } from "./model";
+import { H, HUD_STRIP, panelSource, toOutput, W, zoomAt } from "./model";
 
 export const PREVIEW_W = 540;
 export const PREVIEW_H = 960;
@@ -34,10 +34,20 @@ export function drawFrame(ctx: CanvasRenderingContext2D, video: HTMLVideoElement
     ctx.drawImage(video, sx, sy, sw, sh, -20, -20, PREVIEW_W + 40, PREVIEW_H + 40);
     ctx.filter = "none";
   }
+  if (edit.layout.band_h) {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, PREVIEW_W, edit.layout.band_h * K);
+  }
   for (const panel of edit.layout.panels) {
-    const [sx, sy, sw, sh] = panelSource(panel, vw, vh, panel.role === "game" ? zoom : 1);
+    const zoomed = panel.role === "game" ? zoom : 1;
+    const [sx, sy, sw, sh] = panelSource(panel, vw, vh, zoomed);
     const [dx, dy, dw, dh] = panel.dst;
     ctx.drawImage(video, sx, sy, sw, sh, dx * K, dy * K, dw * K, dh * K);
+    if (zoomed > 1 && edit.keep_hud !== false) {
+      // The renderer lays the unzoomed top strip (the kill counters) back over a zoomed game panel.
+      const [ux, uy, uw, uh] = panelSource(panel, vw, vh, 1);
+      ctx.drawImage(video, ux, uy, uw, uh * HUD_STRIP, dx * K, dy * K, dw * K, dh * HUD_STRIP * K);
+    }
   }
   if (out === null) {
     // A moment that is cut out: shown dimmed while scrubbing, so it's clear it won't be in the export.
