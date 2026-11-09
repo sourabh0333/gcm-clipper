@@ -63,6 +63,39 @@ def fight_span(events, start, end):
     return lo, hi
 
 
+MOMENT_S = (20.0, 45.0)        # length presets (M3 plan, decision 3)
+FULL_FIGHT_S = (60.0, 120.0)
+FIGHT_LEAD_S, FIGHT_TAIL_S = 8.0, 4.0
+
+
+def _fit(a, b, shortest, longest, lo, hi, focus):
+    """[a, b] grown evenly to `shortest` or cut to `longest` (keeping `focus` with 60% of the time before
+    it), then moved inside [lo, hi]."""
+    if b - a < shortest:
+        grow = (shortest - (b - a)) / 2
+        a, b = a - grow, b + grow
+    elif b - a > longest:
+        a = min(max(a, focus - 0.6 * longest), b - longest)
+        b = a + longest
+    if a < lo:
+        a, b = lo, b + (lo - a)
+    if b > hi:
+        a, b = a - (b - hi), hi
+    return round(max(a, lo), 2), round(min(b, hi), 2)
+
+
+def length_presets(start, end, anchor, events, lo, hi):
+    """The "moment" and "full fight" cuts for a clip inside footage [lo, hi], and which one suits it:
+    the full fight when the fight runs longer than a moment."""
+    focus = anchor if anchor is not None and start <= anchor <= end else (start + end) / 2
+    moment = _fit(start, end, *MOMENT_S, lo, hi, focus)
+    span = fight_span(events, start, end)
+    a, b = (span[0] - FIGHT_LEAD_S, span[1] + FIGHT_TAIL_S) if span else (start, end)
+    full = _fit(a, b, *FULL_FIGHT_S, lo, hi, span[1] if span else focus)
+    suggested = "full_fight" if span and span[1] - span[0] > MOMENT_S[1] else "moment"
+    return {"moment": list(moment), "full_fight": list(full), "suggested": suggested}
+
+
 def plan_window(start, end, duration, events=()):
     """Source span to keep: the clip ±CONTEXT_S and its whole fight, at most MAX_WINDOW_S, clip inside."""
     a, b = start - CONTEXT_S, end + CONTEXT_S

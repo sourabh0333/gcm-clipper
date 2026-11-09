@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Navigate, NavLink, Route, Routes, useLocation } from "react-router";
 import { api, ApiError, type Me } from "./api";
+import Editor from "./pages/Editor";
 import Library from "./pages/Library";
 import Live from "./pages/Live";
 import NewStream from "./pages/NewStream";
@@ -14,8 +15,9 @@ import Streams from "./pages/Streams";
 export default function App() {
   const [me, setMe] = useState<Me | null | undefined>(undefined);
   const [offline, setOffline] = useState(false);
-  // Reviewing is full-screen: the tab bar would cover the Keep and Reject buttons on a phone.
-  const reviewing = useLocation().pathname.endsWith("/review");
+  // Reviewing and editing are full-screen: the tab bar would cover their buttons on a phone.
+  const path = useLocation().pathname;
+  const reviewing = path.endsWith("/review") || path.endsWith("/edit");
 
   useEffect(() => {
     api<Me>("/api/me")
@@ -52,6 +54,7 @@ export default function App() {
           <Route path="/library" element={<Library />} />
           <Route path="/kept" element={<Navigate to="/library?decision=keep" replace />} />
           <Route path="/clips/:id/studio" element={<StudioPage />} />
+          <Route path="/clips/:id/edit" element={<Editor />} />
           <Route path="/live" element={<Live />} />
           <Route path="/settings" element={<Settings me={me} />} />
           <Route path="*" element={<p>Page not found. <NavLink to="/">Back to your streams</NavLink></p>} />

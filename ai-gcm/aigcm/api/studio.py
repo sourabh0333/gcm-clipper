@@ -49,6 +49,7 @@ def studio(clip_id: int, request: Request, user=Depends(current_user), db=Depend
     return {"clip": clip_view(clip), "window": window_view(status, details, clip.id),
             "edit": {"version": version, "data": edit.model_dump(mode="json"),
                      "length_s": round(output_length(edit.segments), 2)},
+            "editor": project.editor_extras(settings, clip, details) if status == "ready" else None,
             "exports": [render_view(r) for r in exports]}
 
 

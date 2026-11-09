@@ -111,7 +111,8 @@ export default function StudioPage() {
               {edit.data.captions.on && " · captions"}
             </div>
             <div className="row" style={{ marginTop: 10 }}>
-              <button className="primary" disabled={busy} onClick={() => exportNow()}>Export</button>
+              <Link className="button primary" to={`/clips/${id}/edit`}>Open editor</Link>
+              <button disabled={busy} onClick={() => exportNow()}>Export</button>
               {clip.safe_video && <button disabled={busy} onClick={() => exportNow(true)}>Export sponsor-safe</button>}
             </div>
           </div>

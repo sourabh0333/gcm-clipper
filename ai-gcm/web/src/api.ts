@@ -123,5 +123,10 @@ export type Studio = {
   clip: Clip;
   window: StudioWindow;
   edit: { version: number; data: EditData; length_s: number };
+  editor: {
+    events: { t: number; kind: string }[];
+    anchor: number | null;
+    presets: { moment: [number, number]; full_fight: [number, number]; suggested: "moment" | "full_fight" };
+  } | null;
   exports: RenderJob[];
 };

@@ -137,7 +137,7 @@ def test_without_a_recording_a_clip_cannot_be_edited(studio_app):
     owner = client_for(studio_app, "owner@example.com")
     clip = first_clip(owner)
     view = owner.get(f"/api/clips/{clip['id']}/studio").json()
-    assert view["window"]["status"] == "missing" and view["edit"]["version"] == 0
+    assert view["window"]["status"] == "missing" and view["edit"]["version"] == 0 and view["editor"] is None
     assert view["edit"]["data"]["layout"]["template"] == "native"    # the demo stream is vertical
     assert owner.post(f"/api/clips/{clip['id']}/prepare", headers=APP).status_code == 409
     assert owner.post(f"/api/clips/{clip['id']}/export", json={}, headers=APP).status_code == 409
@@ -166,6 +166,9 @@ def test_keep_prepare_edit_and_export(studio_app):
     win = view["window"]
     assert win["status"] == "ready" and win["start"] <= 277.5 - 55 and win["end"] >= 305.5 + 55
     assert win["width"] == 360 and win["height"] == 640 and win["has_audio"]
+    extras = view["editor"]
+    assert set(extras["presets"]) == {"moment", "full_fight", "suggested"} and extras["anchor"] is None
+    assert extras["presets"]["moment"] == [277.5, 305.5]
     for name in ("preview", "wave"):
         assert owner.get(win[name]).status_code == 200
     assert owner.get(win["strip"]["url"]).headers["content-type"] == "image/jpeg"
@@ -240,3 +243,21 @@ def test_prepare_kept_queues_only_clips_that_need_footage(studio_app):
     with studio_app.state.sessions() as s:
         assert prepare_kept(s, settings) == 1          # the same clip, already queued: no second render
         assert s.query(Render).filter_by(kind="prepare").count() == 1
+
+
+def test_length_presets():
+    kills = [{"t": t, "kind": "self_kill"} for t in (300, 320, 345, 370)]
+    # A short clip in a long fight: the moment grows to 20 s, the full fight covers the kills.
+    p = W.length_presets(318, 328, 320, kills, 200, 440)
+    assert p["moment"] == [313.0, 333.0] and p["suggested"] == "full_fight"
+    assert p["full_fight"] == [292.0, 374.0]
+    # A long fight is cut to 2 minutes, ending near its last kill.
+    many = [{"t": t, "kind": "self_kill"} for t in range(100, 400, 20)]
+    a, b = W.length_presets(200, 230, 210, many, 0, 600)["full_fight"]
+    assert b - a == 120 and a < 380 <= b
+    # A talk clip with no kills: a 60 s cut around it, a moment by default; never outside the footage.
+    p = W.length_presets(10, 70, None, [], 0, 75)
+    assert p["suggested"] == "moment" and p["full_fight"] == [10.0, 70.0]
+    assert p["moment"][1] - p["moment"][0] == 45 and p["moment"][0] >= 0
+    p = W.length_presets(2, 8, None, [], 0, 300)
+    assert p["moment"] == [0.0, 20.0]

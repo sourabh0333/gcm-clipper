@@ -60,6 +60,22 @@ def default_for(settings, clip, window=None):
                         captions=has_captions(folder, clip.clip_key), window=span)
 
 
+MARKER_KINDS = ("self_kill", "knock", "accolade", "chicken_dinner")
+
+
+def editor_extras(settings, clip, details):
+    """What the editor shows besides the edit: the kills and other events inside the saved footage (for
+    the timeline) and the two length presets."""
+    folder = job_folder(settings, clip)
+    events = (read_json(folder / "vision.json", {}) or {}).get("events") or []
+    lo, hi = details["start"], details["end"]
+    shown = [{"t": e["t"], "kind": e["kind"]} for e in events
+             if e.get("kind") in MARKER_KINDS and lo <= e.get("t", -1) <= hi]
+    anchor = (clip.details or {}).get("anchor")
+    return {"events": shown, "anchor": anchor,
+            "presets": win.length_presets(clip.start_s, clip.end_s, anchor, events, lo, hi)}
+
+
 def latest_edit(db, clip):
     return db.scalars(select(Edit).where(Edit.clip_id == clip.id).order_by(Edit.version.desc()).limit(1)).first()
 
