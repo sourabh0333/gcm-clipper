@@ -125,13 +125,31 @@ BGMI's kill feed sits under the teammate list at the left edge of the gameplay w
 
 Also fixed 6 Nov: `--force vision` used to mark the audio chain stale too, so Whisper re-ran beside every scan and halved its CPU (`jobs.stages_from`); forcing vision now leaves audio/sounds/transcript alone, and vice versa.
 
+## Milestone M3: studio (started 9 Nov)
+
+Reviewed before any code: [plans/M3 Studio plan.md](../plans/M3%20Studio%20plan.md) (13 findings, decisions, steps M3.1–M3.10, owner tasks). Tested on the laptop during the review: ffmpeg's subtitle renderer draws Hindi correctly but emoji only as outlines (so emoji become images); a zoom made with `scale` `eval=frame` plus a fixed crop works; a 4-minute 540p preview copy takes 38 s and 51 MB (so preview copies are made only for kept clips).
+
+| Step | Status |
+|---|---|
+| M3.1 Edit model and renderer | Next |
+| M3.2 Library | — |
+| M3.3 Editor basics and export | — |
+| M3.4 Layouts and zoom | — |
+| M3.5 Hook and captions | — |
+| M3.6 Brand kit | — |
+| M3.7 Thumbnails and cover frames | — |
+| M3.8 Weekly compilation | — |
+| M3.9 Sound safety | — |
+| M3.10 Phone check | — |
+
 ## Next
 
 1. Owner: strict swipes in the new app on the phone, on five accuracy sections (LoLzZz, Bixi, Aashi, PABLO, Rajput) and the full GtxPreet job: they give the M1 recall figure and the talk-vs-fight balance.
 2. Owner, when someone is available: a second Google account signs in from another phone (M2's two-creator test; invite it in Settings first).
 3. Decide the transcript "broken" threshold from those swipes.
 4. M2.8 marker-window upload: spike on a phone that has a stream recording; skipped if no creator records on the phone.
-5. M3 Studio: review it first (as M2 was), then build.
+5. Owner: watch 20 top BGMI Shorts and note zoom, speed-ups, added music, facecam on top, text band (M3 plan section 5), before M3.4.
+6. M3.1 edit model and renderer, then the M3 steps in order.
 
 ## Known slow spots
 
