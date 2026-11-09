@@ -46,7 +46,8 @@ export default function Kept() {
           </div>
           {clip.hashtags.length > 0 && <div className="small muted">{clip.hashtags.join(" ")}</div>}
           <div className="row" style={{ marginTop: 10 }}>
-            <a className="button primary" href={`${clip.video}?download=1`}>Download</a>
+            <Link className="button primary" to={`/clips/${clip.id}/studio`}>Edit</Link>
+            <a className="button" href={`${clip.video}?download=1`}>Download</a>
             {clip.safe_video && <a className="button" href={`${clip.safe_video}&download=1`}>Sponsor-safe copy</a>}
             <button onClick={() => share(clip).catch((err) => say((err as Error).message))}>Share</button>
             <button onClick={() => copy(clip)}>Copy text</button>

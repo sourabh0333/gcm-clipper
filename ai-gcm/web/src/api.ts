@@ -72,3 +72,47 @@ export type Clip = {
 export type LiveSession = { id: string; title: string | null; started_at: string; ended_at: string | null; markers: number[] };
 
 export type WorkerStatus = { online: boolean; busy: boolean; queue_waiting: boolean };
+
+// Studio (M3): a clip's edit list, the footage saved for editing it, and its exports.
+export type Segment = { start: number; end: number; speed: number };
+export type Panel = { role: "game" | "cam"; src: [number, number, number, number]; dst: [number, number, number, number] };
+export type EditData = {
+  v: 1;
+  segments: Segment[];
+  layout: { template: "native" | "blur" | "band" | "split"; background: "blur" | "black"; panels: Panel[] };
+  zooms: { t: number; dur: number; scale: number }[];
+  hook: { text: string; color: "white" | "yellow"; on: boolean };
+  captions: { on: boolean };
+  cover_t: number | null;
+  sponsor_safe: boolean;
+};
+export type StudioWindow = {
+  status: "ready" | "preparing" | "failed" | "none" | "missing";
+  error?: string | null;
+  start?: number;
+  end?: number;
+  duration?: number;
+  width?: number;
+  height?: number;
+  has_audio?: boolean;
+  preview?: string;
+  wave?: string;
+  strip?: { url: string; every_s: number; cols: number; rows: number; frames: number; tile_w: number; tile_h: number };
+};
+export type RenderJob = {
+  id: string;
+  kind: "prepare" | "export";
+  status: "queued" | "running" | "done" | "failed";
+  error: string | null;
+  version: number | null;
+  sponsor_safe: boolean;
+  created_at: string | null;
+  finished_at: string | null;
+  video: string | null;
+};
+export type Studio = {
+  clip: Clip;
+  window: StudioWindow;
+  edit: { version: number; data: EditData; length_s: number };
+  exports: RenderJob[];
+};

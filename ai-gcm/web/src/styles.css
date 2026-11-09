@@ -137,7 +137,7 @@ h2 { font-size: 1.1rem; margin: 1.4rem 0 0.6rem; }
 }
 .markbtn:active { transform: scale(0.97); }
 
-.kept video { width: 100%; border-radius: 10px; background: #000; max-height: 60vh; }
+.kept video, .studio video { width: 100%; border-radius: 10px; background: #000; max-height: 60vh; }
 .toast {
   position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); background: #2b2f3b; color: var(--text);
   padding: 10px 16px; border-radius: 999px; z-index: 10; max-width: 92vw; text-align: center;

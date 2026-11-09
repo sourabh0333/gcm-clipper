@@ -6,12 +6,16 @@ The engine runs as a child process (`python -m aigcm run <source> --job <folder>
 run.log, so a crash in a 3-hour job can't take the worker down and Stop can kill the whole process tree.
 A stream left "running" by a crash, power cut or restart goes back to the queue at start, and the engine
 resumes it from its checkpoints. When a job finishes, its clips are copied into the clips table once.
-See plans/M2 platform core plan.md (M2.4, R10, R11)."""
+See plans/M2 platform core plan.md (M2.4, R10, R11).
+
+A second thread runs the studio's render lane (working windows for kept clips, exports) beside the stream
+job, with ffmpeg on fewer threads while a stream is running (plans/M3 Studio plan.md, S-R7)."""
 
 import argparse
 import os
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -29,6 +33,8 @@ WATCH_S = 1.0          # how often a running job is checked for a Stop request
 HOUSEKEEPING_S = 3600  # how often stale uploads are cleared
 HEARTBEAT_S = 10.0
 STALE_S = 45.0         # a heartbeat older than this means that worker is gone
+RENDER_THREADS_BUSY = 3   # ffmpeg threads for studio renders while a stream job runs (the laptop has 8)
+RENDER_THREADS_IDLE = 6
 
 
 def claim_next(session):
@@ -53,16 +59,24 @@ def requeue_interrupted(session):
 
 def import_clips(session, stream, folder):
     """Copy the job's clips into the clips table. A clip that is unchanged from an earlier import (same id
-    and same cut) keeps its keep or reject decision."""
+    and same cut) keeps its row, so its keep or reject decision and its studio edits stay; a changed or
+    vanished clip is replaced."""
     old = {c.clip_key: c for c in stream.clips}
-    stream.clips.clear()
-    session.flush()
+    rows = []
     for item in finished_clips(folder):
-        clip = Clip(stream_id=stream.id, **item)
         before = old.get(item["clip_key"])
-        if before and before.start_s == clip.start_s and before.end_s == clip.end_s:
-            clip.decision, clip.decision_reason, clip.decided_at = before.decision, before.decision_reason, before.decided_at
-        stream.clips.append(clip)
+        if before and before.start_s == item["start_s"] and before.end_s == item["end_s"]:
+            for key, value in item.items():
+                setattr(before, key, value)
+            rows.append(before)
+            del old[item["clip_key"]]
+        else:
+            rows.append(Clip(stream_id=stream.id, **item))
+    # Replaced and vanished rows go first, so a new row may reuse their (stream, clip key).
+    for gone in old.values():
+        stream.clips.remove(gone)
+    session.flush()
+    stream.clips[:] = rows
     session.flush()
     return len(stream.clips)
 
@@ -111,6 +125,8 @@ class Worker:
         self.command = command
         self.notify = list(notify)   # callables (stream, event) -> None; Telegram joins in M2.7
         self.last_beat = self.last_housekeeping = 0.0
+        self.current_stream = None    # the stream job running now, if any (renders use fewer threads then)
+        self.stopping = threading.Event()
 
     def heartbeat(self, stream_id=None, force=False):
         if not force and time.time() - self.last_beat < HEARTBEAT_S:
@@ -173,10 +189,15 @@ class Worker:
                 told = True
             time.sleep(POLL_S)
             waited += POLL_S
+        from .studio.project import requeue_renders
+
         with self.sessions() as s:
             requeued = requeue_interrupted(s)
+            renders = requeue_renders(s)
         if requeued:
             log(f"worker: back in the queue after a restart: {', '.join(requeued)}")
+        if renders:
+            log(f"worker: {len(renders)} studio renders back in the queue")
         self.heartbeat(force=True)
 
     def step(self):
@@ -200,6 +221,7 @@ class Worker:
             write_markers(s, stream, folder)
             cmd = self.command(stream, folder)
         log(f"worker: starting {stream_id}")
+        self.current_stream = stream_id
         self.heartbeat(stream_id, force=True)
         env = dict(os.environ, AIGCM_JOBS_DIR=str(self.settings.jobs_dir.resolve()), PYTHONIOENCODING="utf-8")
         with open(folder / "run.log", "a", encoding="utf-8") as out:
@@ -239,10 +261,33 @@ class Worker:
                     hook(stream, event)
                 except Exception as exc:  # a failed message must never stop the worker
                     log(f"worker: notification failed: {exc!r}")
+        self.current_stream = None
         self.heartbeat(None, force=True)
+
+    def render_step(self):
+        """Run at most one studio render. Returns its id, or None if none was queued."""
+        from .studio import lane
+        from .studio.project import claim_render
+
+        with self.sessions() as s:
+            render_id = claim_render(s)
+        if render_id:
+            threads = RENDER_THREADS_BUSY if self.current_stream else RENDER_THREADS_IDLE
+            lane.run(self.settings, self.sessions, render_id, threads)
+        return render_id
+
+    def render_loop(self):
+        while not self.stopping.is_set():
+            try:
+                if not self.render_step():
+                    self.stopping.wait(POLL_S)
+            except Exception as exc:  # the lane must keep going whatever one render does
+                log(f"worker: render lane error: {exc!r}")
+                self.stopping.wait(POLL_S)
 
     def forever(self):
         self.start()
+        threading.Thread(target=self.render_loop, daemon=True, name="render-lane").start()
         log(f"worker: waiting for streams (jobs in {self.settings.jobs_dir})")
         while True:
             if not self.step():
@@ -258,8 +303,6 @@ def main(argv=None):
     settings = ApiSettings.from_env()
     worker = Worker(settings)
     if settings.telegram_bot_token:
-        import threading
-
         from .telegram import Bot, notifier, poll
 
         bot = Bot(settings.telegram_bot_token)
@@ -270,6 +313,8 @@ def main(argv=None):
     if args.once:
         worker.start()
         worker.step()
+        while worker.render_step():
+            pass
     else:
         worker.forever()
 

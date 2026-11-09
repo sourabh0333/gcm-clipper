@@ -1,10 +1,15 @@
 """Owner commands for the platform database.
 
     python -m aigcm.manage import-jobs --owner you@gmail.com
+    python -m aigcm.manage prepare-kept
 
 import-jobs: brings job folders made before the platform existed (the old app and the command line) into
 the database under one account, with their clips and the keep or reject decisions in decisions.json.
-Folders already in the database are skipped, so it can be run again safely."""
+Folders already in the database are skipped, so it can be run again safely.
+
+prepare-kept: queues the studio's working window for every kept clip that doesn't have one yet (clips kept
+before the studio existed), while their streams' recordings are still on the laptop. The worker makes
+them. Safe to run again."""
 
 import argparse
 import sys
@@ -62,6 +67,18 @@ def import_jobs(session, settings, owner_email):
     return imported
 
 
+def prepare_kept(session, settings):
+    """Queue a working window for each kept clip that has none; returns how many were queued."""
+    from .studio.project import queue_prepare
+
+    queued = 0
+    for clip in session.scalars(select(Clip).where(Clip.decision == "keep")).all():
+        if queue_prepare(session, settings, clip) is not None:
+            queued += 1
+    session.commit()
+    return queued
+
+
 def main(argv=None):
     from .api.settings import ApiSettings
 
@@ -69,12 +86,16 @@ def main(argv=None):
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("import-jobs", help="bring existing job folders into the database under one account")
     p.add_argument("--owner", required=True, help="the Google email of the account that will own them")
+    sub.add_parser("prepare-kept", help="queue studio footage for kept clips that have none yet")
     args = parser.parse_args(argv)
 
     settings = ApiSettings.from_env()
     engine = database.make_engine(settings.db_url)
     database.migrate(engine)
     with database.session_factory(engine)() as session:
+        if args.command == "prepare-kept":
+            print(f"queued {prepare_kept(session, settings)} kept clips for the studio; the worker prepares them")
+            return 0
         names = import_jobs(session, settings, args.owner)
     print(f"imported {len(names)} job folders" + (": " + ", ".join(names) if names else ""))
     return 0

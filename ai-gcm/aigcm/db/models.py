@@ -144,6 +144,41 @@ class Clip(Base):
     decided_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     stream: Mapped[Stream] = relationship(back_populates="clips")
+    edits: Mapped[list["Edit"]] = relationship(back_populates="clip", cascade="all, delete-orphan",
+                                               passive_deletes=True, order_by="Edit.version")
+
+
+class Edit(Base):
+    """One saved version of a clip's edit list (M3 Studio). The newest version is the clip's edit; the last
+    20 are kept for going back. See plans/M3 Studio plan.md, decision 1."""
+    __tablename__ = "edits"
+    __table_args__ = (UniqueConstraint("clip_id", "version"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    clip_id: Mapped[int] = mapped_column(ForeignKey("clips.id", ondelete="CASCADE"), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    data: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    clip: Mapped[Clip] = relationship(back_populates="edits")
+
+
+class Render(Base):
+    """Studio work for the worker's render lane: "prepare" saves a kept clip's working window and preview
+    copy; "export" renders an edit into the final video. Runs beside stream jobs (M3 review S-R7)."""
+    __tablename__ = "renders"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=lambda: new_id("rn"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    clip_id: Mapped[int | None] = mapped_column(ForeignKey("clips.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(12), default="queued", index=True)  # queued running done failed
+    params: Mapped[dict] = mapped_column(JSON, default=dict)
+    output: Mapped[str | None] = mapped_column(String(200))   # file name, for exports
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 class Marker(Base):

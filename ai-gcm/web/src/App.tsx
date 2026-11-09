@@ -8,6 +8,7 @@ import Review from "./pages/Review";
 import Settings from "./pages/Settings";
 import SignIn from "./pages/SignIn";
 import StreamPage from "./pages/StreamPage";
+import StudioPage from "./pages/StudioPage";
 import Streams from "./pages/Streams";
 
 export default function App() {
@@ -49,6 +50,7 @@ export default function App() {
           <Route path="/streams/:id" element={<StreamPage />} />
           <Route path="/streams/:id/review" element={<Review />} />
           <Route path="/kept" element={<Kept />} />
+          <Route path="/clips/:id/studio" element={<StudioPage />} />
           <Route path="/live" element={<Live />} />
           <Route path="/settings" element={<Settings me={me} />} />
           <Route path="*" element={<p>Page not found. <NavLink to="/">Back to your streams</NavLink></p>} />

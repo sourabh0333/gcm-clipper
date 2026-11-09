@@ -131,10 +131,10 @@ Reviewed before any code: [plans/M3 Studio plan.md](../plans/M3%20Studio%20plan.
 
 | Step | Status |
 |---|---|
-| M3.1 Edit model and renderer | Next |
-| M3.2 Library | — |
+| M3.1 Edit model and renderer | **Done 9 Nov.** `aigcm/studio/`: `edit.py` (the edit list: parts with speed, layout panels, zooms, hook, captions, cover, sponsor-safe; checks; the four layout templates; the default edit from the engine's data), `window.py` (working window of a kept clip: the clip ±60 s and its whole fight, at most 4 min, stream-copied; 540p preview, filmstrip, sound wave), `render.py` (the studio renderer: parts, speed, panels, zoom on kills, captions through the cuts, sponsor-safe mute), `project.py` and `lane.py` (versions, the render queue, the worker's render lane). Tables `edits` and `renders` (migration 0002). The worker runs renders in a second thread beside stream jobs (3 ffmpeg threads while a stream runs, 6 otherwise). Keeping a clip queues its window; `python -m aigcm.manage prepare-kept` does it for clips kept earlier. API: `/api/clips/{id}/studio`, `/prepare`, `/edit` (PUT with base_version, 409 on a stale save), `/export`, `/api/renders/{id}`, `/media/renders/{id}`, `/media/studio/{id}/{preview.mp4|strip.jpg|wave.json}`. Web: an Edit button on Kept opens a Studio page (prepare, preview, export, download, share); the full editor is M3.3. Re-importing a job now keeps unchanged clip rows, so edits survive a re-run. **Real check 9 Nov:** the owner's 4 kept clips (Joker stream) got their footage through `prepare-kept` and the live worker (30–48 s each); two automatic edits exported (60 s and 42 s, 1080x1920, zoom visible at the kill); the Studio page checked at phone size on a copy of the database. Tests: 147 Python, 6 web. **Found and fixed:** a stream copy asked to start exactly on a keyframe begins one keyframe earlier (5 s on Aashi), so the cut starts 0.3 s after the keyframe and the real start is confirmed against the keyframe list (re-encoded exactly if it doesn't line up); checked against the engine's own clip (42 dB PSNR, same frames). Timings on the laptop: a 2.5-min window with preview 33 s; a 23 s export 25 s with 3 threads |
+| M3.2 Library | Next |
 | M3.3 Editor basics and export | — |
-| M3.4 Layouts and zoom | — |
+| M3.4 Layouts and zoom | — Note from the M3.1 real check (Joker stream, landscape): the zoom on a kill pushes the kill counters and minimap off the edges for about a second; keep the HUD in frame during zooms (overlay the HUD corners, or zoom less) |
 | M3.5 Hook and captions | — |
 | M3.6 Brand kit | — |
 | M3.7 Thumbnails and cover frames | — |
@@ -149,7 +149,7 @@ Reviewed before any code: [plans/M3 Studio plan.md](../plans/M3%20Studio%20plan.
 3. Decide the transcript "broken" threshold from those swipes.
 4. M2.8 marker-window upload: spike on a phone that has a stream recording; skipped if no creator records on the phone.
 5. Owner: watch 20 top BGMI Shorts and note zoom, speed-ups, added music, facecam on top, text band (M3 plan section 5), before M3.4.
-6. M3.1 edit model and renderer, then the M3 steps in order.
+6. M3.2 library, then the M3 steps in order.
 
 ## Known slow spots
 

@@ -1,0 +1,115 @@
+"""The worker's render lane: runs studio work (working windows, exports) beside stream jobs, so an export
+never waits an hour behind a stream (M3 review S-R7).
+
+Each render is planned in a short database transaction that reads everything it needs, run with no
+transaction open (ffmpeg takes seconds to minutes, and an open write transaction would block the API;
+the M2 lesson), then recorded in a second short transaction."""
+
+import shutil
+from pathlib import Path
+
+from ..db.models import Clip, Render, utcnow
+from ..jobs import log, read_json
+from . import project
+from . import window as win
+from .edit import EditData, check_window
+
+EXPORTS = "exports"
+
+
+def export_name(clip_key, version, render_id, safe):
+    return f"{clip_key}_v{version}{'_safe' if safe else ''}_{render_id}.mp4"
+
+
+def plan_prepare(settings, session, render):
+    clip = session.get(Clip, render.clip_id)
+    folder = project.job_folder(settings, clip)
+    target = project.clip_folder(settings, clip)
+    start_s, end_s = clip.start_s, clip.end_s
+
+    def task(threads):
+        source = project.source_file(folder)
+        if source is None:
+            raise RuntimeError("The recording is no longer on the laptop, so this clip can't be edited.")
+        if shutil.disk_usage(settings.jobs_dir).free < settings.min_free_bytes:
+            raise RuntimeError("The laptop is low on disk space; free some up and try again.")
+        from ..media import probe
+
+        duration = probe(source)["duration"]
+        events = (read_json(folder / "vision.json", {}) or {}).get("events") or []
+        start, end = win.plan_window(start_s, end_s, duration, events)
+        win.prepare(source, target, start, end, threads=threads)
+        return None
+    return task
+
+
+def plan_export(settings, session, render):
+    clip = session.get(Clip, render.clip_id)
+    target = project.clip_folder(settings, clip)
+    details = win.ready(target)
+    if not details:
+        raise RuntimeError("This clip's footage isn't ready for editing yet.")
+    version = render.params.get("version") or 0
+    if version:
+        saved = next((e for e in clip.edits if e.version == version), None)
+        if saved is None:
+            raise RuntimeError(f"Version {version} of this edit no longer exists.")
+        edit = EditData.model_validate(saved.data)
+    else:
+        edit = project.default_for(settings, clip, details)
+    check_window(edit, details["start"], details["end"])
+    folder = project.job_folder(settings, clip)
+    safe = bool(render.params.get("sponsor_safe") or edit.sponsor_safe)
+    spans = (clip.details or {}).get("mute_spans") if safe else None
+    name = export_name(clip.clip_key, version, render.id, safe)
+    clip_start = clip.start_s
+
+    def task(threads):
+        from .render import output_mute, render as render_edit
+
+        transcript = read_json(folder / "transcript.json") if edit.captions.on else None
+        out_dir = folder / EXPORTS
+        out_dir.mkdir(exist_ok=True)
+        render_edit(edit, target / "window.mkv", details["start"], details["has_audio"], out_dir / name,
+                    transcript=transcript, mute_spans=output_mute(edit, clip_start, spans), threads=threads)
+        return name
+    return task
+
+
+PLANNERS = {"prepare": plan_prepare, "export": plan_export}
+
+
+def run(settings, sessions, render_id, threads):
+    """Run one claimed render and record how it ended. Never raises: a failed render is recorded."""
+    task, error, output = None, None, None
+    with sessions() as s:
+        render = s.get(Render, render_id)
+        kind = render.kind
+        try:
+            task = PLANNERS[kind](settings, s, render)
+        except Exception as exc:
+            error = exc
+        s.commit()   # ends the read transaction before any slow work
+    if task is not None:
+        try:
+            output = task(threads)
+        except Exception as exc:
+            error = exc
+    with sessions() as s:
+        render = s.get(Render, render_id)
+        if error is None:
+            render.status, render.output, render.error = "done", output, None
+        else:
+            log(f"studio: {kind} {render_id} failed: {error!r}")
+            render.status, render.error = "failed", str(error)[:500]
+        render.finished_at = utcnow()
+        s.commit()
+        return render.status
+
+
+def export_path(settings, clip, render):
+    if not render.output:
+        return None
+    folder = (project.job_folder(settings, clip) / EXPORTS).resolve()
+    path = (folder / Path(render.output).name).resolve()
+    return path if path.parent == folder and path.is_file() else None

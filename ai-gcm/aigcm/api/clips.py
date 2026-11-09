@@ -60,7 +60,7 @@ class Decision(BaseModel):
 
 
 @router.post("/api/clips/{clip_id}/decision")
-def decide(clip_id: int, body: Decision, user=Depends(current_user), db=Depends(get_db)):
+def decide(clip_id: int, body: Decision, request: Request, user=Depends(current_user), db=Depends(get_db)):
     clip = own_clip(db, user, clip_id)
     if body.verdict not in ("keep", "reject", None):
         raise HTTPException(400, "verdict must be keep, reject or null.")
@@ -69,6 +69,11 @@ def decide(clip_id: int, body: Decision, user=Depends(current_user), db=Depends(
     clip.decided_at = utcnow() if body.verdict else None
     db.add(AuditEntry(user_id=user.id, action="decision", detail={"clip": clip.id, "verdict": body.verdict,
                                                                    "reason": reason}))
+    if body.verdict == "keep":
+        # Save the clip's footage for the studio now, while the stream's recording is still on the laptop.
+        from ..studio.project import queue_prepare
+
+        queue_prepare(db, request.app.state.settings, clip)
     db.commit()
     return clip_view(clip)
 
