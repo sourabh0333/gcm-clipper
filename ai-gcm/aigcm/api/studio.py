@@ -3,6 +3,9 @@ versions, asking for the window to be prepared and for exports, and serving the 
 sound wave and exported videos to the clip's owner only. The work itself runs in the worker's render
 lane; this API only queues it. See plans/M3 Studio plan.md."""
 
+import re
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ValidationError
@@ -151,6 +154,77 @@ def render_video(render_id: str, request: Request, download: int = 0, user=Depen
     return FileResponse(path, media_type="video/mp4", filename=f"kaatclip_{path.name}" if download else None,
                         content_disposition_type="attachment" if download else "inline",
                         headers={"Cache-Control": "private, max-age=3600"})
+
+
+class HookBody(BaseModel):
+    text: str
+    color: Literal["yellow", "white"] = "yellow"
+    box_h: int = 420
+    backing: bool = False   # outside the black band the hook sits on a dark box
+
+
+@router.post("/api/clips/{clip_id}/hook")
+def draw_hook(clip_id: int, body: HookBody, request: Request, user=Depends(current_user), db=Depends(get_db)):
+    """Draw the hook for the editor's preview (the export uses the very same image). About 0.3-0.6 s the
+    first time; cached after that."""
+    from ..studio import hook
+
+    if len(body.text) > 80 or not 120 <= body.box_h <= 900:
+        raise HTTPException(422, "The hook can be at most 80 characters.")
+    folder = project.clip_folder(request.app.state.settings, own_clip(db, user, clip_id)) / "hooks"
+    db.close()   # drawing takes a moment; no transaction may wait on it
+    path = hook.cached(folder, body.text, body.color, body.box_h, body.backing)
+    return {"url": f"/media/studio/{clip_id}/hooks/{path.name}" if path else None}
+
+
+HOOK_NAME = re.compile(r"^[0-9a-f]{20}\.png$")
+
+
+@router.get("/media/studio/{clip_id}/hooks/{name}")
+def hook_image(clip_id: int, name: str, request: Request, user=Depends(current_user), db=Depends(get_db)):
+    if not HOOK_NAME.match(name):
+        raise HTTPException(404, "Not found.")
+    path = project.clip_folder(request.app.state.settings, own_clip(db, user, clip_id)) / "hooks" / name
+    db.close()
+    if not path.is_file():
+        raise HTTPException(404, "Not found.")
+    return FileResponse(path, media_type="image/png", headers={"Cache-Control": "private, max-age=86400"})
+
+
+class ConvertBody(BaseModel):
+    script: Literal["latin", "devanagari"]
+    words: list[dict]   # [{"t": start, "w": word}] as the editor shows them
+
+
+@router.post("/api/clips/{clip_id}/captions/convert")
+def convert_script(clip_id: int, body: ConvertBody, user=Depends(current_user), db=Depends(get_db)):
+    """Caption words in the other script, each keeping its start time; the editor applies them as word
+    fixes (nothing is saved here)."""
+    from ..studio import script
+
+    own_clip(db, user, clip_id)
+    db.close()
+    try:
+        times = [round(float(w["t"]), 2) for w in body.words]
+        converted = script.convert([str(w.get("w", ""))[:40] for w in body.words], body.script)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(422, str(exc))
+    except script.Unavailable as exc:
+        raise HTTPException(503, str(exc))
+    return {"script": body.script, "words": [{"t": t, "w": w} for t, w in zip(times, converted)]}
+
+
+FONT_FILES = {"Anton-Regular.ttf", "Mukta-ExtraBold.ttf"}
+
+
+@router.get("/fonts/{name}")
+def font(name: str):
+    """The bundled fonts, for the editor's preview of captions (open fonts; no sign-in needed)."""
+    from ..studio.render import FONTS
+
+    if name not in FONT_FILES:
+        raise HTTPException(404, "Not found.")
+    return FileResponse(FONTS / name, media_type="font/ttf", headers={"Cache-Control": "public, max-age=604800"})
 
 
 @router.get("/media/studio/{clip_id}/{name}")

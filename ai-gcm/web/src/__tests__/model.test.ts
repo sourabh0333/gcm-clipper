@@ -99,3 +99,27 @@ describe("layouts and zoom controls (M3.4)", () => {
     expect(toggleZoom(fewer, 12).zooms.map((z) => [z.t, z.scale])).toEqual([[12, 1.3], [35, 1.3]]);
   });
 });
+
+describe("hook and captions (M3.5)", () => {
+  const words = [{ t: 10, end: 10.5, w: "bhai" }, { t: 10.6, end: 11, w: "ekdum" }, { t: 11.1, end: 11.6, w: "gaali" },
+                 { t: 11.7, end: 12.2, w: "clutch" }, { t: 25, end: 25.4, w: "cut" }];
+  const talk = { ...edit, segments: [{ start: 10, end: 20, speed: 1 }], captions: { on: true, words: [] } };
+
+  it("chunks words through the cuts like captions.py, with fixes", async () => {
+    const { captionChunks, fixWord, wordsInParts } = await import("../studio/model");
+    expect(captionChunks(talk, words).map((c) => c.text)).toEqual(["bhai ekdum", "gaali clutch"]);   // 1.4 s per chunk
+    const fixed = fixWord(fixWord(talk, words[0], "भाई"), words[2], "");
+    expect(captionChunks(fixed, words).map((c) => c.text)).toEqual(["भाई ekdum", "clutch"]);
+    expect(wordsInParts(fixed, words).map((w) => w.shown)).toEqual(["भाई", "ekdum", "", "clutch"]);   // 25 s is cut
+    expect(fixWord(fixed, words[0], "bhai").captions.words).toEqual([{ t: 11.1, w: "" }]);           // back to spoken
+  });
+
+  it("puts the hook where edit.py does", async () => {
+    const { hookBox, templateLayout } = await import("../studio/model");
+    const cam: [number, number, number, number] = [0, 0.6, 0.3, 0.4];
+    expect(hookBox(templateLayout("band", 1280, 720, cam))).toEqual([0, 420]);
+    expect(hookBox(templateLayout("split", 1280, 720, cam))).toEqual([500, 260]);
+    expect(hookBox(templateLayout("blur", 1280, 720, null))).toEqual([206, 420]);
+    expect(hookBox(templateLayout("native", 720, 1280, null))).toEqual([110, 360]);
+  });
+});

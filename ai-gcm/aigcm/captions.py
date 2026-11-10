@@ -14,7 +14,7 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,Nirmala UI,78,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,6,2,2,60,60,{margin_v},1
+Style: Caption,{font},78,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,6,2,2,60,60,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -39,8 +39,8 @@ def chunk_words(words):
             for c in chunks]
 
 
-def to_ass(chunks, margin_v):
-    lines = [ASS_HEADER.format(margin_v=margin_v)]
+def to_ass(chunks, margin_v, font="Nirmala UI"):
+    lines = [ASS_HEADER.format(margin_v=margin_v, font=font)]
     for c in chunks:
         text = c["text"].replace("{", "(").replace("}", ")").upper()
         lines.append(f"Dialogue: 0,{_stamp(c['start'])},{_stamp(c['end'])},Caption,,0,0,0,,{text}")

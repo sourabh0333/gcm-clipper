@@ -8,7 +8,7 @@ from sqlalchemy import DateTime, bindparam, select, text
 from ..db.models import Edit, Render, utcnow
 from ..jobs import read_json
 from . import window as win
-from .edit import EditData, default_edit
+from .edit import EditData, default_edit, is_talk
 
 KEEP_VERSIONS = 20
 POSTER_W = 270          # library posters: 270x480 JPEGs of about 15 KB, two to a row on a phone
@@ -45,9 +45,12 @@ def engine_clip(folder, clip_key):
     return next((c for c in read_json(Path(folder) / "ranked.json", []) if c.get("id") == clip_key), {})
 
 
-def has_captions(folder, clip_key):
-    chunks = read_json(Path(folder) / "captions" / f"{clip_key}.json", {}) or {}
-    return bool(chunks.get("chunks")) and (Path(folder) / "transcript.json").exists()
+def has_captions(folder, clip):
+    """Word captions start switched on for talk clips that have a transcript."""
+    return is_talk(clip.type, (clip.details or {}).get("labels")) and (Path(folder) / "transcript.json").exists()
+
+
+
 
 
 def stream_facecam(settings, clip):
@@ -64,7 +67,7 @@ def default_for(settings, clip, window=None):
     span = (window["start"], window["end"]) if window else None
     return default_edit(clip.start_s, clip.end_s, width, height, clip.title,
                         engine_clip(folder, clip.clip_key).get("events") or (),
-                        captions=has_captions(folder, clip.clip_key), window=span,
+                        captions=has_captions(folder, clip), window=span,
                         facecam=stream_facecam(settings, clip))
 
 
@@ -83,7 +86,12 @@ def editor_extras(settings, clip, details):
     from . import facecam
 
     cam = facecam.for_stream(folder) or {}
+    transcript = read_json(folder / "transcript.json") or {}
+    words = [{"t": round(w["start"], 2), "end": round(w["end"], 2), "w": w["word"].strip()}
+             for seg in transcript.get("segments", []) if seg.get("end", 0) > lo and seg.get("start", 0) < hi
+             for w in seg.get("words", []) if lo <= w["start"] <= hi]
     return {"events": shown, "anchor": anchor, "facecam": cam.get("box"), "facecam_source": cam.get("source"),
+            "words": words,
             "presets": win.length_presets(clip.start_s, clip.end_s, anchor, events, lo, hi)}
 
 

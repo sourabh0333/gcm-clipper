@@ -17,6 +17,8 @@ MAX_SEGMENTS = 40
 KILL_KINDS = ("self_kill",)
 ZOOM_MERGE_S = 2.0        # kills closer than this share one zoom
 FACECAM_H = 760           # the split layout's camera band, as the engine's render.py had it
+# Clip types that are about what was said: they get word captions by default (plan section 4.4).
+TALK_TYPES = {"funny", "banter", "rage", "hype", "wholesome", "story", "talk", "reaction"}
 BAND_H = 420              # the band layout's black hook band
 
 
@@ -72,8 +74,15 @@ class Hook(Strict):
     on: bool = False
 
 
+class WordFix(Strict):
+    t: float                                  # the word's start in the transcript (source seconds)
+    w: str = Field("", max_length=40)         # what to show instead; empty hides the word
+
+
 class Captions(Strict):
     on: bool = False
+    script: Literal["auto", "latin", "devanagari"] = "auto"
+    words: list[WordFix] = Field(default_factory=list, max_length=800)
 
 
 class EditData(Strict):
@@ -169,6 +178,25 @@ def template_layout(template, width, height, facecam=None):
                   panels=[Panel(role="game", src=full, dst=(0, (H - game_h) // 2, W, game_h))])
 
 
+def hook_box(layout):
+    """Where the hook sits on the canvas, (y, height): in the black band when there is one; at the foot
+    of the camera band in "split" (so it covers neither the face nor the kill counters); above the
+    gameplay in "blur"; near the top of a vertical stream's own layout."""
+    if layout.band_h:
+        return 0, layout.band_h
+    if layout.template == "split":
+        return FACECAM_H - 260, 260
+    if layout.template == "blur":
+        game_top = min((p.dst[1] for p in layout.panels if p.role == "game"), default=H // 3)
+        height = min(420, max(160, game_top - 140))
+        return max(0, game_top - height - 30), height
+    return 110, 360
+
+
+def is_talk(kind, labels=None):
+    return kind in TALK_TYPES or bool((labels or {}).get("talk"))
+
+
 def kill_zooms(events, start, end):
     """One zoom per kill (kills close together share one), for landscape sources."""
     times = sorted(e["t"] for e in events or () if e.get("kind") in KILL_KINDS and start <= e["t"] <= end)
@@ -194,6 +222,6 @@ def default_edit(start, end, width, height, title=None, events=(), captions=Fals
         segments=[Segment(start=round(start, 3), end=round(end, 3))],
         layout=layout,
         zooms=[] if vertical else kill_zooms(events, start, end),
-        hook=Hook(text=(title or "")[:80]),
+        hook=Hook(text=(title or "")[:80], on=bool((title or "").strip())),
         captions=Captions(on=bool(captions)),
     )

@@ -158,19 +158,39 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
                                render.CAPTION_MARGIN.get(layout, 380))
 
     def render_stage(job):
+        """Each clip is cut by the studio renderer from its default edit (M3 review S-R8): the swipe video
+        is already the Short the creator would post (layout, camera, zoom on kills, hook, captions), and
+        the studio and the engine can't drift apart."""
+        from .studio import facecam, hook
+        from .studio import render as studio_render
+        from .studio.edit import default_edit, is_talk, template_layout
+
         info = read_json(job.path("info.json"))
         ranked = read_json(job.path("ranked.json"))
         out_dir = job.path("clips")
         out_dir.mkdir(exist_ok=True)
         done = read_json(job.path("clips.json"), {})
+        said = read_json(job.path("transcript.json")) if use_captions else None
+        cam = list(settings.facecam) if settings.facecam else (facecam.for_stream(job.root, info["path"]) or {}).get("box")
         for clip in ranked:
             if clip["id"] in done and (out_dir / done[clip["id"]]).exists():
                 continue
-            ass = job.path("captions", f"{clip['id']}.ass")
-            done[clip["id"]] = render.render_clip(info["path"], clip, info, settings, out_dir, ass)
+            edit = default_edit(clip["start"], clip["end"], info["width"], info["height"], clip.get("title"),
+                                clip.get("events") or (), captions=bool(said) and is_talk(clip.get("type"), clip.get("labels")),
+                                facecam=cam)
+            if settings.layout in ("blur", "split", "native"):
+                edit = edit.model_copy(update={"layout": template_layout(settings.layout, info["width"], info["height"], cam)})
+            picture = hook.for_edit(job.path("studio", "hooks"), edit)
+            name = f"{clip['rank']:02d}_{clip['type']}_{clip['id']}.mp4"
+            studio_render.render(edit, info["path"], 0.0, info.get("has_audio", True), out_dir / name, transcript=said,
+                                 threads=8, hook_png=picture)
+            done[clip["id"]] = name
             if settings.sponsor_safe and clip.get("mute_spans"):
-                done[clip["id"] + "_safe"] = render.render_clip(info["path"], clip, info, settings, out_dir, ass,
-                                                                mute=clip["mute_spans"])
+                safe = f"{clip['rank']:02d}_{clip['type']}_{clip['id']}_safe.mp4"
+                studio_render.render(edit, info["path"], 0.0, info.get("has_audio", True), out_dir / safe,
+                                     transcript=said, threads=8, hook_png=picture,
+                                     mute_spans=studio_render.output_mute(edit, clip["start"], clip["mute_spans"]))
+                done[clip["id"] + "_safe"] = safe
             write_json(job.path("clips.json"), done)
 
     def review_stage(job):

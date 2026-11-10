@@ -211,3 +211,13 @@ h2 { font-size: 1.1rem; margin: 1.4rem 0 0.6rem; }
 .camcorner { position: absolute; width: 26px; height: 26px; background: var(--accent); border-radius: 50%; touch-action: none; }
 .camcorner.tl { left: -13px; top: -13px; cursor: nwse-resize; }
 .camcorner.br { right: -13px; bottom: -13px; cursor: nwse-resize; }
+
+/* Text and captions tools (M3.5) */
+.edpanel { display: flex; flex-direction: column; gap: 8px; }
+.edpanel .chip { min-height: 34px; background: transparent; }
+.edpanel .chip.on { color: #1a1200; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+.emojis { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 4px; max-height: 136px; overflow-y: auto; }
+.emojis button { min-height: 40px; padding: 0; font-size: 1.35rem; background: transparent; border-color: transparent; }
+.wordlist { display: flex; flex-wrap: wrap; gap: 6px; max-height: 180px; overflow-y: auto; }
+.wordlist .word { min-height: 34px; padding: 0.25rem 0.6rem; font-size: 0.9rem; }
+.wordlist .word.fixed { border-color: var(--accent); color: var(--accent); }

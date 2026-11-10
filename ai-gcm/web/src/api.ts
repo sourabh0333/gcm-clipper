@@ -91,12 +91,14 @@ export type EditData = {
   layout: { template: Template; background: "blur" | "black"; band_h?: number; panels: Panel[] };
   zooms: { t: number; dur: number; scale: number }[];
   hook: { text: string; color: "white" | "yellow"; on: boolean };
-  captions: { on: boolean };
+  captions: { on: boolean; script?: "auto" | "latin" | "devanagari"; words?: WordFix[] };
   cover_t: number | null;
   sponsor_safe: boolean;
   keep_hud?: boolean;
 };
 export type Template = "native" | "blur" | "band" | "split";
+export type WordFix = { t: number; w: string };
+export type Word = { t: number; end: number; w: string };
 export type Box = [number, number, number, number];
 export type StudioWindow = {
   status: "ready" | "preparing" | "failed" | "none" | "missing";
@@ -131,6 +133,7 @@ export type Studio = {
     anchor: number | null;
     facecam: Box | null;
     facecam_source: "auto" | "manual" | null;
+    words: Word[];
     presets: { moment: [number, number]; full_fight: [number, number]; suggested: "moment" | "full_fight" };
   } | null;
   exports: RenderJob[];

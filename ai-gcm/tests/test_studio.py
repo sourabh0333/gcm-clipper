@@ -45,7 +45,8 @@ def test_default_edit_keeps_vertical_streams_and_zooms_landscape_kills():
     assert landscape.layout.template == "blur"
     assert landscape.layout.panels[0].dst == (0, 656, 1080, 608)
     assert [z.t for z in landscape.zooms] == [20.0, 30.0]   # 21 s shares the first zoom; 90 s is outside
-    assert landscape.hook.text == "3 FINISHES" and not landscape.hook.on
+    assert landscape.hook.text == "3 FINISHES" and landscape.hook.on      # the title becomes the hook
+    assert not E.default_edit(10, 40, 1920, 1080).hook.on                 # no title, no hook
     clipped = E.default_edit(10, 40, 1920, 1080, window=(15.0, 35.0))
     assert (clipped.segments[0].start, clipped.segments[0].end) == (15.0, 35.0)
 
@@ -357,3 +358,131 @@ def test_a_camera_box_set_by_hand_is_remembered_for_the_stream(studio_app):
     assert owner.put(f"/api/clips/{clip['id']}/edit", json={"base_version": 0, "data": data}, headers=APP).status_code == 200
     assert F.for_stream(folder) == {"box": [0.05, 0.6, 0.3, 0.35], "source": "manual"}
     assert owner.get(f"/api/clips/{clip['id']}/studio").json()["editor"]["facecam"] == [0.05, 0.6, 0.3, 0.35]
+
+
+# --- M3.5: hook, captions, the engine's clips ------------------------------------------------------------
+
+def test_hook_tokens_keep_bundled_emoji_and_drop_the_rest():
+    from aigcm.studio import hook as K
+
+    assert K.tokens("1v4 🔥🤣 done") == [("text", "1v4 "), ("emoji", "🔥"), ("emoji", "🤣"), ("text", " done")]
+    assert K.tokens("love ❤️ it") == [("text", "love "), ("emoji", "❤"), ("text", " it")]   # variation selector
+    assert K.tokens("odd 🪿 bird") == [("text", "odd  bird")]                               # not bundled: dropped
+    assert K.has_devanagari("लास्ट ज़ोन") and not K.has_devanagari("LAST ZONE")
+    assert K.cache_name("A 🔥", "yellow", 420) != K.cache_name("A 🔥", "white", 420)
+
+
+@needs_ffmpeg
+def test_hook_image_has_colour_emoji_and_fits(tmp_path):
+    import cv2
+    import numpy as np
+    from aigcm.studio import hook as K
+
+    out = K.render("3 FINISHES 1 FIGHT 🔥", "yellow", 420, tmp_path / "h.png")
+    image = cv2.imread(str(out), cv2.IMREAD_UNCHANGED)
+    assert image.shape == (420, 1080, 4)
+    ink = image[..., 3] > 0
+    assert ink.any() and not ink[:10].any() and not ink[-10:].any()        # inside the box with a margin
+    b, g, r = (image[..., i].astype(int) for i in range(3))
+    orange = (r > 200) & (g > 60) & (g < 190) & (b < 80) & ink             # the fire emoji's orange
+    yellow = (r > 230) & (g > 200) & (b < 60) & ink                        # the text
+    assert orange.sum() > 500 and yellow.sum() > 2000
+    assert not ((r > 240) & (g < 20) & (b > 240) & ink).any()              # no placeholder magenta left
+    assert K.render("   ", "white", 420, tmp_path / "e.png") is None
+    hindi = K.render("लास्ट ज़ोन में क्लच 😎", "white", 420, tmp_path / "hi.png")
+    assert cv2.imread(str(hindi), cv2.IMREAD_UNCHANGED)[..., 3].any()
+    assert K.cached(tmp_path, "A 🔥", "yellow", 300) == K.cached(tmp_path, "A 🔥", "yellow", 300)
+
+
+def test_caption_word_fixes_and_talk_defaults():
+    from aigcm.studio import render as R
+
+    transcript = {"segments": [{"start": 10, "end": 13, "words": [
+        {"start": 10.0, "end": 10.5, "word": " bhai"}, {"start": 10.6, "end": 11.0, "word": " ekdum"},
+        {"start": 11.1, "end": 11.6, "word": " gaali"}, {"start": 11.7, "end": 12.2, "word": " clutch"}]}]}
+    edit = E.default_edit(10, 13, 1280, 720, captions=True)
+    edit = edit.model_copy(update={"captions": E.Captions(on=True, words=[E.WordFix(t=10.0, w="भाई"),
+                                                                         E.WordFix(t=11.1, w="")])})
+    chunks = R.caption_chunks(edit, transcript)
+    assert " ".join(c["text"] for c in chunks) == "भाई ekdum clutch"
+    assert E.is_talk("funny") and E.is_talk("fight", {"talk": "banter"}) and not E.is_talk("multi_kill", {})
+    with pytest.raises(ValueError):
+        E.Captions(words=[{"t": 1, "w": "x" * 41}])
+
+
+def test_hook_sits_where_it_covers_neither_face_nor_counters():
+    band = E.template_layout("band", 1280, 720, (0, 0.6, 0.3, 0.4))
+    split = E.template_layout("split", 1280, 720, (0, 0.6, 0.3, 0.4))
+    blur = E.template_layout("blur", 1280, 720)
+    native = E.template_layout("native", 720, 1280)
+    assert E.hook_box(band) == (0, 420)
+    y, h = E.hook_box(split)
+    assert y + h <= E.FACECAM_H and y > E.FACECAM_H / 2          # the foot of the camera band
+    y, h = E.hook_box(blur)
+    assert y + h <= blur.panels[0].dst[1]                        # above the gameplay
+    assert E.hook_box(native) == (110, 360)
+
+
+@needs_ffmpeg
+def test_export_with_hook_and_captions(tmp_path):
+    from aigcm.media import probe
+    from aigcm.studio import hook as K
+    from aigcm.studio import render as R
+
+    src = tmp_path / "land.mp4"
+    subprocess.run([ffmpeg(), "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=s=640x360:r=15:d=6",
+                    "-f", "lavfi", "-i", "sine=d=6", "-c:v", "libx264", "-preset", "ultrafast", "-g", "15",
+                    "-c:a", "aac", "-shortest", str(src)], check=True)
+    transcript = {"segments": [{"start": 1, "end": 4, "words": [
+        {"start": 1.2, "end": 1.6, "word": "hello"}, {"start": 1.7, "end": 2.2, "word": "लास्ट"}]}]}
+    edit = E.default_edit(1, 5, 640, 360, title="TEST 🔥", captions=True)
+    edit = edit.model_copy(update={"layout": E.template_layout("band", 640, 360)})
+    picture = K.cached(tmp_path / "hooks", edit.hook.text, edit.hook.color, E.hook_box(edit.layout)[1])
+    out = R.render(edit, src, 0.0, True, tmp_path / "out.mp4", transcript=transcript, threads=2, hook_png=picture)
+    assert probe(out)["duration"] == pytest.approx(4, abs=0.1)
+    import cv2
+    cap = cv2.VideoCapture(str(out))
+    cap.set(cv2.CAP_PROP_POS_MSEC, 500)
+    ok, frame = cap.read()
+    band = frame[:420]
+    assert ok and band.mean() > 3                       # the hook is drawn in the black band
+
+
+def test_studio_api_draws_hooks_serves_fonts_and_converts_words(studio_app, monkeypatch):
+    from aigcm.studio import script
+
+    owner = client_for(studio_app, "owner@example.com")
+    clip = first_clip(owner)
+    assert owner.get("/fonts/Mukta-ExtraBold.ttf").status_code == 200
+    assert owner.get("/fonts/Anton.otf").status_code == 404                 # only the two bundled fonts
+    for sneaky in ("/fonts/..%2F..%2F.env", "/fonts/../../.env"):           # never reach the route: the web app answers
+        reply = owner.get(sneaky)
+        assert "font" not in reply.headers.get("content-type", "") and "GOOGLE" not in reply.text
+    assert owner.post(f"/api/clips/{clip['id']}/hook", json={"text": "x" * 81}, headers=APP).status_code == 422
+    if ffmpeg():
+        url = owner.post(f"/api/clips/{clip['id']}/hook", json={"text": "WIN 🏆"}, headers=APP).json()["url"]
+        assert url and owner.get(url).headers["content-type"] == "image/png"
+        assert client_for(studio_app, "b@example.com").get(url).status_code == 404
+        assert owner.post(f"/api/clips/{clip['id']}/hook", json={"text": "  "}, headers=APP).json()["url"] is None
+    assert owner.get(f"/media/studio/{clip['id']}/hooks/..%2Fwindow.json").status_code == 404
+
+    monkeypatch.setattr(script, "convert", lambda words, target: [w.upper() for w in words])
+    body = {"script": "latin", "words": [{"t": 1.234, "w": "bhai"}, {"t": 2, "w": "kya"}]}
+    got = owner.post(f"/api/clips/{clip['id']}/captions/convert", json=body, headers=APP).json()
+    assert got == {"script": "latin", "words": [{"t": 1.23, "w": "BHAI"}, {"t": 2.0, "w": "KYA"}]}
+
+    def unavailable(words, target):
+        raise script.Unavailable("no key")
+    monkeypatch.setattr(script, "convert", unavailable)
+    assert owner.post(f"/api/clips/{clip['id']}/captions/convert", json=body, headers=APP).status_code == 503
+
+
+def test_script_conversion_needs_a_key(monkeypatch):
+    from aigcm.studio import script
+
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    assert script.convert([], "latin") == []
+    with pytest.raises(script.Unavailable):
+        script.convert(["bhai"], "latin")
+    with pytest.raises(ValueError):
+        script.convert(["bhai"], "tamil")

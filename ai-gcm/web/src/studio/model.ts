@@ -1,7 +1,7 @@
 // The editor's arithmetic, kept apart from the screen so it can be tested. It mirrors the server:
 // aigcm/studio/edit.py (time mapping, limits) and aigcm/studio/render.py (zoom, panel crops), so the
 // preview shows what the export will be.
-import type { Box, EditData, Panel, Segment, Template } from "../api";
+import type { Box, EditData, Panel, Segment, Template, Word } from "../api";
 
 export const W = 1080;
 export const H = 1920;
@@ -150,6 +150,71 @@ export function templateLayout(template: Template, width: number, height: number
   }
   return { template: "blur", background: "blur", band_h: 0,
            panels: [{ role: "game", src: full, dst: [0, Math.floor((H - gameH) / 2), W, gameH] }] };
+}
+
+/** Where the hook sits, [y, height] on the canvas: the same as edit.py's hook_box. */
+export function hookBox(layout: EditData["layout"]): [number, number] {
+  if (layout.band_h) return [0, layout.band_h];
+  if (layout.template === "split") return [FACECAM_H - 260, 260];
+  if (layout.template === "blur") {
+    const tops = layout.panels.filter((p) => p.role === "game").map((p) => p.dst[1]);
+    const gameTop = tops.length ? Math.min(...tops) : Math.floor(H / 3);
+    const height = Math.min(420, Math.max(160, gameTop - 140));
+    return [Math.max(0, gameTop - height - 30), height];
+  }
+  return [110, 360];
+}
+
+/** Caption lines sit this far up from the bottom (render.py's CAPTION_MARGIN). */
+export const CAPTION_MARGIN: Record<string, number> = { native: 560, blur: 380, band: 380, split: 260 };
+const WORDS_PER_CHUNK = 3;
+const MAX_CHUNK_S = 1.4;
+
+export type Chunk = { start: number; end: number; text: string };
+
+/** The spoken words inside the parts, with the creator's fixes, in output time. */
+export function captionWords(edit: EditData, words: Word[]): { start: number; end: number; w: string; t: number }[] {
+  const fixes = new Map((edit.captions.words ?? []).map((f) => [Math.round(f.t * 100), f.w]));
+  const out = [];
+  for (const word of words) {
+    const text = fixes.get(Math.round(word.t * 100)) ?? word.w;
+    if (!text.trim()) continue;
+    const start = toOutput(edit.segments, word.t);
+    const end = toOutput(edit.segments, word.end);
+    if (start !== null && end !== null && end > start) out.push({ start, end, w: text, t: word.t });
+  }
+  return out.sort((a, b) => a.start - b.start);
+}
+
+/** A few words at a time, as captions.py's chunk_words cuts them. */
+export function captionChunks(edit: EditData, words: Word[]): Chunk[] {
+  const chunks: Chunk[] = [];
+  let current: { start: number; end: number; w: string }[] = [];
+  const flush = () => {
+    if (current.length) chunks.push({ start: current[0].start, end: current[current.length - 1].end,
+                                      text: current.map((w) => w.w.trim()).join(" ") });
+    current = [];
+  };
+  for (const w of captionWords(edit, words)) {
+    if (current.length && (current.length >= WORDS_PER_CHUNK || w.end - current[0].start > MAX_CHUNK_S)) flush();
+    current.push(w);
+  }
+  flush();
+  return chunks;
+}
+
+/** Words in the parts that the editor lists for fixing: each with its fix applied (or hidden). */
+export function wordsInParts(edit: EditData, words: Word[]): (Word & { shown: string })[] {
+  const fixes = new Map((edit.captions.words ?? []).map((f) => [Math.round(f.t * 100), f.w]));
+  return words.filter((w) => toOutput(edit.segments, w.t) !== null)
+              .map((w) => ({ ...w, shown: fixes.get(Math.round(w.t * 100)) ?? w.w }));
+}
+
+/** Set (or clear, when it equals the spoken word) the fix for the word starting at t. */
+export function fixWord(edit: EditData, word: Word, text: string): EditData {
+  const others = (edit.captions.words ?? []).filter((f) => Math.round(f.t * 100) !== Math.round(word.t * 100));
+  const words = text === word.w ? others : [...others, { t: word.t, w: text.slice(0, 40) }].sort((a, b) => a.t - b.t);
+  return { ...edit, captions: { ...edit.captions, words } };
 }
 
 export function cameraBox(edit: EditData): Box | null {

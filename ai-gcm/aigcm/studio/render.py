@@ -8,15 +8,19 @@ stays in place (tested in the M3 review, S-R6). Captions are burned from an ASS 
 version silences the flagged words. No user text ever enters the filter graph (S-R11)."""
 
 import os
+import shutil
 import tempfile
 from pathlib import Path
 
 from ..jobs import log
 from ..media import run, tool
 from ..safety import mute_filter
-from .edit import H, W, span_to_output, to_output
+from .edit import H, W, hook_box, span_to_output, to_output
+
+CAPTION_FONT = "Mukta ExtraBold"   # bundled in assets/fonts; has both Latin and Devanagari
 
 FPS = 30
+FONTS = Path(__file__).resolve().parents[2] / "assets" / "fonts"
 ZOOM_IN_S = 0.25
 ZOOM_OUT_S = 0.35
 ZOOM_LEAD_S = 0.4      # the zoom starts this long before the kill
@@ -54,7 +58,7 @@ def _panel_lines(i, panel, zoom, keep_hud):
             f"[pg{i}][hud{i}]overlay=0:0[p{i}]"]
 
 
-def build_graph(edit, input_start, has_audio, captions_name=None, mute=()):
+def build_graph(edit, input_start, has_audio, captions_name=None, mute=(), hook_input=None):
     """The -filter_complex text. `input_start` is the source time of the input's first frame (after any
     `-ss`), so the parts are trimmed relative to it; zooms stay in source time. `mute` is output-time spans
     to silence."""
@@ -93,7 +97,12 @@ def build_graph(edit, input_start, has_audio, captions_name=None, mute=()):
         lines.extend(_panel_lines(i, panel, zoom, edit.keep_hud))
         lines.append(f"{base}[p{i}]overlay={panel.dst[0]}:{panel.dst[1]}[o{i}]")
         base = f"[o{i}]"
-    tail = f",subtitles={captions_name}" if captions_name else ""
+    if hook_input is not None:
+        y, _ = hook_box(layout)
+        lines.append(f"[{hook_input}:v]format=rgba[hook]")
+        lines.append(f"{base}[hook]overlay=0:{y}:eof_action=repeat[withhook]")
+        base = "[withhook]"
+    tail = f",subtitles={captions_name}:fontsdir=fonts" if captions_name else ""
     lines.append(f"{base}null{tail},format=yuv420p[v]")
     if has_audio:
         silence = f"{mute_filter(mute)}," if mute else ""
@@ -102,15 +111,20 @@ def build_graph(edit, input_start, has_audio, captions_name=None, mute=()):
 
 
 def caption_chunks(edit, transcript):
-    """Caption chunks in output time: the words spoken inside each part, timed through the cuts."""
+    """Caption chunks in output time: the words spoken inside each part, timed through the cuts, with
+    the creator's word fixes (keyed by the word's start time) applied."""
     from ..captions import chunk_words
 
+    fixes = {round(f.t, 2): f.w for f in edit.captions.words}
     words = []
     for seg in transcript.get("segments", []) if transcript else []:
         for w in seg.get("words", []):
+            text = fixes.get(round(w["start"], 2), w["word"])
+            if not text.strip():
+                continue
             start, end = to_output(edit.segments, w["start"]), to_output(edit.segments, w["end"])
             if start is not None and end is not None and end > start:
-                words.append(dict(w, start=start, end=end))
+                words.append(dict(w, word=text, start=start, end=end))
     words.sort(key=lambda w: w["start"])
     return chunk_words(words)
 
@@ -123,8 +137,10 @@ def output_mute(edit, clip_start, spans):
     return out
 
 
-def render(edit, window_file, window_start, has_audio, out_path, transcript=None, mute_spans=(), threads=3):
-    """Render `edit` from the window file (time 0 = source time `window_start`) into out_path."""
+def render(edit, window_file, window_start, has_audio, out_path, transcript=None, mute_spans=(), threads=3,
+           hook_png=None):
+    """Render `edit` from the window file (time 0 = source time `window_start`) into out_path, with the
+    hook image (from hook.py) laid over its box when given."""
     from ..captions import to_ass
 
     out_path = Path(out_path)
@@ -137,11 +153,15 @@ def render(edit, window_file, window_start, has_audio, out_path, transcript=None
             if chunks:
                 captions_name = "captions.ass"
                 margin = CAPTION_MARGIN.get(edit.layout.template, 380)
-                (Path(tmp) / captions_name).write_text(to_ass(chunks, margin), encoding="utf-8")
-        graph = build_graph(edit, window_start + seek, has_audio, captions_name, mute_spans)
+                (Path(tmp) / captions_name).write_text(to_ass(chunks, margin, CAPTION_FONT), encoding="utf-8")
+                shutil.copytree(FONTS, Path(tmp) / "fonts")
+        hook_input = 1 if hook_png else None
+        graph = build_graph(edit, window_start + seek, has_audio, captions_name, mute_spans, hook_input)
         partial = out_path.with_name(out_path.stem + ".part.mp4")
-        cmd = [tool("ffmpeg"), "-v", "error", "-y", "-ss", f"{seek:.3f}", "-i", str(Path(window_file).resolve()),
-               "-filter_complex", graph, "-filter_complex_threads", str(threads), "-map", "[v]"]
+        cmd = [tool("ffmpeg"), "-v", "error", "-y", "-ss", f"{seek:.3f}", "-i", str(Path(window_file).resolve())]
+        if hook_png:
+            cmd += ["-i", str(Path(hook_png).resolve())]
+        cmd += ["-filter_complex", graph, "-filter_complex_threads", str(threads), "-map", "[v]"]
         if has_audio:
             cmd += ["-map", "[a]", "-c:a", "aac", "-b:a", "128k"]
         cmd += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-r", str(FPS), "-threads", str(threads),

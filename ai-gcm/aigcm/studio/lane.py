@@ -46,6 +46,12 @@ def plan_prepare(settings, session, render):
     return task
 
 
+def _hook(edit, folder):
+    from . import hook
+
+    return hook.for_edit(folder, edit)
+
+
 def plan_export(settings, session, render):
     clip = session.get(Clip, render.clip_id)
     target = project.clip_folder(settings, clip)
@@ -66,6 +72,7 @@ def plan_export(settings, session, render):
     spans = (clip.details or {}).get("mute_spans") if safe else None
     name = export_name(clip.clip_key, version, render.id, safe)
     clip_start = clip.start_s
+    hooks_folder = target / "hooks"   # worked out now: the task runs after this session has closed
 
     def task(threads):
         from .render import output_mute, render as render_edit
@@ -74,7 +81,8 @@ def plan_export(settings, session, render):
         out_dir = folder / EXPORTS
         out_dir.mkdir(exist_ok=True)
         render_edit(edit, target / "window.mkv", details["start"], details["has_audio"], out_dir / name,
-                    transcript=transcript, mute_spans=output_mute(edit, clip_start, spans), threads=threads)
+                    transcript=transcript, mute_spans=output_mute(edit, clip_start, spans), threads=threads,
+                    hook_png=_hook(edit, hooks_folder))
         return name
     return task
 

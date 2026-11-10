@@ -3,14 +3,24 @@ import { Link, useParams } from "react-router";
 import { api, type Box, type EditData, type RenderJob, type Studio, type Template } from "../api";
 import { clock } from "../format";
 import {
-  addPart, applyPreset, cameraBox, outputLength, partAt, problems, removePart, setSpeed, setZoomStrength, SPEEDS, split,
-  templateLayout, toggleZoom, toOutput, trim, ZOOM_STRENGTHS, zoomStrength,
+  addPart, applyPreset, cameraBox, captionChunks, type Chunk, fixWord, hookBox, outputLength, partAt, problems, removePart,
+  setSpeed, setZoomStrength, SPEEDS, split, templateLayout, toggleZoom, toOutput, trim, wordsInParts, ZOOM_STRENGTHS,
+  zoomStrength,
 } from "../studio/model";
 import CamBox from "../studio/CamBox";
-import { drawFrame, PREVIEW_H, PREVIEW_W } from "../studio/preview";
+import { CAPTION_FONT, drawFrame, PREVIEW_H, PREVIEW_W } from "../studio/preview";
 import Timeline, { TIMELINE_PAD } from "../studio/Timeline";
 
 const POLL_MS = 2000;
+const HOOK_DELAY_MS = 450;   // draw the hook once typing pauses
+// The emoji bundled in assets/emoji (the hook draws only these, in colour).
+const EMOJI = [0x1f525, 0x1f631, 0x1f602, 0x1f923, 0x1f62d, 0x1f621, 0x1f92f, 0x1f480, 0x1f451, 0x1f3af, 0x1f3c6, 0x26a1,
+  0x1f4a5, 0x1f680, 0x1f60e, 0x1f921, 0x1f440, 0x1f608, 0x1f64f, 0x2764, 0x1f4af, 0x2705, 0x274c, 0x26a0, 0x1f3ae, 0x1f52b,
+  0x1f4a3, 0x1fa78, 0x1f624, 0x1f975, 0x1f976, 0x1f633, 0x1f914, 0x1f44f, 0x1f91d, 0x1f4aa, 0x1fae1, 0x1f410, 0x1f981,
+  0x1f40d, 0x1f357, 0x1f414, 0x1f947, 0x1f389, 0x1f4c8, 0x23f1, 0x1f9e0, 0x1f64c, 0x1f605, 0x1f62c, 0x1f60f, 0x1f92b,
+  0x1f5ff, 0x1f47b, 0x2620, 0x1f62e, 0x1f972, 0x1f606, 0x1fae3, 0x1f534, 0x1f381, 0x1f447, 0x1f446].map((c) => String.fromCodePoint(c));
+const TOOLS = [["cut", "Cut"], ["layout", "Layout"], ["zoom", "Zoom"], ["text", "Text"], ["captions", "Captions"]] as const;
+type Tool = (typeof TOOLS)[number][0];
 const TEMPLATES: [Template, string][] = [["native", "As streamed"], ["blur", "Blur fill"], ["band", "Hook band"], ["split", "Camera on top"]];
 const DEFAULT_CAMERA: Box = [0.02, 0.6, 0.3, 0.38];
 const ZOOMS = [4, 6, 10, 16, 24];   // timeline pixels per second
@@ -38,8 +48,11 @@ export default function Editor() {
   const [job, setJob] = useState<RenderJob | null>(null);
   const [shareFile, setShareFile] = useState<File | null>(null);
   const [cursor, setCursor] = useState(0);
-  const [tool, setTool] = useState<"cut" | "layout" | "zoom">("cut");
+  const [tool, setTool] = useState<Tool>("cut");
   const [placing, setPlacing] = useState<{ box: Box; template: Template } | null>(null);
+  const [converting, setConverting] = useState(false);
+  const hookImage = useRef<HTMLImageElement | null>(null);
+  const chunks = useRef<Chunk[]>([]);
 
   const video = useRef<HTMLVideoElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -89,7 +102,7 @@ export default function Editor() {
     const current = editRef.current;
     if (!v || !ctx || !current) return;
     const t = cursorRef.current;
-    drawFrame(ctx, v, current, t);
+    drawFrame(ctx, v, current, t, { hook: hookImage.current, chunks: chunks.current });
     if (playhead.current) playhead.current.style.left = `${TIMELINE_PAD + (t - lo) * pps}px`;
     if (timeLabel.current) {
       const out = toOutput(current.segments, t);
@@ -98,6 +111,47 @@ export default function Editor() {
   }, [lo, pps]);
 
   useEffect(() => { paint(); }, [edit, paint, cursor]);
+
+  // Captions: the same chunks the export burns in, from the transcript's words and the creator's fixes.
+  const words = studio?.editor?.words;
+  useEffect(() => {
+    chunks.current = edit && words ? captionChunks(edit, words) : [];
+    paint();
+  }, [edit, words, paint]);
+
+  // The bundled caption font, so the preview's captions look like the export's.
+  useEffect(() => {
+    if (typeof FontFace === "undefined" || !document.fonts) return;
+    new FontFace(CAPTION_FONT, "url(/fonts/Mukta-ExtraBold.ttf)").load()
+      .then((face) => { document.fonts.add(face); paint(); }).catch(() => {});
+  }, [paint]);
+
+  // The hook: drawn by the server (the same image the export uses), shortly after typing stops.
+  const hookText = edit?.hook.text ?? "";
+  const hookColor = edit?.hook.color ?? "yellow";
+  const hookOn = edit?.hook.on ?? false;
+  const hookHeight = edit ? hookBox(edit.layout)[1] : 0;
+  const hookBacking = edit ? !edit.layout.band_h : false;
+  useEffect(() => {
+    if (!hookOn || !hookText.trim()) {
+      hookImage.current = null;
+      paint();
+      return;
+    }
+    let live = true;
+    const timer = window.setTimeout(() => {
+      api<{ url: string | null }>(`/api/clips/${id}/hook`, { body: { text: hookText, color: hookColor, box_h: hookHeight, backing: hookBacking } })
+        .then(({ url }) => {
+          if (!live) return;
+          if (!url) { hookImage.current = null; paint(); return; }
+          const image = new Image();
+          image.onload = () => { if (live) { hookImage.current = image; paint(); } };
+          image.src = url;
+        })
+        .catch((err) => setMessage((err as Error).message));
+    }, HOOK_DELAY_MS);
+    return () => { live = false; window.clearTimeout(timer); };
+  }, [id, hookText, hookColor, hookOn, hookHeight, hookBacking, paint]);
 
   // Open (and zoom) with the playhead in view: the saved footage starts a minute or more before the clip.
   const ready = studio?.window.status === "ready";
@@ -347,11 +401,96 @@ export default function Editor() {
                 }} />
 
       <div className="chips tooltabs" role="tablist">
-        {(["cut", "layout", "zoom"] as const).map((t) => (
+        {TOOLS.map(([t, label]) => (
           <button key={t} role="tab" aria-selected={tool === t} className={tool === t ? "chip on" : "chip"}
-                  onClick={() => setTool(t)}>{t === "cut" ? "Cut" : t === "layout" ? "Layout" : "Zoom"}</button>
+                  onClick={() => setTool(t)}>{label}</button>
         ))}
       </div>
+
+      {tool === "text" && (
+        <div className="edpanel">
+          <div className="row">
+            <button className={edit.hook.on ? "chip on" : "chip"}
+                    onClick={() => commit({ ...edit, hook: { ...edit.hook, on: !edit.hook.on } })}>
+              Hook {edit.hook.on ? "on" : "off"}
+            </button>
+            {(["yellow", "white"] as const).map((c) => (
+              <button key={c} className={edit.hook.color === c ? "chip on" : "chip"}
+                      onClick={() => commit({ ...edit, hook: { ...edit.hook, color: c, on: true } })}>
+                {c === "yellow" ? "Yellow" : "White"}
+              </button>
+            ))}
+          </div>
+          <input value={edit.hook.text} maxLength={80} aria-label="Hook text" placeholder="1V4 LAST ZONE 😱"
+                 onChange={(e) => setEdit({ ...edit, hook: { ...edit.hook, text: e.target.value, on: true } })}
+                 onFocus={() => { dragBase.current = edit; }}
+                 onBlur={() => {
+                   const base = dragBase.current;
+                   dragBase.current = null;
+                   if (base && base.hook.text !== editRef.current?.hook.text) {
+                     setPast((p) => [...p.slice(-49), base]);
+                     setFuture([]);
+                   }
+                 }} />
+          {studio.clip.titles.length > 0 && (
+            <div className="chips" aria-label="Suggested hooks">
+              {studio.clip.titles.map((t) => (
+                <button key={t} className="chip" onClick={() => commit({ ...edit, hook: { ...edit.hook, text: t, on: true } })}>{t}</button>
+              ))}
+            </div>
+          )}
+          <div className="emojis" aria-label="Add an emoji">
+            {EMOJI.map((e) => (
+              <button key={e} onClick={() => commit({ ...edit, hook: { ...edit.hook, text: `${edit.hook.text.trimEnd()} ${e}`.slice(0, 80), on: true } })}>
+                {e}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tool === "captions" && (
+        <div className="edpanel">
+          <div className="row">
+            <button className={edit.captions.on ? "chip on" : "chip"}
+                    onClick={() => commit({ ...edit, captions: { ...edit.captions, on: !edit.captions.on } })}>
+              Captions {edit.captions.on ? "on" : "off"}
+            </button>
+            <button className="chip" disabled={converting || !(edit.captions.words ?? []).length}
+                    onClick={() => commit({ ...edit, captions: { ...edit.captions, script: "auto", words: [] } })}>As spoken</button>
+            {(["latin", "devanagari"] as const).map((script) => (
+              <button key={script} className={edit.captions.script === script ? "chip on" : "chip"} disabled={converting}
+                      onClick={async () => {
+                        const listed = wordsInParts(edit, studio.editor!.words);
+                        if (!listed.length) { setMessage("No words were heard in this clip."); return; }
+                        setConverting(true);
+                        try {
+                          const result = await api<{ words: { t: number; w: string }[] }>(`/api/clips/${id}/captions/convert`,
+                            { body: { script, words: listed.map((w) => ({ t: w.t, w: w.w })) } });
+                          commit({ ...edit, captions: { on: true, script, words: result.words } });
+                        } catch (err) {
+                          setMessage((err as Error).message);
+                        } finally {
+                          setConverting(false);
+                        }
+                      }}>
+                {script === "latin" ? "Hinglish" : "हिंदी"}
+              </button>
+            ))}
+          </div>
+          {converting && <p className="small muted">Converting with Gemini…</p>}
+          <p className="small muted">Tap a word to fix it; clear it to hide it.</p>
+          <div className="wordlist">
+            {wordsInParts(edit, studio.editor.words).map((w) => (
+              <button key={w.t} className={w.shown !== w.w ? "word fixed" : "word"} onClick={() => {
+                const next = window.prompt(`Change "${w.shown}" to:`, w.shown);
+                if (next !== null) commit(fixWord(edit, w, next.trim()));
+              }}>{w.shown || "∅"}</button>
+            ))}
+            {wordsInParts(edit, studio.editor.words).length === 0 && <span className="small muted">No words were heard in this clip.</span>}
+          </div>
+        </div>
+      )}
 
       {placing && video.current && (
         <CamBox video={video.current} box={placing.box} onCancel={() => setPlacing(null)}
