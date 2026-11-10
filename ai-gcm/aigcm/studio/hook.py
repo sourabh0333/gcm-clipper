@@ -71,7 +71,7 @@ def placeholder_colour(k):
     return 255, 0, 255 - 28 * k     # R, G, B
 
 
-def build_ass(parts, font, size, colour, box_h, placeholder):
+def build_ass(parts, font, size, colour, box_h, placeholder, width=W):
     """An ASS script drawing the hook centred in a W x box_h box; each emoji is a square drawing in its
     own placeholder colour (to be found) or fully transparent (to be filled with the image)."""
     side = round(size * 0.92)
@@ -89,7 +89,7 @@ def build_ass(parts, font, size, colour, box_h, placeholder):
     spacing = 0 if has_devanagari("".join(v for kind, v in parts if kind == "text")) else 1
     return f"""[Script Info]
 ScriptType: v4.00+
-PlayResX: {W}
+PlayResX: {width}
 PlayResY: {box_h}
 WrapStyle: 0
 ScaledBorderAndShadow: yes
@@ -184,9 +184,9 @@ def add_backing(image):
     return np.clip(over(image.astype(np.float32), backing), 0, 255).astype(np.uint8)
 
 
-def render(text, colour, box_h, out_path, backing=False):
-    """Draw the hook into out_path (a W x box_h RGBA PNG), on a dark backing if asked. Returns out_path,
-    or None for an empty hook."""
+def render(text, colour, box_h, out_path, backing=False, width=W, start_size=None):
+    """Draw the hook into out_path (a width x box_h RGBA PNG; 1080 wide for Shorts, 1920 for a compilation's
+    title cards), on a dark backing if asked. Returns out_path, or None for an empty hook."""
     import cv2
     import numpy as np
 
@@ -196,23 +196,23 @@ def render(text, colour, box_h, out_path, backing=False):
     script = "devanagari" if has_devanagari(text) else "latin"
     font = DEVANAGARI_FONT if script == "devanagari" else LATIN_FONT
     emojis = [value for kind, value in parts if kind == "emoji"]
-    size = START_SIZE[script]
+    size = start_size or START_SIZE[script]
     with tempfile.TemporaryDirectory(prefix="kaatclip_hook_") as tmp:
         folder = Path(tmp)
         for _ in range(MAX_TRIES):
-            probe = _draw(build_ass(parts, font, size, colour, box_h, True), box_h, folder, "probe")
+            probe = _draw(build_ass(parts, font, size, colour, box_h, True, width), box_h, folder, "probe", width)
             boxes = _emoji_boxes(probe, len(emojis))
             lines = max(1, round(_ink_height(probe) / (size * 1.25)))
             if _ink_height(probe) <= box_h - 2 * MARGIN_Y and lines <= 2 and len(boxes) == len(emojis):
                 break
             size = round(size * SHRINK)
-        final = _draw(build_ass(parts, font, size, colour, box_h, False), box_h, folder, "final")
+        final = _draw(build_ass(parts, font, size, colour, box_h, False, width), box_h, folder, "final", width)
         for (x, y, w, h), ch in zip(boxes, emojis):
             pic = cv2.imread(str(emoji_file(ch)), cv2.IMREAD_UNCHANGED)
             side = max(w, h)
             pic = cv2.resize(pic, (side, side), interpolation=cv2.INTER_AREA)
             x0, y0 = max(0, x + (w - side) // 2), max(0, y + (h - side) // 2)
-            x1, y1 = min(W, x0 + side), min(box_h, y0 + side)
+            x1, y1 = min(width, x0 + side), min(box_h, y0 + side)
             region = final[y0:y1, x0:x1].astype(np.float32)
             src = pic[: y1 - y0, : x1 - x0].astype(np.float32)
             final[y0:y1, x0:x1] = np.clip(over(src, region), 0, 255).astype(np.uint8)
@@ -225,17 +225,17 @@ def render(text, colour, box_h, out_path, backing=False):
     return out_path
 
 
-def cache_name(text, colour, box_h, backing=False):
-    key = f"{VERSION}|{text.strip()}|{colour}|{box_h}|{int(bool(backing))}".encode("utf-8")
+def cache_name(text, colour, box_h, backing=False, width=W):
+    key = f"{VERSION}|{text.strip()}|{colour}|{box_h}|{int(bool(backing))}|{width}".encode("utf-8")
     return hashlib.sha256(key).hexdigest()[:20] + ".png"
 
 
-def cached(folder, text, colour, box_h, backing=False):
+def cached(folder, text, colour, box_h, backing=False, width=W, start_size=None):
     """The hook PNG for these settings in `folder`, drawn once and kept; None for an empty hook."""
-    path = Path(folder) / cache_name(text, colour, box_h, backing)
+    path = Path(folder) / cache_name(text, colour, box_h, backing, width)
     if path.exists():
         return path
-    return render(text, colour, box_h, path, backing)
+    return render(text, colour, box_h, path, backing, width, start_size)
 
 
 def for_edit(folder, edit):

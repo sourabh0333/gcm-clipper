@@ -82,7 +82,10 @@ export default function Library() {
   const facets = page?.facets;
   return (
     <>
-      <h1>Library</h1>
+      <div className="spread">
+        <h1>Library</h1>
+        <Link to="/compilation" className="button">Weekly compilation</Link>
+      </div>
       <input type="search" placeholder="Search what was said or the title" value={query}
              onChange={(e) => setQuery(e.target.value)} aria-label="Search clips" />
       <div className="chips" role="group" aria-label="Filters">

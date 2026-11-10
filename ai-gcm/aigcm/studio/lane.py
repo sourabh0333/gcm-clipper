@@ -9,7 +9,7 @@ import shutil
 from pathlib import Path
 
 from ..db.models import Clip, Render, Stream, utcnow
-from ..jobs import log, read_json
+from ..jobs import log, read_json, write_json
 from . import project
 from . import window as win
 from .edit import EditData, check_window
@@ -227,7 +227,80 @@ def plan_thumbs(settings, session, render):
     return task
 
 
-PLANNERS = {"prepare": plan_prepare, "export": plan_export, "posters": plan_posters, "thumbs": plan_thumbs}
+COMPILATIONS = "_compilations"
+
+
+def compilation_folder(jobs_dir, user_id, render_id):
+    return Path(jobs_dir) / COMPILATIONS / str(int(user_id)) / Path(render_id).name
+
+
+def plan_compilation(settings, session, render):
+    """A weekly compilation from the creator's chosen clips, in their order: the video, three thumbnails, three
+    titles and a description with chapters (M3.8)."""
+    from .. import titles
+    from . import brand, compile, facecam, hook
+    from .thumbs import Moment, make_set
+
+    params = render.params or {}
+    short = params.get("format") == "short"
+    clips = {c.id: c for c in session.query(Clip).filter(Clip.id.in_(params.get("clip_ids") or [])).all()
+             if c.stream.user_id == render.user_id}
+    pieces, edits, cams, events_by_job = [], {}, {}, {}
+    for clip_id in params.get("clip_ids") or []:
+        clip = clips.get(clip_id)
+        piece = compile.piece_for(settings, clip, short) if clip else None
+        if piece is None:
+            continue
+        pieces.append(piece)
+        folder = project.job_folder(settings, clip)
+        events_by_job[piece.job_dir] = (read_json(folder / "vision.json", {}) or {}).get("events") or []
+        cams[piece.job_dir] = (facecam.for_stream(folder) or {}).get("box")
+        if short:
+            edit = project.default_for(settings, clip)
+            edits[clip.id] = (edit, None if not edit.hook.on else (folder, edit))
+    if len(pieces) < 2:
+        raise RuntimeError("At least two of the chosen clips need footage on the laptop.")
+    out_dir = compilation_folder(settings.jobs_dir, render.user_id, render.id)
+    kills = sum(p.kills for p in pieces)
+    dinners = sum(1 for p in pieces for e in events_by_job[p.job_dir]
+                  if e.get("kind") == "dinner" and p.start <= e["t"] <= p.end)
+    talk = next((clips[p.clip_id].title for p in pieces if p.talk and clips[p.clip_id].title), None)   # a real title only
+    names = titles.long_titles(kills, dinners, "BEST OF THE WEEK", talk)
+    words = titles.thumb_words(kills, dinners, [clips[p.clip_id].type for p in pieces])
+    chapter_lines = compile.chapters(pieces)
+    kit = project.kit_for(next(iter(clips.values())))
+    engine_text = "Chapters:\n" + "\n".join(chapter_lines) + "\n\n" + titles.KRAFTON_LINE
+    post = brand.post_text(names[0], engine_text, ["#bgmi"], kit)
+    best = next((p for p in reversed(pieces) if not p.talk), pieces[0])
+    moments = []
+    for p in pieces:
+        for e in events_by_job[p.job_dir]:
+            if e.get("kind") == "self_kill" and p.start <= e["t"] <= p.end:
+                moments.append(Moment(Path(p.video), e["t"] + 0.3 - p.offset, "kill", score=p.kills))
+                moments.append(Moment(Path(p.video), min(p.end, e["t"] + 2.0) - p.offset, "reaction", score=p.kills))
+    if not moments:
+        moments = [Moment(Path(p.video), (p.start + p.end) / 2 - p.offset, "kill") for p in pieces]
+    transcripts = {p.job_dir: read_json(Path(settings.jobs_dir) / p.job_dir / "transcript.json") for p in pieces}
+
+    def task(threads):
+        out_dir.mkdir(parents=True, exist_ok=True)
+        if short:
+            ready = {}
+            for clip_id, (edit, hook_job) in edits.items():
+                picture = hook.for_edit(out_dir / "hooks", edit) if hook_job else None
+                ready[clip_id] = (edit, picture)
+            compile.render_short(pieces, out_dir, ready, transcripts, threads)
+        else:
+            compile.render_wide(pieces, out_dir, transcripts, threads)
+        make_set(moments, cams.get(best.job_dir), words, out_dir)
+        compile.save_plan(out_dir, pieces, "short" if short else "wide", names, chapter_lines)
+        write_json(out_dir / "post.json", post)
+        return render.id
+    return task
+
+
+PLANNERS = {"prepare": plan_prepare, "export": plan_export, "posters": plan_posters, "thumbs": plan_thumbs,
+            "compilation": plan_compilation}
 
 
 def run(settings, sessions, render_id, threads):

@@ -11,6 +11,7 @@ function clip(id: number) {
 }
 
 let urls: string[] = [];
+const clipLinks = () => screen.getAllByRole("link").filter((a) => a.getAttribute("href")?.startsWith("/clips/"));
 
 beforeEach(() => {
   urls = [];
@@ -41,11 +42,11 @@ describe("library", () => {
     );
     expect(await screen.findByText("45 clips")).toBeTruthy();
     expect(urls[0]).toContain("decision=keep");
-    expect(screen.getAllByRole("link")).toHaveLength(40);
-    expect(screen.getAllByRole("link")[0].getAttribute("href")).toBe("/clips/1/studio");
+    expect(clipLinks()).toHaveLength(40);
+    expect(clipLinks()[0].getAttribute("href")).toBe("/clips/1/studio");
 
     fireEvent.click(screen.getByText("Load more"));
-    await waitFor(() => expect(screen.getAllByRole("link")).toHaveLength(45));
+    await waitFor(() => expect(clipLinks()).toHaveLength(45));
     expect(urls.at(-1)).toContain("offset=40");
 
     fireEvent.click(screen.getByText("Edited"));

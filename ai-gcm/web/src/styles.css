@@ -238,3 +238,20 @@ textarea { font: inherit; width: 100%; padding: 0.7rem 0.8rem; border-radius: 10
 .thumbsbox .thumbgrid img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; display: block; }
 .thumbsbox .titlerow { padding: 6px 0; border-top: 1px solid var(--line); gap: 8px; }
 .thumbsbox .titlerow button { min-height: 34px; padding: 0.2rem 0.7rem; flex: none; }
+
+/* Weekly compilation (M3.8) */
+.compilelist { display: flex; flex-direction: column; gap: 6px; }
+.compilerow { display: grid; grid-template-columns: auto 44px 1fr auto; gap: 10px; align-items: center; padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; opacity: 0.6; }
+.compilerow.on { opacity: 1; border-color: #3a3f4d; background: var(--panel); }
+.compilerow input { width: 22px; height: 22px; min-height: 0; }
+.compilerow img { width: 44px; height: 78px; object-fit: cover; border-radius: 6px; background: #000; }
+.compiletext { min-width: 0; }
+.compiletext .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compilemove { display: flex; flex-direction: column; gap: 4px; }
+.compilemove button { min-height: 32px; padding: 0 10px; }
+.compiled video { width: 100%; border-radius: 10px; background: #000; margin-top: 8px; }
+.compiled .thumbgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 8px 0; }
+.compiled .thumbgrid img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; display: block; }
+.compiled .titlerow { padding: 6px 0; border-top: 1px solid var(--line); gap: 8px; }
+.compiled .titlerow button { min-height: 34px; padding: 0.2rem 0.7rem; flex: none; }
+.description { white-space: pre-wrap; background: #11131a; padding: 10px; border-radius: 8px; max-height: 240px; overflow: auto; }
