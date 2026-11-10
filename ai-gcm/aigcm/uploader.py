@@ -398,9 +398,15 @@ def check(settings, sessions, http, post_id, notify=None, now=None):
             elif approved_at and now - approved_at > PROCESSING_LIMIT:
                 changes["thumbnail"] = "not set: YouTube was still processing the video"
         if status == "scheduled" and publish_at and publish_at <= now:
+            moved = _parse(state.get("publishAt"))
             if state.get("privacyStatus") == "public":
                 changes.update(status="posted", posted_at=now)
                 event = "posted"
+            elif moved is not None and moved > now:
+                changes["publish_at"] = moved          # the creator moved it in YouTube Studio: follow YouTube
+            elif state.get("privacyStatus") == "private" and moved is None:
+                return _fail(sessions, post_id, "Its schedule was removed in YouTube Studio, so it stays private.",
+                             notify)
             elif now - publish_at > LATE_LIMIT:
                 return _fail(sessions, post_id, "YouTube didn't make it public at the planned time. Check it in "
                                                 "YouTube Studio.", notify)

@@ -197,6 +197,24 @@ def test_still_private_long_after_its_time_fails_loudly(app, yt_fake):
     assert "didn't make it public" in post_row(app, post_id).error
 
 
+def test_a_time_moved_in_studio_is_followed(app, yt_fake):
+    post_id, _ = approved_post(app, minutes=60)
+    run(app, yt_fake)
+    http = httpx.Client(transport=httpx.MockTransport(yt_fake.handler))
+    publish_at = post_row(app, post_id).publish_at
+    later_at = publish_at + timedelta(days=1)
+    yt_fake.metadata[-1]["status"]["publishAt"] = later_at.isoformat() + "Z"     # moved a day later in Studio
+    assert uploader.check(app.state.settings, app.state.sessions, http, post_id,
+                          now=publish_at + timedelta(hours=3)) == "thumbnail"     # not posted, not failed
+    row = post_row(app, post_id)
+    assert row.status == "scheduled" and row.publish_at == later_at
+
+    del yt_fake.metadata[-1]["status"]["publishAt"]                               # schedule removed in Studio
+    assert uploader.check(app.state.settings, app.state.sessions, http, post_id,
+                          now=later_at + timedelta(minutes=5)) == "failed"
+    assert "schedule was removed" in post_row(app, post_id).error
+
+
 def test_a_dropped_connection_resumes_where_it_stopped(app, yt_fake):
     post_id, _ = approved_post(app)
     yt_fake.fail_put = {2}
