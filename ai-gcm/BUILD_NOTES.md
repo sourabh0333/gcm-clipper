@@ -151,7 +151,8 @@ Reviewed before any code: [plans/M3 Studio plan.md](../plans/M3%20Studio%20plan.
 5. Owner: watch 20 top BGMI Shorts and note zoom, speed-ups, added music, facecam on top, text band (M3 plan section 5), before M3.4.
 6. Owner: try the editor on the phone (Library → a kept clip → Open editor): trim, split, speed up, Export, Share. Say what feels slow or fiddly.
 7. Owner: set up the brand kit on the phone (Settings → Brand kit): name, UPI ID, Instagram, logo; the next stream's clips carry it.
-8. M3.10 phone check: every M3 done-when on the owner's phone over the Funnel address (editor re-cut and Share in under a minute, layouts, hook and captions, brand kit, covers and thumbnails, a weekly compilation, the music warning). Then M3 is done and M4 (plan and post to YouTube) is reviewed. New streams now take about 4 minutes longer to cut (the studio renderer); worth a look at speed if it bothers the owner.
+8. M3.10 phone check: every M3 done-when on the owner's phone over the Funnel address (editor re-cut and Share in under a minute, layouts, hook and captions, brand kit, covers and thumbnails, a weekly compilation, the music warning).
+9. M4 reviewed 10 Nov: [plans/M4 Plan and post plan.md](../plans/M4%20Plan%20and%20post%20plan.md) (11 findings: uploads have their own 100-a-day bucket at 1 unit; uploads are no longer forced private, so private plus publishAt is always set; only the narrow scopes youtube.upload, youtube.readonly, yt-analytics.readonly; approval uploads at once and YouTube publishes on time; testing-mode tokens last 7 days; no blanket standing consent; Google's check needs a domain of our own). Owner: a test YouTube channel, then turning on the two APIs, the scopes and test users in Google Cloud (guided). Next: M4.1 Connect YouTube. New streams now take about 4 minutes longer to cut (the studio renderer); worth a look at speed if it bothers the owner.
 
 ## Known slow spots
 
