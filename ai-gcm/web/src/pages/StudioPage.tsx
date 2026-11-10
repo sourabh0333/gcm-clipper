@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router";
-import { api, type PostText, type RenderJob, type Studio } from "../api";
+import { Link, useNavigate, useParams } from "react-router";
+import { api, type Post, type PostText, type RenderJob, type Studio } from "../api";
 import { clock } from "../format";
 
 const POLL_MS = 3000;
@@ -20,6 +20,7 @@ async function shareVideo(url: string, name: string) {
 // and the current edit exports to a finished Short. The full editor (timeline, trim, layouts) is M3.3.
 export default function StudioPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [studio, setStudio] = useState<Studio | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -149,7 +150,11 @@ export default function StudioPage() {
               <video src={job.video} controls playsInline preload="metadata" style={{ marginTop: 8 }}
                      poster={job.cover ?? undefined} />
               <div className="row" style={{ marginTop: 8 }}>
-                <a className="button primary" href={`${job.video}?download=1`}>Download</a>
+                <button className="primary" onClick={() => api<Post>("/api/posts", { body: { render_id: job.id } })
+                  .then((post) => navigate(`/posts/${post.id}`), (err) => setError((err as Error).message))}>
+                  Post to YouTube
+                </button>
+                <a className="button" href={`${job.video}?download=1`}>Download</a>
                 {job.cover && <a className="button" href={`${job.cover}?download=1`}>Cover image</a>}
                 <button onClick={() => shareVideo(job.video!, name).catch((err) => setError((err as Error).message))}>
                   Share

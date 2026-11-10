@@ -11,7 +11,8 @@ function Running([string]$Pattern) {
 }
 
 # The key that encrypts creators' YouTube tokens: made once, kept in .env, never shown.
-& $Python -m aigcm.manage token-key | Out-Null
+Push-Location $Root
+try { & $Python -m aigcm.manage token-key | Out-Null } finally { Pop-Location }
 
 if (Running "aigcm\.api") { Write-Host "The API is already running." }
 else {

@@ -10,6 +10,8 @@ export default function StreamPage() {
   const [stream, setStream] = useState<StreamSummary | null>(null);
   const [clips, setClips] = useState<Clip[]>([]);
   const [error, setError] = useState("");
+  const [link, setLink] = useState<string | null>(null);
+  const [linkNote, setLinkNote] = useState("");
 
   const load = useCallback(async () => {
     const s = await api<StreamSummary>(`/api/streams/${id}`);
@@ -42,6 +44,17 @@ export default function StreamPage() {
       if (action === "resume") window.setTimeout(load, 1500);
     } catch (err) {
       setError((err as Error).message);
+    }
+  }
+
+  async function saveLink() {
+    try {
+      const saved = await api<{ link: string | null }>(`/api/streams/${id}/link`, { method: "PUT", body: { link: link ?? "" } });
+      setStream((s) => s && { ...s, link: saved.link });
+      setLink(null);
+      setLinkNote(saved.link ? "Saved. New posts from this stream start with it." : "Link removed.");
+    } catch (err) {
+      setLinkNote((err as Error).message);
     }
   }
 
@@ -114,6 +127,16 @@ export default function StreamPage() {
 
       {stream.status === "done" && (
         <>
+          <h2>Stream link</h2>
+          <div className="card">
+            <div className="small muted">The stream on YouTube. Posts from its clips start with "Full stream: link".</div>
+            <div className="row" style={{ marginTop: 8, flexWrap: "nowrap" }}>
+              <input aria-label="Stream link" placeholder="https://youtube.com/live/…" value={link ?? stream.link ?? ""}
+                     onChange={(e) => setLink(e.target.value)} />
+              <button disabled={link === null} onClick={saveLink}>Save</button>
+            </div>
+            {linkNote && <p className="small">{linkNote}</p>}
+          </div>
           {clips.length > 0 && id && <Thumbnails streamId={id} />}
           <h2>Kept ({kept.length})</h2>
           {kept.length === 0 && <p className="muted small">Clips you keep show up here.</p>}

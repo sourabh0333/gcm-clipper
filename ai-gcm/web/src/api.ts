@@ -39,12 +39,37 @@ export type YouTubeChannel = {
 };
 export type YouTubeState = { available: boolean; channels: YouTubeChannel[] };
 
+export type PostStatus = "draft" | "approved" | "uploading" | "scheduled" | "posted" | "failed" | "cancelled";
+export type Post = {
+  id: string;
+  status: PostStatus;
+  kind: string;
+  clip_id: number | null;
+  clip_title: string | null;
+  stream_id: string | null;
+  render_id: string | null;
+  video: string | null;
+  cover: string | null;
+  channel: { id: string; title: string; thumbnail: string | null; status: string } | null;
+  title: string;
+  description: string;
+  tags: string[];
+  mode: "schedule" | "now";
+  publish_at: string | null;
+  approved_at: string | null;
+  video_id: string | null;
+  error: string | null;
+  updated_at: string;
+  created_at: string;
+};
+
 export type StreamSummary = {
   id: string;
   title: string;
   game: string;
   status: "uploading" | "queued" | "running" | "stopped" | "done" | "failed";
   recorded_on: string | null;
+  link: string | null;
   duration_s: number | null;
   size_bytes: number | null;
   error: string | null;

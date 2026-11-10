@@ -17,6 +17,18 @@ export function bytes(n: number | null | undefined): string {
   return n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(1)} GB` : `${Math.round(n / 1024 ** 2)} MB`;
 }
 
+// A post's time in the creator's own clock: "Tue 11 Nov, 7:00 pm".
+export function when(iso: string | null | undefined): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleString("en-IN", { weekday: "short", day: "numeric", month: "short", hour: "numeric",
+                                                 minute: "2-digit" });
+}
+
+export const POST_LABEL: Record<string, string> = {
+  draft: "draft", approved: "approved", uploading: "uploading", scheduled: "scheduled", posted: "posted",
+  failed: "failed", cancelled: "cancelled",
+};
+
 export const STATUS_LABEL: Record<string, string> = {
   uploading: "Uploading",
   queued: "Waiting",

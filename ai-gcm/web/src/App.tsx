@@ -9,6 +9,8 @@ import Live from "./pages/Live";
 import NewStream from "./pages/NewStream";
 import Review from "./pages/Review";
 import Settings from "./pages/Settings";
+import PostPage from "./pages/PostPage";
+import Posts from "./pages/Posts";
 import SignIn from "./pages/SignIn";
 import StreamPage from "./pages/StreamPage";
 import StudioPage from "./pages/StudioPage";
@@ -59,6 +61,8 @@ export default function App() {
           <Route path="/clips/:id/edit" element={<Editor />} />
           <Route path="/live" element={<Live />} />
           <Route path="/settings" element={<Settings me={me} />} />
+          <Route path="/posts" element={<Posts />} />
+          <Route path="/posts/:id" element={<PostPage />} />
           <Route path="/brand" element={<Brand />} />
           <Route path="/compilation" element={<Compilation />} />
           <Route path="*" element={<p>Page not found. <NavLink to="/">Back to your streams</NavLink></p>} />
@@ -67,6 +71,7 @@ export default function App() {
       {!reviewing && <nav className="tabs">
         <NavLink to="/" end><span className="icon">🎬</span>Streams</NavLink>
         <NavLink to="/library"><span className="icon">📚</span>Library</NavLink>
+        <NavLink to="/posts"><span className="icon">📅</span>Posts</NavLink>
         <NavLink to="/live"><span className="icon">🔴</span>Live</NavLink>
         <NavLink to="/settings"><span className="icon">⚙️</span>Settings</NavLink>
       </nav>}

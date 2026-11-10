@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/streams")
 
 def stream_summary(stream, db=None, jobs_dir=None):
     out = {"id": stream.id, "title": stream.title, "game": stream.game, "status": stream.status,
-           "recorded_on": stream.recorded_on, "duration_s": stream.duration_s, "size_bytes": stream.size_bytes,
+           "recorded_on": stream.recorded_on, "link": stream.link, "duration_s": stream.duration_s, "size_bytes": stream.size_bytes,
            "error": stream.error, "stopping": stream.stop_requested, "created_at": stream.created_at.isoformat(),
            "clips": len(stream.clips), "kept": sum(c.decision == "keep" for c in stream.clips),
            "reviewed": sum(c.decision is not None for c in stream.clips)}

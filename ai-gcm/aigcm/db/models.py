@@ -93,6 +93,7 @@ class Stream(Base):
     error: Mapped[str | None] = mapped_column(Text)
     stop_requested: Mapped[bool] = mapped_column(Boolean, default=False)
     live_session_id: Mapped[str | None] = mapped_column(ForeignKey("live_sessions.id", ondelete="SET NULL"))
+    link: Mapped[str | None] = mapped_column(String(200))   # the stream on YouTube, for "Full stream:" in posts
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     queued_at: Mapped[datetime | None] = mapped_column(DateTime)
     started_at: Mapped[datetime | None] = mapped_column(DateTime)
@@ -199,6 +200,35 @@ class YouTubeChannel(Base):
     settings: Mapped[dict] = mapped_column(JSON, default=dict)  # made_for_kids, synthetic: the creator's answers
     connected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     checked_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Post(Base):
+    """A post to YouTube (M4.2). Editable while a draft; Approve freezes it and stores exactly what was approved
+    in `approval` (the uploader posts that and nothing else). Status: draft, approved, uploading, scheduled,
+    posted, failed, cancelled."""
+    __tablename__ = "posts"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=lambda: new_id("po"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    clip_id: Mapped[int | None] = mapped_column(ForeignKey("clips.id", ondelete="CASCADE"), index=True)
+    render_id: Mapped[str | None] = mapped_column(ForeignKey("renders.id", ondelete="SET NULL"))
+    channel_id: Mapped[str | None] = mapped_column(ForeignKey("youtube_channels.id", ondelete="SET NULL"))
+    kind: Mapped[str] = mapped_column(String(8), default="short")
+    title: Mapped[str] = mapped_column(String(100), default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+    tags: Mapped[list] = mapped_column(JSON, default=list)
+    mode: Mapped[str] = mapped_column(String(8), default="schedule")    # schedule (private + publishAt) or now
+    publish_at: Mapped[datetime | None] = mapped_column(DateTime)        # UTC
+    status: Mapped[str] = mapped_column(String(12), default="draft", index=True)
+    approval: Mapped[dict | None] = mapped_column(JSON)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime)
+    video_id: Mapped[str | None] = mapped_column(String(32))
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    clip: Mapped["Clip | None"] = relationship()
+    channel: Mapped["YouTubeChannel | None"] = relationship()
 
 
 class BrandKitRow(Base):

@@ -1,0 +1,259 @@
+"""Posts and approvals (M4.2): "Post this?" from an export, edited as a draft, then approved one by one or as an
+explicit list. Approving records exactly what the creator saw (aigcm.posting.approval_record); nothing reaches
+the uploader (M4.3) without it. See plans/M4 Plan and post plan.md (P-R5, decisions 2-4)."""
+
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+
+from .. import posting
+from ..db.models import AuditEntry, Post, Render, YouTubeChannel, utcnow
+from ..studio import brand, lane, project
+from .clips import own_clip
+from .deps import current_user, get_db, own_stream
+
+router = APIRouter()
+
+
+def stamp(value):
+    return value.isoformat() + "Z" if value else None
+
+
+def post_view(post):
+    clip = post.clip
+    return {"id": post.id, "status": post.status, "kind": post.kind, "clip_id": post.clip_id,
+            "clip_title": (clip.title if clip else None), "stream_id": clip.stream_id if clip else None,
+            "render_id": post.render_id, "video": f"/media/renders/{post.render_id}" if post.render_id else None,
+            "cover": f"/media/renders/{post.render_id}/cover" if post.render_id else None,
+            "channel": ({"id": post.channel.id, "title": post.channel.title, "thumbnail": post.channel.thumbnail,
+                         "status": post.channel.status} if post.channel else None),
+            "title": post.title, "description": post.description, "tags": post.tags or [],
+            "mode": post.mode, "publish_at": stamp(post.publish_at), "approved_at": stamp(post.approved_at),
+            "video_id": post.video_id, "error": post.error, "updated_at": stamp(post.updated_at),
+            "created_at": stamp(post.created_at)}
+
+
+def own_post(db, user, post_id):
+    post = db.get(Post, post_id)
+    if post is None or post.user_id != user.id:
+        raise HTTPException(404, "Not found.")
+    return post
+
+
+def first_title(text):
+    text = " ".join((text or "").split())
+    if len(text) <= posting.TITLE_MAX:
+        return text
+    cut = text[:posting.TITLE_MAX + 1].rsplit(" ", 1)[0]
+    return cut if len(cut) >= 40 else text[:posting.TITLE_MAX]
+
+
+def draft_text(db, clip):
+    """The first draft: the studio's post text (hook or title, the engine's and the kit's description and
+    hashtags), with the stream link on top when the creator has given it."""
+    saved = project.latest_edit(db, clip)
+    hook = (saved.data.get("hook") or {}).get("text") if saved else None
+    details = clip.details or {}
+    text = brand.post_text(hook or clip.title, details.get("description"), details.get("hashtags"), project.kit_for(clip))
+    description = text["description"]
+    link = clip.stream.link
+    if link and link not in description:
+        description = f"Full stream: {link}\n\n{description}" if description else f"Full stream: {link}"
+    title = text["title"] or clip.title or next(iter(details.get("titles") or []), None)
+    if not title:
+        from ..studio.compile import fallback_title
+        from ..studio.edit import is_talk
+
+        title = fallback_title(clip.type, 0, is_talk(clip.type, details.get("labels")), clip.spoken)
+    return first_title(title), description, posting.clean_tags(text["hashtags"])
+
+
+class NewPost(BaseModel):
+    render_id: str
+
+
+@router.post("/api/posts")
+def new_post(body: NewPost, request: Request, user=Depends(current_user), db=Depends(get_db)):
+    """A draft from a finished export (or the creator's open draft for it)."""
+    settings = request.app.state.settings
+    render = db.get(Render, body.render_id)
+    if render is None or render.user_id != user.id or render.kind != "export":
+        raise HTTPException(404, "Not found.")
+    clip = own_clip(db, user, render.clip_id)
+    if render.status != "done" or lane.export_path(settings, clip, render) is None:
+        raise HTTPException(409, "This export isn't finished yet.")
+    open_draft = db.scalar(select(Post).where(Post.render_id == render.id, Post.status == "draft"))
+    if open_draft is not None:
+        return post_view(open_draft)
+    channel = db.scalar(select(YouTubeChannel).where(YouTubeChannel.user_id == user.id, YouTubeChannel.status == "ok")
+                        .order_by(YouTubeChannel.connected_at))
+    title, description, tags = draft_text(db, clip)
+    post = Post(user_id=user.id, clip_id=clip.id, render_id=render.id, channel_id=channel.id if channel else None,
+                title=title, description=description, tags=tags)
+    db.add(post)
+    db.commit()
+    return post_view(post)
+
+
+@router.get("/api/posts")
+def list_posts(status: str | None = None, user=Depends(current_user), db=Depends(get_db)):
+    query = select(Post).where(Post.user_id == user.id)
+    if status:
+        query = query.where(Post.status.in_(status.split(",")))
+    rows = db.scalars(query.order_by(Post.publish_at.is_(None), Post.publish_at, Post.created_at.desc())).all()
+    return [post_view(p) for p in rows]
+
+
+@router.get("/api/posts/{post_id}")
+def get_post(post_id: str, user=Depends(current_user), db=Depends(get_db)):
+    return post_view(own_post(db, user, post_id))
+
+
+class PostEdit(BaseModel):
+    title: str = Field("", max_length=300)
+    description: str = Field("", max_length=20000)
+    tags: list[str] = Field(default_factory=list, max_length=60)
+    channel_id: str | None = None
+    mode: str = Field("schedule", pattern="^(schedule|now)$")
+    publish_at: datetime | None = None
+
+
+def utc(value):
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        raise HTTPException(422, "Send the time with its time zone.")
+    return value.astimezone(UTC).replace(tzinfo=None, microsecond=0)
+
+
+@router.put("/api/posts/{post_id}")
+def edit_post(post_id: str, body: PostEdit, user=Depends(current_user), db=Depends(get_db)):
+    """Change a draft. Limits are checked on Approve, so a half-written draft can still be saved."""
+    post = own_post(db, user, post_id)
+    if post.status != "draft":
+        raise HTTPException(409, "This post is approved; it can't be changed here any more.")
+    if body.channel_id is not None:
+        channel = db.get(YouTubeChannel, body.channel_id)
+        if channel is None or channel.user_id != user.id:
+            raise HTTPException(404, "Not found.")
+    post.title, post.description = body.title.strip()[:posting.TITLE_MAX * 3], body.description
+    post.tags, post.channel_id = posting.clean_tags(body.tags), body.channel_id
+    post.mode, post.publish_at = body.mode, utc(body.publish_at)
+    post.updated_at = utcnow()
+    db.commit()
+    return post_view(post)
+
+
+def approve_one(db, settings, user, post_id, seen):
+    """Approve one draft, if it is exactly the version the creator was shown (`seen` is its updated_at)."""
+    post = own_post(db, user, post_id)
+    if post.status != "draft":
+        raise posting.PostError("This post is already approved." if post.status in posting.LIVE_STATES
+                                else "Only drafts can be approved.")
+    if seen != stamp(post.updated_at):
+        raise posting.PostError("This post changed since you looked at it. Look again, then approve.")
+    channel = post.channel
+    if channel is None:
+        raise posting.PostError("Pick the channel to post to.")
+    if channel.status != "ok":
+        raise posting.PostError(f"Reconnect {channel.title} in Settings first.")
+    clip = post.clip
+    render = db.get(Render, post.render_id) if post.render_id else None
+    video = lane.export_path(settings, clip, render) if (clip and render and render.status == "done") else None
+    if video is None:
+        raise posting.PostError("The exported video is gone. Export the clip again.")
+    post.title = posting.check_text(post.title, post.description)
+    post.tags = posting.clean_tags(post.tags)
+    now = utcnow()
+    posting.check_time(post.mode, post.publish_at, now)
+    clash = db.scalar(select(Post).where(Post.clip_id == post.clip_id, Post.channel_id == post.channel_id,
+                                         Post.id != post.id, Post.status.in_(posting.LIVE_STATES)))
+    if clash is not None:
+        raise posting.PostError(f"This clip is already going to {channel.title}.")
+    post.approval = posting.approval_record(post, channel, video, now)
+    post.status, post.approved_at, post.updated_at, post.error = "approved", now, now, None
+    db.add(AuditEntry(user_id=user.id, action="post_approved", detail={"post": post.id, **post.approval}))
+    return post
+
+
+class Approve(BaseModel):
+    seen: str
+
+
+@router.post("/api/posts/{post_id}/approve")
+def approve(post_id: str, body: Approve, request: Request, user=Depends(current_user), db=Depends(get_db)):
+    try:
+        post = approve_one(db, request.app.state.settings, user, post_id, body.seen)
+    except posting.PostError as exc:
+        db.rollback()
+        raise HTTPException(409, str(exc)) from exc
+    db.commit()
+    return post_view(post)
+
+
+class BatchItem(BaseModel):
+    id: str
+    seen: str
+
+
+class Batch(BaseModel):
+    posts: list[BatchItem] = Field(min_length=1, max_length=50)
+
+
+@router.post("/api/posts/approve")
+def approve_many(body: Batch, request: Request, user=Depends(current_user), db=Depends(get_db)):
+    """Approve an explicit list the creator looked at; each post on its own, so one problem holds back only that one."""
+    approved, problems = [], []
+    for item in body.posts:
+        try:
+            post = approve_one(db, request.app.state.settings, user, item.id, item.seen)
+            db.commit()
+            approved.append(post_view(post))
+        except posting.PostError as exc:
+            db.rollback()
+            problems.append({"id": item.id, "error": str(exc)})
+        except HTTPException:
+            db.rollback()
+            problems.append({"id": item.id, "error": "Not found."})
+    return {"approved": approved, "problems": problems}
+
+
+@router.post("/api/posts/{post_id}/cancel")
+def cancel(post_id: str, user=Depends(current_user), db=Depends(get_db)):
+    """Take back an approval before the upload starts. After that the video is on YouTube: change it in Studio."""
+    post = own_post(db, user, post_id)
+    if post.status not in ("approved", "failed"):
+        raise HTTPException(409, "Only an approved post that hasn't uploaded yet can be cancelled."
+                            if post.status in ("uploading", "scheduled", "posted") else "Nothing to cancel.")
+    post.status, post.updated_at = "cancelled", utcnow()
+    db.add(AuditEntry(user_id=user.id, action="post_cancelled", detail={"post": post.id}))
+    db.commit()
+    return post_view(post)
+
+
+@router.delete("/api/posts/{post_id}")
+def delete_post(post_id: str, user=Depends(current_user), db=Depends(get_db)):
+    post = own_post(db, user, post_id)
+    if post.status not in ("draft", "cancelled", "failed"):
+        raise HTTPException(409, "Cancel it first.")
+    db.delete(post)
+    db.commit()
+    return {"ok": True}
+
+
+class StreamLink(BaseModel):
+    link: str = Field("", max_length=300)
+
+
+@router.put("/api/streams/{stream_id}/link")
+def stream_link(stream_id: str, body: StreamLink, user=Depends(current_user), db=Depends(get_db)):
+    """The stream on YouTube, put as "Full stream: <link>" at the top of new drafts from its clips."""
+    stream = own_stream(db, user, stream_id)
+    try:
+        stream.link = posting.clean_link(body.link)
+    except posting.PostError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    db.commit()
+    return {"link": stream.link}

@@ -57,7 +57,10 @@ input, select {
 }
 
 label { display: block; margin: 0.9rem 0 0.3rem; color: var(--muted); font-size: 0.9rem; }
-input[type="checkbox"] { width: 22px; height: 22px; min-height: 0; padding: 0; flex: none; accent-color: var(--accent); }
+input[type="checkbox"], input[type="radio"] { width: 22px; height: 22px; min-height: 0; padding: 0; flex: none; accent-color: var(--accent); }
+dl.approval { display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; margin: 10px 0; }
+dl.approval dt { color: var(--muted); }
+dl.approval dd { margin: 0; overflow-wrap: anywhere; }
 label.tick { display: flex; gap: 0.6rem; align-items: center; margin: 0.6rem 0 0; color: var(--text); }
 
 .shell { max-width: 720px; margin: 0 auto; padding: 0 16px 96px; }
@@ -73,7 +76,7 @@ label.tick { display: flex; gap: 0.6rem; align-items: center; margin: 0.6rem 0 0
 
 .tabs {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 5;
-  display: grid; grid-template-columns: repeat(4, 1fr);
+  display: grid; grid-template-columns: repeat(5, 1fr);
   background: var(--panel); border-top: 1px solid var(--line);
   padding-bottom: env(safe-area-inset-bottom);
 }
