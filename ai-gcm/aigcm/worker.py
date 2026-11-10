@@ -9,7 +9,8 @@ resumes it from its checkpoints. When a job finishes, its clips are copied into 
 See plans/M2 platform core plan.md (M2.4, R10, R11).
 
 A second thread runs the studio's render lane (working windows for kept clips, exports) beside the stream
-job, with ffmpeg on fewer threads while a stream is running (plans/M3 Studio plan.md, S-R7)."""
+job, with ffmpeg on fewer threads while a stream is running (plans/M3 Studio plan.md, S-R7). A third runs the
+posting lane: approved posts go up to YouTube and are checked afterwards (aigcm/uploader.py, M4.3)."""
 
 import argparse
 import os
@@ -19,6 +20,7 @@ import threading
 import time
 from pathlib import Path
 
+import httpx
 from sqlalchemy import DateTime, bindparam, select, text
 
 from . import db as database
@@ -133,8 +135,10 @@ def kill_tree(proc):
 
 
 class Worker:
-    def __init__(self, settings, command=engine_command, notify=(), bot=None):
+    def __init__(self, settings, command=engine_command, notify=(), bot=None, http=None):
         self.settings = settings
+        self.http = http      # for YouTube; made on first use so tests and engine-only runs need none
+        self.post_notify = None   # (post id, event) -> None; Telegram when linked
         self.bot = bot   # for owner alerts (low disk); per-stream messages go through `notify`
         self.last_disk_alert = 0.0
         self.engine = database.make_engine(settings.db_url)
@@ -212,6 +216,11 @@ class Worker:
         with self.sessions() as s:
             requeued = requeue_interrupted(s)
             renders = requeue_renders(s)
+            from .uploader import requeue as requeue_posts
+
+            posts = requeue_posts(s)
+        if posts:
+            log(f"worker: {posts} posts carry on uploading after a restart")
         if requeued:
             log(f"worker: back in the queue after a restart: {', '.join(requeued)}")
         if renders:
@@ -301,6 +310,25 @@ class Worker:
             lane.run(self.settings, self.sessions, render_id, threads)
         return render_id
 
+    def post_step(self):
+        """One unit of the posting lane: an upload or a check. Returns what it did, or None."""
+        from . import uploader
+
+        if not self.settings.token_key:
+            return None
+        if self.http is None:
+            self.http = httpx.Client(timeout=httpx.Timeout(30, write=180, read=180))
+        return uploader.step(self.settings, self.sessions, self.http, self.post_notify)
+
+    def post_loop(self):
+        while not self.stopping.is_set():
+            try:
+                if not self.post_step():
+                    self.stopping.wait(POLL_S * 5)
+            except Exception as exc:  # the lane must keep going whatever one post does
+                log(f"worker: posting lane error: {exc!r}")
+                self.stopping.wait(POLL_S * 5)
+
     def render_loop(self):
         while not self.stopping.is_set():
             try:
@@ -313,6 +341,7 @@ class Worker:
     def forever(self):
         self.start()
         threading.Thread(target=self.render_loop, daemon=True, name="render-lane").start()
+        threading.Thread(target=self.post_loop, daemon=True, name="posting-lane").start()
         log(f"worker: waiting for streams (jobs in {self.settings.jobs_dir})")
         while True:
             if not self.step():
@@ -328,11 +357,12 @@ def main(argv=None):
     settings = ApiSettings.from_env()
     worker = Worker(settings)
     if settings.telegram_bot_token:
-        from .telegram import Bot, notifier, poll
+        from .telegram import Bot, notifier, poll, post_notifier
 
         bot = Bot(settings.telegram_bot_token)
         worker.bot = bot
         worker.notify.append(notifier(worker.sessions, bot, settings.public_url))
+        worker.post_notify = post_notifier(worker.sessions, bot, settings.public_url)
         threading.Thread(target=poll, args=(worker.sessions, bot, threading.Event()), daemon=True).start()
         log("worker: Telegram messages on")
     if args.once:

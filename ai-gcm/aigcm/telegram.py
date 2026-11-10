@@ -103,6 +103,35 @@ def stream_message(stream, event, public_url):
     return None
 
 
+def post_message(post, event, public_url):
+    from .uploader import when_india
+
+    title = f"“{post.title}”"
+    channel = post.channel.title if post.channel else "YouTube"
+    if event == "scheduled":
+        return (f"📅 {title} is on {channel}, private until {when_india(post.publish_at)} (India time). "
+                f"YouTube makes it public then.")
+    if event in ("posted", "live"):
+        return f"✅ {title} is live on {channel}: https://youtube.com/shorts/{post.video_id}"
+    if event == "failed":
+        return f"⚠️ {title} didn't post: {post.error or 'unknown error'}\nOpen it: {public_url}/posts/{post.id}"
+    return None
+
+
+def post_notifier(sessions, bot, public_url):
+    """An uploader hook: message the post's owner when it is uploaded, goes live or fails."""
+    from .db.models import Post
+
+    def hook(post_id, event):
+        with sessions() as db:
+            post = db.get(Post, post_id)
+            text = post_message(post, event, public_url) if post else None
+            link = db.get(TelegramLink, post.user_id) if post else None
+            if text and link and link.chat_id:
+                bot.send(link.chat_id, text)
+    return hook
+
+
 def notifier(sessions, bot, public_url):
     """A worker hook: message the stream's owner when their job is done or failed."""
     def hook(stream, event):

@@ -32,7 +32,8 @@ def post_view(post):
             "title": post.title, "description": post.description, "tags": post.tags or [],
             "mode": post.mode, "publish_at": stamp(post.publish_at), "approved_at": stamp(post.approved_at),
             "video_id": post.video_id, "error": post.error, "updated_at": stamp(post.updated_at),
-            "created_at": stamp(post.created_at)}
+            "created_at": stamp(post.created_at), "posted_at": stamp(post.posted_at), "thumbnail": post.thumbnail,
+            "next_try_at": stamp(post.next_try_at)}
 
 
 def own_post(db, user, post_id):
@@ -104,6 +105,16 @@ def list_posts(status: str | None = None, user=Depends(current_user), db=Depends
         query = query.where(Post.status.in_(status.split(",")))
     rows = db.scalars(query.order_by(Post.publish_at.is_(None), Post.publish_at, Post.created_at.desc())).all()
     return [post_view(p) for p in rows]
+
+
+@router.get("/api/posts/quota")
+def quota(user=Depends(current_user), db=Depends(get_db)):
+    """Today's YouTube use for the whole app (Google's day, Pacific time). The owner's view only."""
+    from ..uploader import usage
+
+    if not user.is_admin:
+        raise HTTPException(403, "Only the owner can see this.")
+    return usage(db)
 
 
 @router.get("/api/posts/{post_id}")

@@ -85,6 +85,9 @@ def finish_connect(request, db, pending, code):
     except yt.YouTubeError:
         yt.revoke(http, tokens["refresh_token"])
         return _back("no-channel")
+    from ..uploader import spend
+
+    spend(db, units=1)
     row = db.scalar(select(YouTubeChannel).where(YouTubeChannel.user_id == user.id,
                                                  YouTubeChannel.channel_id == channel["id"]))
     if row is None:
@@ -135,6 +138,9 @@ def check(channel_id: str, request: Request, user=Depends(current_user), db=Depe
     try:
         token = yt.access_token(request.app.state.http, settings, yt.unseal(settings.token_key, row.refresh_token))
         channel = yt.my_channel(request.app.state.http, token)
+        from ..uploader import spend
+
+        spend(db, units=1)
         row.status, row.title, row.thumbnail = "ok", channel["title"][:200], channel["thumbnail"]
     except yt.Expired:
         row.status = "expired"

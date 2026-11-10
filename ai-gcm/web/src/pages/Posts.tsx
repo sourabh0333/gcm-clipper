@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { api, type Post } from "../api";
+import { api, type Post, type Quota } from "../api";
 import { POST_LABEL, when } from "../format";
 
 type BatchResult = { approved: Post[]; problems: { id: string; error: string }[] };
@@ -35,9 +35,20 @@ export default function Posts() {
   const [confirming, setConfirming] = useState(false);
   const [problems, setProblems] = useState<{ id: string; error: string }[]>([]);
   const [error, setError] = useState("");
+  const [quota, setQuota] = useState<Quota | null>(null);
 
   const load = () => api<Post[]>("/api/posts").then(setPosts, (err) => setError((err as Error).message));
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    api<Quota>("/api/posts/quota").then(setQuota, () => {});   // the owner only
+  }, []);
+  // While something is uploading or waiting to go public, look again every 15 seconds.
+  const active = posts?.some((p) => p.status === "approved" || p.status === "uploading");
+  useEffect(() => {
+    if (!active) return;
+    const timer = window.setInterval(load, 15000);
+    return () => window.clearInterval(timer);
+  }, [active]);
 
   if (!posts) return error ? <p className="error">{error}</p> : <p className="muted">Loading…</p>;
   const drafts = posts.filter((p) => p.status === "draft");
@@ -110,6 +121,11 @@ export default function Posts() {
           </div>
         );
       })}
+      {quota && (
+        <p className="small muted">
+          YouTube today (whole app): {quota.uploads} of {quota.uploads_limit} uploads · {quota.units} of {quota.units_limit} units
+        </p>
+      )}
       {error && <p className="error">{error}</p>}
     </>
   );

@@ -9,4 +9,5 @@ python-multipart==0.0.32
 httpx==0.28.1
 google-auth==2.62.0
 cryptography==50.0.2
+tzdata==2026.5
 pytest>=8

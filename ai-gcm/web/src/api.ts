@@ -61,7 +61,11 @@ export type Post = {
   error: string | null;
   updated_at: string;
   created_at: string;
+  posted_at: string | null;
+  thumbnail: string | null;
+  next_try_at: string | null;
 };
+export type Quota = { uploads: number; uploads_limit: number; units: number; units_limit: number };
 
 export type StreamSummary = {
   id: string;

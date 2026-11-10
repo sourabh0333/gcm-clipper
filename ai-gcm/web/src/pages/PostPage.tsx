@@ -52,6 +52,14 @@ export default function PostPage() {
     }, (err) => setError((err as Error).message));
   }, [id]);
 
+  // While the laptop uploads it, look again every 10 seconds.
+  const moving = post?.status === "approved" || post?.status === "uploading";
+  useEffect(() => {
+    if (!moving) return;
+    const timer = window.setInterval(() => api<Post>(`/api/posts/${id}`).then(setPost, () => {}), 10000);
+    return () => window.clearInterval(timer);
+  }, [moving, id]);
+
   if (!post || !form) return error ? <p className="error">{error}</p> : <p className="muted">Loading…</p>;
   const set = (change: Partial<Form>) => { setForm({ ...form, ...change }); setReview(null); };
   const draft = post.status === "draft";
@@ -193,13 +201,29 @@ export default function PostPage() {
             <dt>Tags</dt><dd>{post.tags.join(", ") || "(none)"}</dd>
           </dl>
           {post.status === "approved" && (
-            <p className="small muted">Approved. The laptop uploads it to YouTube; you can cancel until the upload starts.</p>
+            <p className="small muted">
+              {post.next_try_at ? `${post.error ?? "Waiting"} Next try ${when(post.next_try_at)}.`
+                : "Approved. The laptop uploads it to YouTube in a moment; you can cancel until the upload starts."}
+            </p>
           )}
-          {post.error && <p className="small error">{post.error}</p>}
+          {post.status === "uploading" && <p className="small muted">Uploading to YouTube now…</p>}
+          {post.status === "scheduled" && (
+            <p className="small muted">On YouTube as private. YouTube makes it public {when(post.publish_at)}, even if the laptop is off.</p>
+          )}
+          {post.status === "posted" && <p className="small">Live on YouTube{post.posted_at ? ` since ${when(post.posted_at)}` : ""}.</p>}
+          {post.thumbnail && post.thumbnail !== "set" && <p className="small muted">Thumbnail {post.thumbnail}.</p>}
+          {post.error && post.status !== "approved" && <p className="small error">{post.error}</p>}
           {post.video_id && (
-            <a className="button" href={`https://studio.youtube.com/video/${post.video_id}/edit`} target="_blank" rel="noreferrer">
-              Change in YouTube Studio
-            </a>
+            <div className="row">
+              {post.status === "posted" && (
+                <a className="button primary" href={`https://youtube.com/shorts/${post.video_id}`} target="_blank" rel="noreferrer">
+                  Watch on YouTube
+                </a>
+              )}
+              <a className="button" href={`https://studio.youtube.com/video/${post.video_id}/edit`} target="_blank" rel="noreferrer">
+                Change in YouTube Studio
+              </a>
+            </div>
           )}
           <div className="row" style={{ marginTop: 10 }}>
             {(post.status === "approved" || post.status === "failed") && <button disabled={busy} onClick={cancel}>Cancel post</button>}

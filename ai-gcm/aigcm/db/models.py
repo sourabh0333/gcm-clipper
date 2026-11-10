@@ -226,9 +226,27 @@ class Post(Base):
     error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    # The uploader's bookkeeping (M4.3): YouTube's resumable session (valid about a week), tries, when to try
+    # again, the thumbnail's result, when it went public, and when YouTube was last asked about it.
+    upload_url: Mapped[str | None] = mapped_column(Text)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_try_at: Mapped[datetime | None] = mapped_column(DateTime)
+    thumbnail: Mapped[str | None] = mapped_column(String(200))
+    posted_at: Mapped[datetime | None] = mapped_column(DateTime)
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     clip: Mapped["Clip | None"] = relationship()
     channel: Mapped["YouTubeChannel | None"] = relationship()
+
+
+class QuotaDay(Base):
+    """YouTube API use for one Pacific-time day (Google's quota day), for the whole app: the uploads bucket
+    (100 videos.insert a day) and the shared 10,000 units."""
+    __tablename__ = "quota_days"
+
+    day: Mapped[str] = mapped_column(String(10), primary_key=True)   # YYYY-MM-DD in America/Los_Angeles
+    uploads: Mapped[int] = mapped_column(Integer, default=0)
+    units: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class BrandKitRow(Base):
