@@ -116,8 +116,10 @@ def editor_extras(settings, clip, details):
     kit, found = kit_for(clip), brand.files(settings.jobs_dir, clip.stream.user_id)
     kit_info = {"strip": "/media/brand/strip" if (kit.strip_text() or found["logo"]) else None,
                 "intro_s": found["intro_s"], "outro_s": found["outro_s"]}
+    from . import sound
+
     return {"events": shown, "anchor": anchor, "facecam": cam.get("box"), "facecam_source": cam.get("source"),
-            "words": words, "brand": kit_info,
+            "words": words, "brand": kit_info, "music": sound.music_spans(sound.job_sounds(folder), lo, hi),
             "presets": win.length_presets(clip.start_s, clip.end_s, anchor, events, lo, hi)}
 
 

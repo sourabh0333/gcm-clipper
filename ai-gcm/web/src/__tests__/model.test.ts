@@ -123,3 +123,19 @@ describe("hook and captions (M3.5)", () => {
     expect(hookBox(templateLayout("native", 720, 1280, null))).toEqual([110, 360]);
   });
 });
+
+describe("sound safety (M3.9)", () => {
+  it("counts music inside the parts, cuts to 59 s around the action, and adds zoom sounds", async () => {
+    const { fitTo, musicSeconds, outputLength, zoomSounds } = await import("../studio/model");
+    const parts = [{ start: 0, end: 40, speed: 1 }, { start: 50, end: 100, speed: 2 }];   // 40 + 25 = 65 s out
+    expect(musicSeconds([[30, 60]], parts)).toBe(20);
+    const cut = fitTo(parts, 59, 40);
+    expect(outputLength(cut)).toBeCloseTo(59, 1);
+    expect(cut[0].start).toBeCloseTo(4.6, 1);                                  // 60% of the time before the focus
+    expect(fitTo(parts, 70, 10)).toBe(parts);                                 // already short enough
+    expect(outputLength(fitTo(parts, 59, 0))).toBeCloseTo(59, 1);
+    const withSounds = zoomSounds({ ...edit, zooms: [{ t: 15, dur: 1.2, scale: 1.25 }] }, true);
+    expect(withSounds.sfx).toEqual([{ t: 14.65, name: "whoosh", gain: 0.6 }, { t: 15, name: "boom", gain: 0.7 }]);
+    expect(zoomSounds(withSounds, false).sfx).toEqual([]);
+  });
+});

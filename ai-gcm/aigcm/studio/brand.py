@@ -85,6 +85,8 @@ def files(jobs_dir, user_id):
     lengths = read_json(base / "lengths.json", {}) or {}
     out["intro_s"] = lengths.get("intro", 0.0) if out["intro"] else 0.0
     out["outro_s"] = lengths.get("outro", 0.0) if out["outro"] else 0.0
+    out["intro_music"] = lengths.get("intro_music", 0.0) if out["intro"] else 0.0
+    out["outro_music"] = lengths.get("outro_music", 0.0) if out["outro"] else 0.0
     return out
 
 
@@ -152,8 +154,29 @@ def save_clip(jobs_dir, user_id, kind, data):
         (Path(tmp) / "out.mp4").replace(target / f"{kind}.mp4")
     lengths = read_json(target / "lengths.json", {}) or {}
     lengths[kind] = round(length, 3)
+    lengths[f"{kind}_music"] = music_in(target / f"{kind}.mp4")
     write_json(target / "lengths.json", lengths)
     return target / f"{kind}.mp4"
+
+
+def music_in(video):
+    """Seconds of music the sound detector hears in an intro or outro (M3.9): music the creator doesn't own
+    would get every Short that uses it claimed. 0 when the detector isn't installed here."""
+    try:
+        from .. import sounds
+        from ..media import extract_audio
+        from . import sound
+    except ImportError:
+        return 0.0
+    with tempfile.TemporaryDirectory(prefix="kaatclip_music_") as tmp:
+        wav = Path(tmp) / "a.wav"
+        try:
+            extract_audio(video, wav)
+            found = sounds.analyse(wav)
+        except Exception as exc:   # no model, no network: the upload still works, just unchecked
+            log(f"brand: music check skipped ({exc!r})")
+            return 0.0
+    return round(sum(b - a for a, b in sound.music_spans(found)), 1)
 
 
 def remove(jobs_dir, user_id, kind):

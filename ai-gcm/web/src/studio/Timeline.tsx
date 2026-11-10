@@ -7,6 +7,7 @@ type Props = {
   selected: number;
   events: { t: number; kind: string }[];
   zooms: number[];                   // kill times that have a zoom
+  music?: [number, number][];        // where the stream plays music (sound safety)
   pps: number;                       // pixels per second of footage
   playhead: React.RefObject<HTMLDivElement | null>;
   scroller: React.RefObject<HTMLDivElement | null>;
@@ -132,6 +133,10 @@ export default function Timeline(p: Props) {
             <div className="tlhandle start" onPointerDown={drag(i, "start")} aria-label="Trim start" />
             <div className="tlhandle end" onPointerDown={drag(i, "end")} aria-label="Trim end" />
           </div>
+        ))}
+        {(p.music ?? []).map(([a, b]) => (
+          <div key={`m${a}`} className="tlmusic" style={{ left: x(Math.max(a, p.win.start)), width: Math.max(2, (Math.min(b, p.win.end) - Math.max(a, p.win.start)) * p.pps) }}
+               title="Music" />
         ))}
         <div className="tlplayhead" ref={p.playhead} style={{ left: PAD }} />
       </div>

@@ -29,6 +29,7 @@ def kit_view(settings, user_id, kit):
     return {"kit": kit.model_dump(mode="json"),
             "files": {kind: (f"/media/brand/{kind}" if found[kind] else None) for kind in MEDIA},
             "lengths": {"intro": found["intro_s"], "outro": found["outro_s"]},
+            "music": {"intro": found["intro_music"], "outro": found["outro_music"]},
             "strip": "/media/brand/strip" if (kit.strip_text() or found["logo"]) else None}
 
 

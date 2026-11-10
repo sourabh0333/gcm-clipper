@@ -3,7 +3,8 @@ import { Link, useParams } from "react-router";
 import { api, type Box, type EditData, type RenderJob, type Studio, type Template } from "../api";
 import { clock } from "../format";
 import {
-  addPart, applyPreset, cameraBox, captionChunks, type Chunk, fixWord, hookBox, outputLength, partAt, problems, removePart,
+  addPart, applyPreset, cameraBox, captionChunks, type Chunk, CLAIM_LIMIT_S, fitTo, fixWord, hookBox, musicSeconds,
+  MUSIC_WARN_S, outputLength, partAt, problems, removePart, SAFE_LENGTH_S, zoomSounds,
   setSpeed, setZoomStrength, SPEEDS, split, templateLayout, toggleZoom, toOutput, trim, wordsInParts, ZOOM_STRENGTHS,
   zoomStrength,
 } from "../studio/model";
@@ -54,6 +55,7 @@ export default function Editor() {
   const hookImage = useRef<HTMLImageElement | null>(null);
   const stripImage = useRef<HTMLImageElement | null>(null);
   const chunks = useRef<Chunk[]>([]);
+  const lastOut = useRef(0);   // where the playhead was last frame, to start sound effects as it passes them
 
   const video = useRef<HTMLVideoElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -204,6 +206,18 @@ export default function Editor() {
       v.playbackRate = segs[i].speed;
     }
     cursorRef.current = Math.max(t, segs[i].start);
+    const now = toOutput(segs, cursorRef.current);
+    if (now !== null) {
+      for (const fx of current.sfx ?? []) {
+        const at = toOutput(segs, fx.t);
+        if (at !== null && at > lastOut.current && at <= now) {
+          const sound = new Audio(`/sfx/${fx.name}.wav`);
+          sound.volume = fx.gain;
+          sound.play().catch(() => {});
+        }
+      }
+      lastOut.current = now;
+    }
     paint();
     const box = scroller.current;
     const x = TIMELINE_PAD + (cursorRef.current - lo) * pps;
@@ -224,6 +238,7 @@ export default function Editor() {
     }
     partRef.current = i;
     cursorRef.current = t;
+    lastOut.current = toOutput(segs, t) ?? 0;
     v.currentTime = t - lo;
     v.playbackRate = segs[i].speed;
     playingRef.current = true;
@@ -345,6 +360,7 @@ export default function Editor() {
   }
   const segs = edit.segments;
   const total = outputLength(segs);
+  const music = musicSeconds(studio.editor.music ?? [], segs);
   const vertical = (win.height ?? 0) > (win.width ?? 0);
   const camera = cameraBox(edit) ?? studio.editor.facecam;
   const strength = zoomStrength(edit);
@@ -393,6 +409,7 @@ export default function Editor() {
 
       <Timeline win={timelineWin} segments={segs} selected={selected} events={studio.editor.events} pps={pps}
                 zooms={edit.zooms.map((z) => z.t)} onEventTap={(t) => commit(toggleZoom(edit, t))}
+                music={studio.editor.music}
                 playhead={playhead} scroller={scroller} onSeek={seek} onSelect={setSelected}
                 onTrimStart={() => { if (playingRef.current) pause(); dragBase.current = edit; }}
                 onTrim={(i, edge, t) => {
@@ -561,6 +578,8 @@ export default function Editor() {
           ))}
           <button className={edit.keep_hud !== false ? "chip on" : "chip"}
                   onClick={() => commit({ ...edit, keep_hud: edit.keep_hud === false })}>Keep HUD</button>
+          <button className={(edit.sfx ?? []).length ? "chip on" : "chip"} disabled={!edit.zooms.length}
+                  onClick={() => commit(zoomSounds(edit, !(edit.sfx ?? []).length))}>Sound on zooms</button>
           <span className="small muted">Tap a red kill mark to add or take away its zoom.</span>
         </div>
       )}
@@ -589,6 +608,20 @@ export default function Editor() {
         <button aria-label="Zoom the timeline out" onClick={() => setZoomIndex((z) => Math.max(0, z - 1))}>−</button>
         <button aria-label="Zoom the timeline in" onClick={() => setZoomIndex((z) => Math.min(ZOOMS.length - 1, z + 1))}>+</button>
       </div>}
+
+      {music >= MUSIC_WARN_S && (
+        <div className={total > CLAIM_LIMIT_S ? "banner musicwarn danger" : "banner musicwarn"}>
+          {total > CLAIM_LIMIT_S
+            ? <>Music plays under about {Math.round(music)} s of this clip. A Short over 1 minute with a music claim is blocked worldwide.</>
+            : <>Music plays under about {Math.round(music)} s of this clip. Under a minute a claim won't block it, but it can take the money.</>}
+          {total > CLAIM_LIMIT_S && (
+            <button className="primary" onClick={() => {
+              const focus = edit.zooms.length ? toOutput(segs, edit.zooms[0].t) : null;
+              commit({ ...edit, segments: fitTo(segs, SAFE_LENGTH_S, focus ?? total / 2) });
+            }}>Cut to {SAFE_LENGTH_S} s</button>
+          )}
+        </div>
+      )}
 
       <div className="card edexport">
         {!job && <button className="primary" disabled={busy} onClick={exportNow}>Export{dirty ? " (saves first)" : ""}</button>}

@@ -97,6 +97,7 @@ export type EditData = {
   sponsor_safe: boolean;
   keep_hud?: boolean;
   lower_third?: boolean;
+  sfx?: { t: number; name: "whoosh" | "boom" | "ding" | "pop"; gain: number }[];
   intro?: boolean;
   outro?: boolean;
 };
@@ -119,6 +120,7 @@ export type BrandView = {
   kit: BrandKit;
   files: { logo: string | null; intro: string | null; outro: string | null };
   lengths: { intro: number; outro: number };
+  music?: { intro: number; outro: number };
   strip: string | null;
 };
 export type PostText = { title: string; description: string; hashtags: string[]; text: string };
@@ -162,6 +164,7 @@ export type Studio = {
     facecam_source: "auto" | "manual" | null;
     words: Word[];
     brand: { strip: string | null; intro_s: number; outro_s: number };
+    music: [number, number][];
     presets: { moment: [number, number]; full_fight: [number, number]; suggested: "moment" | "full_fight" };
   } | null;
   exports: RenderJob[];

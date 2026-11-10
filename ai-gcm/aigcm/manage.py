@@ -13,7 +13,8 @@ before the studio existed), while their streams' recordings are still on the lap
 them. Safe to run again.
 
 backfill-library: fills in what was said in each clip (for the library's search) from the job's transcript,
-and queues posters for every finished stream; the worker makes the posters. Safe to run again."""
+flags clips with background music (M3.9), and queues posters for every finished stream; the worker makes
+the posters. Safe to run again."""
 
 import argparse
 import sys
@@ -82,10 +83,19 @@ def backfill_library(session, settings):
     updated = queued = 0
     for stream in session.scalars(select(Stream).where(Stream.status == "done")).all():
         transcript = read_json(settings.jobs_dir / stream.job_dir / "transcript.json")
+        from .studio import sound
+
+        sounds = sound.job_sounds(settings.jobs_dir / stream.job_dir)
         for clip in stream.clips:
             if clip.spoken is None and transcript:
                 clip.spoken = spoken_between(transcript, clip.start_s, clip.end_s)
                 updated += clip.spoken is not None
+            if sounds:
+                music = sound.clip_music(None, clip.start_s, clip.end_s, sounds)
+                flags = [f for f in ((clip.details or {}).get("flags") or []) if f.get("kind") != "music"]
+                if music >= sound.MUSIC_FLAG_S:
+                    flags.append(sound.music_flag(music))
+                clip.details = dict(clip.details or {}, flags=flags)
         if stream.clips:
             queue_posters(session, stream)
             queued += 1

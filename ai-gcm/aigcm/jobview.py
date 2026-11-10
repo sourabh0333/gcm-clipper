@@ -69,6 +69,9 @@ def finished_clips(folder):
     folder = Path(folder)
     files = read_json(folder / "clips.json", {})
     transcript = read_json(folder / "transcript.json")
+    from .studio import sound
+
+    sounds = sound.job_sounds(folder)
     out = []
     for clip in read_json(folder / "ranked.json", []):
         if clip["id"] not in files or not (folder / "clips" / files[clip["id"]]).exists():
@@ -76,6 +79,9 @@ def finished_clips(folder):
         safe = files.get(clip["id"] + "_safe")
         details = {k: clip.get(k) for k in ("titles", "hashtags", "description", "labels", "flags", "reasons",
                                             "mute_spans", "players_left", "anchor")}
+        music = sound.clip_music(folder, clip["start"], clip["end"], sounds) if sounds else 0.0
+        if music >= sound.MUSIC_FLAG_S:
+            details["flags"] = [f for f in (details.get("flags") or []) if f.get("kind") != "music"] + [sound.music_flag(music)]
         out.append({"clip_key": clip["id"], "rank": clip.get("rank") or len(out) + 1, "start_s": clip["start"],
                     "end_s": clip["end"], "type": clip.get("type", "moment"),
                     "score": clip.get("final_score", clip.get("score")), "file_name": files[clip["id"]],

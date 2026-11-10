@@ -61,7 +61,7 @@ def _panel_lines(i, panel, zoom, keep_hud):
 
 
 def build_graph(edit, input_start, has_audio, captions_name=None, mute=(), hook_input=None, strip_input=None,
-                intro_input=None, outro_input=None):
+                intro_input=None, outro_input=None, sfx_inputs=None):
     """The -filter_complex text. `input_start` is the source time of the input's first frame (after any
     `-ss`), so the parts are trimmed relative to it; zooms stay in source time. `mute` is output-time spans
     to silence. The other inputs, when given, are ffmpeg input numbers: the hook image, the brand kit's
@@ -116,10 +116,21 @@ def build_graph(edit, input_start, has_audio, captions_name=None, mute=(), hook_
     joins = [i for i in (intro_input, outro_input) if i is not None]
     main_v, main_a = ("[mv]", "[ma]") if joins else ("[v]", "[a]")
     lines.append(f"{base}null{tail},format=yuv420p,setsar=1{main_v}")
+    effects = [(sfx_inputs[fx.name], at, fx.gain) for fx in edit.sfx
+               if sfx_inputs and fx.name in sfx_inputs and (at := to_output(edit.segments, fx.t)) is not None]
     if has_audio:
         silence = f"{mute_filter(mute)}," if mute else ""
         stereo = ",aformat=channel_layouts=stereo" if joins else ""
-        lines.append(f"[ca]{silence}aresample=48000{stereo}{main_a}")
+        if effects:
+            # Each effect is delayed to its moment and mixed over the clip's own sound, which keeps its level.
+            for k, (number, at, gain) in enumerate(effects):
+                ms = max(0, round(at * 1000))
+                lines.append(f"[{number}:a]aresample=48000,volume={gain:.2f},adelay={ms}|{ms},apad[fx{k}]")
+            mix = "".join(f"[fx{k}]" for k in range(len(effects)))
+            lines.append(f"[ca]{silence}aresample=48000[clip]")
+            lines.append(f"[clip]{mix}amix=inputs={len(effects) + 1}:duration=first:normalize=0{stereo}{main_a}")
+        else:
+            lines.append(f"[ca]{silence}aresample=48000{stereo}{main_a}")
     elif joins:
         # The intro and outro have sound; the clip needs a silent track of its own length to join them.
         lines.append(f"anullsrc=r=48000:cl=stereo,atrim=duration={output_length(edit.segments):.3f}{main_a}")
@@ -191,8 +202,16 @@ def render(edit, window_file, window_start, has_audio, out_path, transcript=None
             if path:
                 numbers[name] = 1 + len(numbers)
                 cmd += ["-i", str(Path(path).resolve())]
+        from .sound import sfx_file
+
+        sfx_inputs = {}
+        for fx_name in sorted({fx.name for fx in edit.sfx}) if has_audio else ():
+            path = sfx_file(fx_name)
+            if path:
+                sfx_inputs[fx_name] = 1 + len(numbers) + len(sfx_inputs)
+                cmd += ["-i", str(path)]
         graph = build_graph(edit, window_start + seek, has_audio, captions_name, mute_spans, numbers.get("hook"),
-                            numbers.get("strip"), numbers.get("intro"), numbers.get("outro"))
+                            numbers.get("strip"), numbers.get("intro"), numbers.get("outro"), sfx_inputs)
         partial = out_path.with_name(out_path.stem + ".part.mp4")
         cmd += ["-filter_complex", graph, "-filter_complex_threads", str(threads), "-map", "[v]"]
         if has_audio or intro or outro:

@@ -68,6 +68,12 @@ class Zoom(Strict):
     scale: float = Field(1.25, ge=1.0, le=2.5)
 
 
+class SoundFx(Strict):
+    t: float = Field(ge=0)                                    # source seconds
+    name: Literal["whoosh", "boom", "ding", "pop"]            # synthesised in assets/sfx (make_sfx.py)
+    gain: float = Field(0.7, ge=0.05, le=1.0)
+
+
 class Hook(Strict):
     text: str = Field("", max_length=80)
     color: Literal["white", "yellow"] = "yellow"
@@ -97,6 +103,7 @@ class EditData(Strict):
     cover_t: float | None = None
     sponsor_safe: bool = False
     keep_hud: bool = True      # the game panel's top strip (kill counters) stays unzoomed during zooms
+    sfx: list[SoundFx] = Field(default_factory=list, max_length=40)
     lower_third: bool = False  # the brand kit's strip (logo, name, UPI, Instagram) at the bottom
     intro: bool = False        # the brand kit's intro before the clip
     outro: bool = False        # and its outro after

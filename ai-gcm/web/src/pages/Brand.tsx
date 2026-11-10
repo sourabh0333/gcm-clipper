@@ -131,6 +131,10 @@ export default function Brand() {
               )}
             </div>
             {view.files[kind] && <video src={`${view.files[kind]}?v=${stamp}`} controls playsInline preload="metadata" />}
+            {view.files[kind] && (view.music?.[kind] ?? 0) >= 1 && (
+              <p className="small error">We hear music in your {kind}. Unless it's yours, YouTube can claim every Short
+                that uses it, and Shorts over a minute with a claim are blocked. Use your own voice or sound instead.</p>
+            )}
             <div className="row">
               <label className="button filebutton">{view.files[kind] ? "Replace" : `Add ${kind}`}
                 <input type="file" accept="video/*" disabled={busy !== ""} onChange={(e) => send(kind, e.target.files?.[0])} />

@@ -255,3 +255,8 @@ textarea { font: inherit; width: 100%; padding: 0.7rem 0.8rem; border-radius: 10
 .compiled .titlerow { padding: 6px 0; border-top: 1px solid var(--line); gap: 8px; }
 .compiled .titlerow button { min-height: 34px; padding: 0.2rem 0.7rem; flex: none; }
 .description { white-space: pre-wrap; background: #11131a; padding: 10px; border-radius: 8px; max-height: 240px; overflow: auto; }
+
+/* Sound safety (M3.9) */
+.tlmusic { position: absolute; bottom: 0; height: 5px; background: #9b6bff; border-radius: 3px; pointer-events: none; }
+.musicwarn { display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; }
+.musicwarn.danger { background: #2a0d10; border-color: #6a1d25; }

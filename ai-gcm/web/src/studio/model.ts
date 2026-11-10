@@ -217,6 +217,44 @@ export function fixWord(edit: EditData, word: Word, text: string): EditData {
   return { ...edit, captions: { ...edit.captions, words } };
 }
 
+// --- sound safety (M3.9) ----------------------------------------------------------------------------------
+export const MUSIC_WARN_S = 3;      // sound.MUSIC_FLAG_S
+export const CLAIM_LIMIT_S = 60;    // over a minute, a Short with any claim is blocked worldwide
+export const SAFE_LENGTH_S = 59;
+
+/** Seconds of the stream's music that survive the edit's parts. */
+export function musicSeconds(spans: [number, number][], segs: Segment[]): number {
+  let total = 0;
+  for (const [a, b] of spans) for (const s of segs) total += Math.max(0, Math.min(b, s.end) - Math.max(a, s.start));
+  return total;
+}
+
+/** The parts cut down to `maxOut` seconds of output around `focusOut` (60% of the time before it). */
+export function fitTo(segs: Segment[], maxOut: number, focusOut: number): Segment[] {
+  const total = outputLength(segs);
+  if (total <= maxOut) return segs;
+  const a = Math.min(Math.max(focusOut - 0.6 * maxOut, 0), total - maxOut);
+  const b = a + maxOut;
+  const out: Segment[] = [];
+  let offset = 0;
+  for (const s of segs) {
+    const len = (s.end - s.start) / s.speed;
+    const lo = Math.max(a, offset);
+    const hi = Math.min(b, offset + len);
+    if (hi - lo >= MIN_PART_S) out.push({ start: round(s.start + (lo - offset) * s.speed), end: round(s.start + (hi - offset) * s.speed), speed: s.speed });
+    offset += len;
+  }
+  return out.length ? out : segs;
+}
+
+/** A whoosh into each zoom and a boom on its kill; or none. */
+export function zoomSounds(edit: EditData, on: boolean): EditData {
+  if (!on) return { ...edit, sfx: [] };
+  const sfx = edit.zooms.flatMap((z) => [{ t: round(Math.max(0, z.t - 0.35)), name: "whoosh" as const, gain: 0.6 },
+                                         { t: z.t, name: "boom" as const, gain: 0.7 }]);
+  return { ...edit, sfx };
+}
+
 export function cameraBox(edit: EditData): Box | null {
   return edit.layout.panels.find((p) => p.role === "cam")?.src ?? null;
 }

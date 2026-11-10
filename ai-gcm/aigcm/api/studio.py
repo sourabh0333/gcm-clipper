@@ -321,6 +321,17 @@ def post_text(clip_id: int, user=Depends(current_user), db=Depends(get_db)):
                            project.kit_for(clip))
 
 
+@router.get("/sfx/{name}.wav")
+def sound_effect(name: str):
+    """The studio's synthesised sound effects, for the editor's preview (no sign-in needed)."""
+    from ..studio.sound import sfx_file
+
+    path = sfx_file(name)
+    if path is None:
+        raise HTTPException(404, "Not found.")
+    return FileResponse(path, media_type="audio/wav", headers={"Cache-Control": "public, max-age=604800"})
+
+
 FONT_FILES = {"Anton-Regular.ttf", "Mukta-ExtraBold.ttf"}
 
 
