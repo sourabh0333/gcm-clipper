@@ -4,6 +4,7 @@ sound wave and exported videos to the clip's owner only. The work itself runs in
 lane; this API only queues it. See plans/M3 Studio plan.md."""
 
 import re
+from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -12,10 +13,11 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy import select
 
 from ..db.models import AuditEntry, Render
+from ..jobs import read_json
 from ..studio import lane, project
 from ..studio.edit import EditData, check_window, output_length
 from .clips import clip_view, own_clip
-from .deps import current_user, get_db
+from .deps import current_user, get_db, own_stream
 
 router = APIRouter()
 
@@ -26,7 +28,8 @@ def render_view(render):
             "version": (render.params or {}).get("version"), "sponsor_safe": bool((render.params or {}).get("sponsor_safe")),
             "created_at": render.created_at.isoformat() + "Z" if render.created_at else None,
             "finished_at": render.finished_at.isoformat() + "Z" if render.finished_at else None,
-            "video": f"/media/renders/{render.id}" if done else None}
+            "video": f"/media/renders/{render.id}" if done else None,
+            "cover": f"/media/renders/{render.id}/cover" if done else None}
 
 
 def window_view(status, details, clip_id):
@@ -177,6 +180,73 @@ def render_video(render_id: str, request: Request, download: int = 0, user=Depen
     return FileResponse(path, media_type="video/mp4", filename=f"kaatclip_{path.name}" if download else None,
                         content_disposition_type="attachment" if download else "inline",
                         headers={"Cache-Control": "private, max-age=3600"})
+
+
+@router.get("/media/renders/{render_id}/cover")
+def render_cover(render_id: str, request: Request, download: int = 0, user=Depends(current_user), db=Depends(get_db)):
+    """The Short's cover frame (a JPEG of the export at its cover time)."""
+    render = own_render(db, user, render_id)
+    clip = own_clip(db, user, render.clip_id) if render.clip_id else None
+    path = lane.export_path(request.app.state.settings, clip, render) if clip else None
+    db.close()
+    cover = lane.cover_path(path) if path else None
+    if cover is None or not cover.is_file():
+        raise HTTPException(404, "No cover for this export.")
+    return FileResponse(cover, media_type="image/jpeg", filename=f"kaatclip_{cover.name}" if download else None,
+                        content_disposition_type="attachment" if download else "inline",
+                        headers={"Cache-Control": "private, max-age=3600"})
+
+
+def thumbs_view(render, settings, stream):
+    view = {"id": render.id, "status": render.status, "error": render.error, "images": [], "titles": []}
+    if render.status == "done":
+        folder = Path(settings.jobs_dir) / stream.job_dir / "thumbs" / render.id
+        view["images"] = [f"/media/thumbs/{render.id}/{n}" for n in (1, 2, 3) if (folder / f"thumb_{n}.jpg").exists()]
+        view["titles"] = (read_json(folder / "titles.json", {}) or {}).get("titles", [])
+    return view
+
+
+def stream_thumbs(db, stream):
+    renders = db.scalars(select(Render).where(Render.kind == "thumbs", Render.user_id == stream.user_id)
+                         .order_by(Render.created_at.desc())).all()
+    return [r for r in renders if (r.params or {}).get("stream_id") == stream.id]
+
+
+@router.get("/api/streams/{stream_id}/thumbnails")
+def get_thumbnails(stream_id: str, request: Request, user=Depends(current_user), db=Depends(get_db)):
+    """Three thumbnails and three titles for a long video of this stream (highlights, or the compilation)."""
+    stream = own_stream(db, user, stream_id)
+    made = stream_thumbs(db, stream)
+    return thumbs_view(made[0], request.app.state.settings, stream) if made else {"status": "none"}
+
+
+@router.post("/api/streams/{stream_id}/thumbnails")
+def make_thumbnails(stream_id: str, request: Request, user=Depends(current_user), db=Depends(get_db)):
+    stream = own_stream(db, user, stream_id)
+    if stream.status != "done":
+        raise HTTPException(409, "Thumbnails come once the stream's clips are ready.")
+    active = next((r for r in stream_thumbs(db, stream) if r.status in ("queued", "running")), None)
+    render = active or Render(user_id=user.id, kind="thumbs", params={"stream_id": stream.id})
+    if not active:
+        db.add(render)
+        db.commit()
+    return thumbs_view(render, request.app.state.settings, stream)
+
+
+@router.get("/media/thumbs/{render_id}/{n}")
+def thumb_image(render_id: str, n: int, request: Request, download: int = 0, user=Depends(current_user),
+                db=Depends(get_db)):
+    render = own_render(db, user, render_id)
+    if render.kind != "thumbs" or n not in (1, 2, 3):
+        raise HTTPException(404, "Not found.")
+    stream = own_stream(db, user, (render.params or {}).get("stream_id", ""))
+    path = Path(request.app.state.settings.jobs_dir) / stream.job_dir / "thumbs" / render.id / f"thumb_{n}.jpg"
+    db.close()
+    if not path.is_file():
+        raise HTTPException(404, "Not found.")
+    return FileResponse(path, media_type="image/jpeg", filename=f"thumbnail_{n}.jpg" if download else None,
+                        content_disposition_type="attachment" if download else "inline",
+                        headers={"Cache-Control": "private, max-age=86400"})
 
 
 class HookBody(BaseModel):

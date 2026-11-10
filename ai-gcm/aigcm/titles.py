@@ -129,3 +129,48 @@ def series_counter(history, key):
     pattern = re.compile(re.escape(key) + r" #(\d+)")
     seen = [int(m.group(1)) for title in history for m in [pattern.search(title)] if m]
     return (max(seen) + 1) if seen else None
+
+
+# --- long videos (M3.7: stream highlights and the weekly compilation) -------------------------------------
+
+LONG_MAX = 100   # YouTube's title limit
+CONTEXTS = ["SOLO VS SQUAD", "RANK PUSH", "CONQUEROR", "SCRIMS", "CUSTOM ROOM", "TDM", "LIVIK", "ERANGEL",
+            "MIRAMAR", "SANHOK", "VIKENDI", "RONDO", "1V4", "CLUTCH", "RUSH GAMEPLAY"]
+THUMB_WORDS = {"clutch": "1V4 CLUTCH", "squad_wipe": "SQUAD WIPE", "win": "CHICKEN DINNER"}
+
+
+def stream_context(title):
+    """The kind of stream in a couple of words, from its title ("SOLO VS SQUAD", "RANK PUSH"), else RUSH GAMEPLAY."""
+    upper = (title or "").upper().replace("VS.", "VS")
+    return next((c for c in CONTEXTS if c in upper), "RUSH GAMEPLAY")
+
+
+def long_titles(kills, dinners, context, punchline=None, game="bgmi"):
+    """Three titles for a long video, one per family, in the "[N] FINISHES | context | BGMI" pattern Indian
+    gaming channels use: stats, a Hinglish punchline from the best talk clip, and suspense."""
+    tag = "BGMI" if game == "bgmi" else game.upper()
+    stats = f"{kills} FINISHES | {context} | {tag}" if kills else f"{context} | {tag}"
+    if dinners:
+        stats = f"{dinners} CHICKEN DINNER{'S' if dinners > 1 else ''} + {stats}"
+    talk = f"{_cut(punchline, 60)} | {kills} FINISHES | {tag}" if punchline else f"BEST MOMENTS | {context} | {tag}"
+    suspense = (f"LAST ZONE MEIN KYA HUA? 😱 | {kills} FINISHES | {tag}" if dinners
+                else f"WAIT FOR THE LAST FIGHT 😱 | {context} | {tag}")
+    out = []
+    for title in (stats, talk, suspense):
+        title = _cut(title, LONG_MAX)
+        if title not in out:
+            out.append(title)
+    return out
+
+
+def thumb_words(kills, dinners, clip_types=()):
+    """Two short stat lines for thumbnails ("59 FINISHES", "CHICKEN DINNER")."""
+    out = [f"{kills} FINISHES"] if kills else []
+    if dinners:
+        out.append("CHICKEN DINNER")
+    for kind in clip_types:
+        word = THUMB_WORDS.get(kind)
+        if word and word not in out:
+            out.append(word)
+    out += ["BEST MOMENTS"] if len(out) < 2 else []
+    return out[:2]

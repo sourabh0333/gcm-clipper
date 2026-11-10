@@ -146,9 +146,11 @@ export default function StudioPage() {
           {job.status === "failed" && <p className="small error">{job.error}</p>}
           {job.video && (
             <>
-              <video src={job.video} controls playsInline preload="metadata" style={{ marginTop: 8 }} />
+              <video src={job.video} controls playsInline preload="metadata" style={{ marginTop: 8 }}
+                     poster={job.cover ?? undefined} />
               <div className="row" style={{ marginTop: 8 }}>
                 <a className="button primary" href={`${job.video}?download=1`}>Download</a>
+                {job.cover && <a className="button" href={`${job.cover}?download=1`}>Cover image</a>}
                 <button onClick={() => shareVideo(job.video!, name).catch((err) => setError((err as Error).message))}>
                   Share
                 </button>

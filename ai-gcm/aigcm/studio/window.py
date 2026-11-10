@@ -30,7 +30,7 @@ STRIP_EVERY_S = 2.0
 STRIP_TILE_W = 96
 STRIP_COLS = 10
 WAVE_STEP_S = 0.1
-FIGHT_KINDS = ("self_kill", "knock", "accolade", "chicken_dinner")
+FIGHT_KINDS = ("self_kill", "self_knock", "accolade", "dinner")   # the HUD scan's event names (vision.py)
 
 
 def studio_dir(job_folder, clip_key):

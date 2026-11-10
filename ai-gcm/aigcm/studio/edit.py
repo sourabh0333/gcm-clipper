@@ -198,6 +198,17 @@ def hook_box(layout):
     return 110, 360
 
 
+def cover_time(edit, intro_s=0.0):
+    """Where the Short's cover frame is taken from, in seconds of the exported video: the frame the creator
+    chose, else the first zoomed kill (a moment of action, hook and all), else 40% in. `intro_s` is the
+    length of an intro joined before the clip."""
+    at = to_output(edit.segments, edit.cover_t) if edit.cover_t is not None else None
+    if at is None:
+        kills = [t for t in (to_output(edit.segments, z.t) for z in edit.zooms) if t is not None]
+        at = min(kills) + 0.3 if kills else output_length(edit.segments) * 0.4
+    return round(intro_s + min(max(at, 0.0), max(0.0, output_length(edit.segments) - 0.1)), 3)
+
+
 def is_talk(kind, labels=None):
     return kind in TALK_TYPES or bool((labels or {}).get("talk"))
 

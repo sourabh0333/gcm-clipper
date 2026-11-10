@@ -195,6 +195,8 @@ def test_keep_prepare_edit_and_export(studio_app):
     assert done["status"] == "done" and done["video"]
     video = owner.get(done["video"])
     assert video.status_code == 200 and video.headers["content-type"] == "video/mp4"
+    cover = owner.get(done["cover"])                                   # every Short gets a cover frame
+    assert cover.status_code == 200 and cover.headers["content-type"] == "image/jpeg"
     assert client_for(studio_app, "b@example.com").get(done["video"]).status_code == 404
     out = next((settings.jobs_dir / "demo-finished" / "exports").glob("*.mp4"))
     from aigcm.media import probe

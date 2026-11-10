@@ -149,6 +149,7 @@ export type RenderJob = {
   created_at: string | null;
   finished_at: string | null;
   video: string | null;
+  cover?: string | null;
 };
 export type Studio = {
   clip: Clip;

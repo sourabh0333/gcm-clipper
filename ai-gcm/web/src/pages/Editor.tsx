@@ -572,6 +572,14 @@ export default function Editor() {
         <button onClick={() => commit({ ...edit, segments: removePart(segs, selected) })} disabled={segs.length < 2}>
           Delete part
         </button>
+        <button className={edit.cover_t !== null && Math.abs(edit.cover_t - cursor) < 0.05 ? "chip on" : "chip"}
+                disabled={inGap} title="The Short's cover: this frame (otherwise the first kill)"
+                onClick={() => commit({ ...edit, cover_t: Math.round(cursor * 1000) / 1000 })}>
+          {edit.cover_t === null ? "Cover here" : "Cover ✓ here"}
+        </button>
+        {edit.cover_t !== null && (
+          <button className="chip" onClick={() => commit({ ...edit, cover_t: null })}>Auto cover</button>
+        )}
         <span className="small muted">Speed</span>
         {SPEEDS.map((s) => (
           <button key={s} className={part.speed === s ? "chip on" : "chip"}

@@ -104,13 +104,13 @@ Dialogue: 0,0:00:00.00,0:00:01.00,Hook,,0,0,0,,{body}
 """
 
 
-def _draw(ass_text, box_h, folder, name):
-    """Render an ASS script onto a transparent W x box_h image; returns it as an RGBA numpy array."""
+def _draw(ass_text, box_h, folder, name, width=W):
+    """Render an ASS script onto a transparent width x box_h image; returns it as an RGBA numpy array."""
     import cv2
 
     (folder / f"{name}.ass").write_text(ass_text, encoding="utf-8")
     fonts = shutil.copytree(FONTS, folder / "fonts", dirs_exist_ok=True)
-    run([tool("ffmpeg"), "-v", "error", "-y", "-f", "lavfi", "-i", f"color=c=black@0.0:s={W}x{box_h}:d=1,format=rgba",
+    run([tool("ffmpeg"), "-v", "error", "-y", "-f", "lavfi", "-i", f"color=c=black@0.0:s={width}x{box_h}:d=1,format=rgba",
          "-vf", f"subtitles={name}.ass:fontsdir={Path(fonts).name}:alpha=1", "-frames:v", "1", f"{name}.png"],
         cwd=folder)
     image = cv2.imread(str(folder / f"{name}.png"), cv2.IMREAD_UNCHANGED)

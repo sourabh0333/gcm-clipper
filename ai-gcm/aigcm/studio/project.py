@@ -92,7 +92,7 @@ def default_for(settings, clip, window=None):
                         facecam=stream_facecam(settings, clip), brand=brand_defaults(settings, clip))
 
 
-MARKER_KINDS = ("self_kill", "knock", "accolade", "chicken_dinner")
+MARKER_KINDS = ("self_kill", "self_knock", "accolade", "dinner")   # the HUD scan's event names (vision.py)
 
 
 def editor_extras(settings, clip, details):

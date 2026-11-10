@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { api, type Clip, type StreamSummary } from "../api";
 import { duration, STAGE_LABEL, STATUS_LABEL } from "../format";
+import Thumbnails from "../studio/Thumbnails";
 
 export default function StreamPage() {
   const { id } = useParams();
@@ -113,6 +114,7 @@ export default function StreamPage() {
 
       {stream.status === "done" && (
         <>
+          {clips.length > 0 && id && <Thumbnails streamId={id} />}
           <h2>Kept ({kept.length})</h2>
           {kept.length === 0 && <p className="muted small">Clips you keep show up here.</p>}
           {kept.map((c) => (

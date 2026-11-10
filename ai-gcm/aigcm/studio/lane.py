@@ -46,6 +46,18 @@ def plan_prepare(settings, session, render):
     return task
 
 
+def cover_path(video):
+    return Path(video).with_suffix(".jpg")
+
+
+def save_cover(video, at):
+    """The Short's cover image: a full-size frame of the exported video (hook, captions and all), next to it."""
+    from ..media import run, tool
+
+    run([tool("ffmpeg"), "-v", "error", "-y", "-ss", f"{at:.3f}", "-i", str(video), "-frames:v", "1", "-q:v", "2",
+         str(cover_path(video))])
+
+
 def _hook(edit, folder):
     from . import hook
 
@@ -74,7 +86,7 @@ def plan_export(settings, session, render):
     clip_start = clip.start_s
     hooks_folder = target / "hooks"   # worked out now: the task runs after this session has closed
     from . import brand
-    from .edit import MAX_LENGTH_S, output_length
+    from .edit import MAX_LENGTH_S, cover_time, output_length
 
     owner = clip.stream.user_id
     kit = project.kit_for(clip)
@@ -96,6 +108,7 @@ def plan_export(settings, session, render):
                     hook_png=_hook(edit, hooks_folder),
                     strip_png=brand.strip_for(settings.jobs_dir, owner, kit) if edit.lower_third else None,
                     intro=intro, outro=outro)
+        save_cover(out_dir / name, cover_time(edit, found["intro_s"] if intro else 0.0))
         return name
     return task
 
@@ -130,7 +143,91 @@ def plan_posters(settings, session, render):
     return task
 
 
-PLANNERS = {"prepare": plan_prepare, "export": plan_export, "posters": plan_posters}
+REACTION_S = 4.0    # the streamer's reaction is the loudest moment this soon after a kill
+
+
+def stream_moments(folder, clips, windows):
+    """Kill and reaction moments of a stream's best clips, each located in a file that still has it: the
+    source if it's on the laptop, else a kept clip's working window. Returns (moments, kills, dinners)."""
+    import numpy as np
+
+    from .thumbs import Moment
+
+    source = project.source_file(folder)
+    events = (read_json(folder / "vision.json", {}) or {}).get("events") or []
+    kills_all = [e["t"] for e in events if e.get("kind") == "self_kill"]
+    dinners = sum(1 for e in events if e.get("kind") == "dinner")   # the HUD scan's name for a chicken dinner
+
+    def locate(t):
+        if source is not None:
+            return source, t
+        for path, (a, b) in windows.items():
+            if a <= t <= b:
+                return path, t - a
+        return None
+
+    loud = None
+    if (folder / "audio.npz").exists():
+        data = np.load(folder / "audio.npz")
+        loud = (data["t"], data["excitement"])
+    moments = []
+    for clip in sorted(clips, key=lambda c: c.rank):
+        for t in [k for k in kills_all if clip.start_s <= k <= clip.end_s]:
+            spot = locate(t + 0.3)
+            if spot:
+                moments.append(Moment(spot[0], spot[1], "kill", score=(clip.score or 0) - clip.rank))
+            if loud is not None:
+                times, excitement = loud
+                near = (times > t) & (times <= t + REACTION_S)
+                if near.any():
+                    i = int(np.argmax(np.where(near, excitement, -1e9)))
+                    spot = locate(float(times[i]))
+                    if spot:
+                        moments.append(Moment(spot[0], spot[1], "reaction", score=float(excitement[i])))
+    if not any(m.kind == "kill" for m in moments):   # talk streams: the clips' key moments instead
+        for clip in sorted(clips, key=lambda c: c.rank)[:6]:
+            at = (clip.details or {}).get("anchor") or (clip.start_s + clip.end_s) / 2
+            spot = locate(at)
+            if spot:
+                moments.append(Moment(spot[0], spot[1], "kill", score=-clip.rank))
+    return moments, len(kills_all), dinners
+
+
+def plan_thumbs(settings, session, render):
+    from .. import titles
+    from . import facecam
+    from .thumbs import make_set
+
+    stream = session.get(Stream, (render.params or {}).get("stream_id"))
+    if stream is None:
+        raise RuntimeError("That stream no longer exists.")
+    folder = Path(settings.jobs_dir) / stream.job_dir
+    clips = list(stream.clips)
+    windows = {}
+    for clip in clips:
+        details = win.ready(project.clip_folder(settings, clip))
+        if details:
+            windows[project.clip_folder(settings, clip) / "window.mkv"] = (details["start"], details["end"])
+    moments, kills, dinners = stream_moments(folder, clips, windows)
+    if not moments:
+        raise RuntimeError("The stream's recording is no longer on the laptop and no kept clip has footage saved.")
+    talk = next((c.title for c in sorted(clips, key=lambda c: c.rank)
+                 if c.title and (c.type in ("funny", "banter", "rage", "hype", "story", "talk", "reaction"))), None)
+    texts = titles.thumb_words(kills, dinners, [c.type for c in sorted(clips, key=lambda c: c.rank)])
+    names = titles.long_titles(kills, dinners, titles.stream_context(stream.title), talk, stream.game or "bgmi")
+    cam = (facecam.for_stream(folder) or {}).get("box")
+    out_dir = folder / "thumbs" / render.id
+
+    def task(threads):
+        from ..jobs import write_json
+
+        make_set(moments, cam, texts, out_dir)
+        write_json(out_dir / "titles.json", {"titles": names, "words": texts})
+        return render.id
+    return task
+
+
+PLANNERS = {"prepare": plan_prepare, "export": plan_export, "posters": plan_posters, "thumbs": plan_thumbs}
 
 
 def run(settings, sessions, render_id, threads):
