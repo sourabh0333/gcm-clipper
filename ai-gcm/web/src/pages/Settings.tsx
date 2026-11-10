@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 import { api, type Me } from "../api";
 
 export default function Settings({ me }: { me: Me }) {
@@ -60,6 +61,11 @@ export default function Settings({ me }: { me: Me }) {
         <div className="small muted">{me.email}{me.admin ? " · owner" : ""}</div>
         <button style={{ marginTop: 12 }} onClick={signOut}>Sign out</button>
       </div>
+      <h2>Brand kit</h2>
+      <Link to="/brand" className="card">
+        <div className="title">Your look, lower-third, intro and post text</div>
+        <div className="small muted">Set once; used on every export and on new streams' clips.</div>
+      </Link>
       <h2>Notifications</h2>
       {telegram && !telegram.available && <p className="muted small">Telegram messages aren't set up on this laptop yet.</p>}
       {telegram?.available && (

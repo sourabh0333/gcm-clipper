@@ -60,6 +60,27 @@ def stream_facecam(settings, clip):
     return ((facecam.for_stream(job_folder(settings, clip)) or {}).get("box")) or None
 
 
+def kit_for(clip):
+    """The clip owner's brand kit (a default kit if they haven't set one)."""
+    from sqlalchemy.orm import object_session
+
+    from ..db.models import BrandKitRow
+    from .brand import BrandKit
+
+    session = object_session(clip)
+    row = session.get(BrandKitRow, clip.stream.user_id) if session is not None else None
+    try:
+        return BrandKit.model_validate(row.data) if row else BrandKit()
+    except Exception:
+        return BrandKit()
+
+
+def brand_defaults(settings, clip):
+    from . import brand
+
+    return brand.defaults(kit_for(clip), brand.files(settings.jobs_dir, clip.stream.user_id))
+
+
 def default_for(settings, clip, window=None):
     folder = job_folder(settings, clip)
     info = window or read_json(folder / "info.json", {}) or {}
@@ -68,7 +89,7 @@ def default_for(settings, clip, window=None):
     return default_edit(clip.start_s, clip.end_s, width, height, clip.title,
                         engine_clip(folder, clip.clip_key).get("events") or (),
                         captions=has_captions(folder, clip), window=span,
-                        facecam=stream_facecam(settings, clip))
+                        facecam=stream_facecam(settings, clip), brand=brand_defaults(settings, clip))
 
 
 MARKER_KINDS = ("self_kill", "knock", "accolade", "chicken_dinner")
@@ -90,8 +111,13 @@ def editor_extras(settings, clip, details):
     words = [{"t": round(w["start"], 2), "end": round(w["end"], 2), "w": w["word"].strip()}
              for seg in transcript.get("segments", []) if seg.get("end", 0) > lo and seg.get("start", 0) < hi
              for w in seg.get("words", []) if lo <= w["start"] <= hi]
+    from . import brand
+
+    kit, found = kit_for(clip), brand.files(settings.jobs_dir, clip.stream.user_id)
+    kit_info = {"strip": "/media/brand/strip" if (kit.strip_text() or found["logo"]) else None,
+                "intro_s": found["intro_s"], "outro_s": found["outro_s"]}
     return {"events": shown, "anchor": anchor, "facecam": cam.get("box"), "facecam_source": cam.get("source"),
-            "words": words,
+            "words": words, "brand": kit_info,
             "presets": win.length_presets(clip.start_s, clip.end_s, anchor, events, lo, hi)}
 
 

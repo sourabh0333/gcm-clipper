@@ -91,11 +91,37 @@ export type EditData = {
   layout: { template: Template; background: "blur" | "black"; band_h?: number; panels: Panel[] };
   zooms: { t: number; dur: number; scale: number }[];
   hook: { text: string; color: "white" | "yellow"; on: boolean };
-  captions: { on: boolean; script?: "auto" | "latin" | "devanagari"; words?: WordFix[] };
+  captions: { on: boolean; script?: "auto" | "latin" | "devanagari"; words?: WordFix[]; color?: "white" | "yellow";
+              size?: "normal" | "large" };
   cover_t: number | null;
   sponsor_safe: boolean;
   keep_hud?: boolean;
+  lower_third?: boolean;
+  intro?: boolean;
+  outro?: boolean;
 };
+
+export type BrandKit = {
+  hook_color: "yellow" | "white";
+  caption_color: "white" | "yellow";
+  caption_size: "normal" | "large";
+  lower_third: boolean;
+  name: string;
+  upi: string;
+  instagram: string;
+  use_intro: boolean;
+  use_outro: boolean;
+  description: string;
+  hashtags: string[];
+  disclaimer: string | null;
+};
+export type BrandView = {
+  kit: BrandKit;
+  files: { logo: string | null; intro: string | null; outro: string | null };
+  lengths: { intro: number; outro: number };
+  strip: string | null;
+};
+export type PostText = { title: string; description: string; hashtags: string[]; text: string };
 export type Template = "native" | "blur" | "band" | "split";
 export type WordFix = { t: number; w: string };
 export type Word = { t: number; end: number; w: string };
@@ -134,6 +160,7 @@ export type Studio = {
     facecam: Box | null;
     facecam_source: "auto" | "manual" | null;
     words: Word[];
+    brand: { strip: string | null; intro_s: number; outro_s: number };
     presets: { moment: [number, number]; full_fight: [number, number]; suggested: "moment" | "full_fight" };
   } | null;
   exports: RenderJob[];

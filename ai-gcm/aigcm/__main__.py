@@ -172,23 +172,28 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
         done = read_json(job.path("clips.json"), {})
         said = read_json(job.path("transcript.json")) if use_captions else None
         cam = list(settings.facecam) if settings.facecam else (facecam.for_stream(job.root, info["path"]) or {}).get("box")
+        kit = read_json(job.path("brand.json"), {}) or {}   # the owner's brand kit, from the worker
+        files = {k: (kit.get(k) or None) for k in ("strip", "intro", "outro")}
+        files = {k: (v if v and Path(v).exists() else None) for k, v in files.items()}
         for clip in ranked:
             if clip["id"] in done and (out_dir / done[clip["id"]]).exists():
                 continue
             edit = default_edit(clip["start"], clip["end"], info["width"], info["height"], clip.get("title"),
                                 clip.get("events") or (), captions=bool(said) and is_talk(clip.get("type"), clip.get("labels")),
-                                facecam=cam)
+                                facecam=cam, brand=kit.get("defaults"))
             if settings.layout in ("blur", "split", "native"):
                 edit = edit.model_copy(update={"layout": template_layout(settings.layout, info["width"], info["height"], cam)})
             picture = hook.for_edit(job.path("studio", "hooks"), edit)
             name = f"{clip['rank']:02d}_{clip['type']}_{clip['id']}.mp4"
             studio_render.render(edit, info["path"], 0.0, info.get("has_audio", True), out_dir / name, transcript=said,
-                                 threads=8, hook_png=picture)
+                                 threads=8, hook_png=picture, strip_png=files["strip"], intro=files["intro"],
+                                 outro=files["outro"])
             done[clip["id"]] = name
             if settings.sponsor_safe and clip.get("mute_spans"):
                 safe = f"{clip['rank']:02d}_{clip['type']}_{clip['id']}_safe.mp4"
                 studio_render.render(edit, info["path"], 0.0, info.get("has_audio", True), out_dir / safe,
-                                     transcript=said, threads=8, hook_png=picture,
+                                     transcript=said, threads=8, hook_png=picture, strip_png=files["strip"],
+                                     intro=files["intro"], outro=files["outro"],
                                      mute_spans=studio_render.output_mute(edit, clip["start"], clip["mute_spans"]))
                 done[clip["id"] + "_safe"] = safe
             write_json(job.path("clips.json"), done)

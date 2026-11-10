@@ -54,5 +54,5 @@ describe("library", () => {
     fireEvent.change(screen.getByLabelText("Search clips"), { target: { value: "zone" } });
     await waitFor(() => expect(screen.getByText("1 clip")).toBeTruthy(), { timeout: 2000 });
     expect(urls.at(-1)).toContain("q=zone");
-  });
+  }, 15000);   // 45 tiles and a typing pause: slow when every test file runs at once
 });

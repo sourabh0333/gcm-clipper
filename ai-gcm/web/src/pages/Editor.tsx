@@ -52,6 +52,7 @@ export default function Editor() {
   const [placing, setPlacing] = useState<{ box: Box; template: Template } | null>(null);
   const [converting, setConverting] = useState(false);
   const hookImage = useRef<HTMLImageElement | null>(null);
+  const stripImage = useRef<HTMLImageElement | null>(null);
   const chunks = useRef<Chunk[]>([]);
 
   const video = useRef<HTMLVideoElement>(null);
@@ -102,7 +103,7 @@ export default function Editor() {
     const current = editRef.current;
     if (!v || !ctx || !current) return;
     const t = cursorRef.current;
-    drawFrame(ctx, v, current, t, { hook: hookImage.current, chunks: chunks.current });
+    drawFrame(ctx, v, current, t, { hook: hookImage.current, chunks: chunks.current, strip: stripImage.current });
     if (playhead.current) playhead.current.style.left = `${TIMELINE_PAD + (t - lo) * pps}px`;
     if (timeLabel.current) {
       const out = toOutput(current.segments, t);
@@ -118,6 +119,15 @@ export default function Editor() {
     chunks.current = edit && words ? captionChunks(edit, words) : [];
     paint();
   }, [edit, words, paint]);
+
+  // The brand kit's lower-third strip, the same image the export lays on.
+  const stripUrl = studio?.editor?.brand?.strip ?? null;
+  useEffect(() => {
+    if (!stripUrl) { stripImage.current = null; return; }
+    const image = new Image();
+    image.onload = () => { stripImage.current = image; paint(); };
+    image.src = `${stripUrl}?v=${Date.now()}`;
+  }, [stripUrl, paint]);
 
   // The bundled caption font, so the preview's captions look like the export's.
   useEffect(() => {
@@ -439,6 +449,26 @@ export default function Editor() {
               ))}
             </div>
           )}
+          {(studio.editor.brand.strip || studio.editor.brand.intro_s > 0 || studio.editor.brand.outro_s > 0) && (
+            <div className="row" aria-label="Brand kit">
+              {studio.editor.brand.strip && (
+                <button className={edit.lower_third ? "chip on" : "chip"} onClick={() => commit({ ...edit, lower_third: !edit.lower_third })}>
+                  Lower-third
+                </button>
+              )}
+              {studio.editor.brand.intro_s > 0 && (
+                <button className={edit.intro ? "chip on" : "chip"} onClick={() => commit({ ...edit, intro: !edit.intro })}>
+                  Intro {studio.editor.brand.intro_s.toFixed(0)}s
+                </button>
+              )}
+              {studio.editor.brand.outro_s > 0 && (
+                <button className={edit.outro ? "chip on" : "chip"} onClick={() => commit({ ...edit, outro: !edit.outro })}>
+                  Outro {studio.editor.brand.outro_s.toFixed(0)}s
+                </button>
+              )}
+              <Link to="/brand" className="small">Brand kit</Link>
+            </div>
+          )}
           <div className="emojis" aria-label="Add an emoji">
             {EMOJI.map((e) => (
               <button key={e} onClick={() => commit({ ...edit, hook: { ...edit.hook, text: `${edit.hook.text.trimEnd()} ${e}`.slice(0, 80), on: true } })}>
@@ -476,6 +506,16 @@ export default function Editor() {
                       }}>
                 {script === "latin" ? "Hinglish" : "हिंदी"}
               </button>
+            ))}
+          </div>
+          <div className="row">
+            {(["white", "yellow"] as const).map((c) => (
+              <button key={c} className={(edit.captions.color ?? "white") === c ? "chip on" : "chip"}
+                      onClick={() => commit({ ...edit, captions: { ...edit.captions, color: c } })}>{c === "white" ? "White" : "Yellow"}</button>
+            ))}
+            {(["normal", "large"] as const).map((z) => (
+              <button key={z} className={(edit.captions.size ?? "normal") === z ? "chip on" : "chip"}
+                      onClick={() => commit({ ...edit, captions: { ...edit.captions, size: z } })}>{z === "normal" ? "Normal" : "Large"}</button>
             ))}
           </div>
           {converting && <p className="small muted">Converting with Gemini…</p>}

@@ -73,6 +73,17 @@ def plan_export(settings, session, render):
     name = export_name(clip.clip_key, version, render.id, safe)
     clip_start = clip.start_s
     hooks_folder = target / "hooks"   # worked out now: the task runs after this session has closed
+    from . import brand
+    from .edit import MAX_LENGTH_S, output_length
+
+    owner = clip.stream.user_id
+    kit = project.kit_for(clip)
+    found = brand.files(settings.jobs_dir, owner)
+    intro = found["intro"] if edit.intro else None
+    outro = found["outro"] if edit.outro else None
+    total = output_length(edit.segments) + (found["intro_s"] if intro else 0) + (found["outro_s"] if outro else 0)
+    if total > MAX_LENGTH_S + 0.01:
+        raise RuntimeError(f"With the intro and outro the Short would be {total:.0f} s; Shorts can be at most 3 minutes.")
 
     def task(threads):
         from .render import output_mute, render as render_edit
@@ -82,7 +93,9 @@ def plan_export(settings, session, render):
         out_dir.mkdir(exist_ok=True)
         render_edit(edit, target / "window.mkv", details["start"], details["has_audio"], out_dir / name,
                     transcript=transcript, mute_spans=output_mute(edit, clip_start, spans), threads=threads,
-                    hook_png=_hook(edit, hooks_folder))
+                    hook_png=_hook(edit, hooks_folder),
+                    strip_png=brand.strip_for(settings.jobs_dir, owner, kit) if edit.lower_third else None,
+                    intro=intro, outro=outro)
         return name
     return task
 

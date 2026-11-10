@@ -82,6 +82,8 @@ class WordFix(Strict):
 class Captions(Strict):
     on: bool = False
     script: Literal["auto", "latin", "devanagari"] = "auto"
+    color: Literal["white", "yellow"] = "white"
+    size: Literal["normal", "large"] = "normal"
     words: list[WordFix] = Field(default_factory=list, max_length=800)
 
 
@@ -95,6 +97,9 @@ class EditData(Strict):
     cover_t: float | None = None
     sponsor_safe: bool = False
     keep_hud: bool = True      # the game panel's top strip (kill counters) stays unzoomed during zooms
+    lower_third: bool = False  # the brand kit's strip (logo, name, UPI, Instagram) at the bottom
+    intro: bool = False        # the brand kit's intro before the clip
+    outro: bool = False        # and its outro after
 
     @model_validator(mode="after")
     def _segments_in_order(self):
@@ -209,12 +214,13 @@ def kill_zooms(events, start, end):
 
 
 def default_edit(start, end, width, height, title=None, events=(), captions=False, facecam=None,
-                 window=None):
+                 window=None, brand=None):
     """The edit a clip starts with, made from what the engine knows (decision 2). Vertical streams are
     already laid out by the streamer, so they stay as they are; landscape ones go over a blurred fill
     with a zoom on each kill."""
     if window:
         start, end = max(start, window[0]), min(end, window[1])
+    b = brand or {}   # what the creator's brand kit sets (studio.brand.defaults)
     vertical = height > width
     # Facecam on top for streams with a camera (the top Indian format); otherwise the blurred fill.
     layout = template_layout("native" if vertical else ("split" if facecam else "blur"), width, height, facecam)
@@ -222,6 +228,7 @@ def default_edit(start, end, width, height, title=None, events=(), captions=Fals
         segments=[Segment(start=round(start, 3), end=round(end, 3))],
         layout=layout,
         zooms=[] if vertical else kill_zooms(events, start, end),
-        hook=Hook(text=(title or "")[:80], on=bool((title or "").strip())),
-        captions=Captions(on=bool(captions)),
+        hook=Hook(text=(title or "")[:80], on=bool((title or "").strip()), color=b.get("hook_color", "yellow")),
+        captions=Captions(on=bool(captions), color=b.get("caption_color", "white"), size=b.get("caption_size", "normal")),
+        lower_third=bool(b.get("lower_third")), intro=bool(b.get("intro")), outro=bool(b.get("outro")),
     )

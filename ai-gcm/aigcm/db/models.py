@@ -182,6 +182,15 @@ class Render(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
+class BrandKitRow(Base):
+    """A creator's brand kit (M3.6): settings as JSON (aigcm.studio.brand.BrandKit); files in the jobs folder."""
+    __tablename__ = "brand_kits"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    data: Mapped[dict] = mapped_column(JSON, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class Marker(Base):
     """A moment the creator marked: on the Live screen (wall-clock time), by chat or by voice."""
     __tablename__ = "markers"

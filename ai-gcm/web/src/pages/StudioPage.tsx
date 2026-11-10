@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
-import { api, type RenderJob, type Studio } from "../api";
+import { api, type PostText, type RenderJob, type Studio } from "../api";
 import { clock } from "../format";
 
 const POLL_MS = 3000;
@@ -126,7 +126,7 @@ export default function StudioPage() {
           <a className="button" href={`${clip.video}?download=1`}>Download</a>
           {clip.safe_video && <a className="button" href={`${clip.safe_video}&download=1`}>Sponsor-safe copy</a>}
           <button onClick={() => shareVideo(clip.video, name).catch((err) => setError((err as Error).message))}>Share</button>
-          <button onClick={() => copyText([clip.title, clip.description, clip.hashtags.join(" ")].filter(Boolean).join("\n\n"))
+          <button onClick={() => api<PostText>(`/api/clips/${id}/post-text`).then((post) => copyText(post.text))
             .then(() => setNote("Title, description and hashtags copied"), () => setNote("Couldn't copy here"))}>
             Copy text
           </button>

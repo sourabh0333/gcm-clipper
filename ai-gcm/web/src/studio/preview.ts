@@ -5,7 +5,10 @@
 import type { EditData } from "../api";
 import { CAPTION_MARGIN, type Chunk, H, hookBox, HUD_STRIP, panelSource, toOutput, W, zoomAt } from "./model";
 
-export type Overlays = { hook?: HTMLImageElement | null; chunks?: Chunk[] };
+export type Overlays = { hook?: HTMLImageElement | null; chunks?: Chunk[]; strip?: HTMLImageElement | null };
+const STRIP_Y = H - 140 - 30;   // brand.STRIP_Y
+const CAPTION_COLOURS = { white: "#fff", yellow: "#ffe600" };
+const CAPTION_SIZES = { normal: 78, large: 92 };
 export const CAPTION_FONT = "Mukta ExtraBold";
 
 export const PREVIEW_W = 540;
@@ -58,11 +61,14 @@ export function drawFrame(ctx: CanvasRenderingContext2D, video: HTMLVideoElement
     const [y, h] = hookBox(edit.layout);
     ctx.drawImage(overlays.hook, 0, y * K, PREVIEW_W, h * K);
   }
+  if (edit.lower_third && overlays.strip?.complete && overlays.strip.naturalWidth) {
+    ctx.drawImage(overlays.strip, 0, STRIP_Y * K, PREVIEW_W, overlays.strip.naturalHeight * K);
+  }
   if (edit.captions.on && out !== null) {
     const chunk = overlays.chunks?.find((c) => out >= c.start && out < c.end);
     if (chunk) {
       // As the export's captions: bold, white, black outline, centred, CAPTION_MARGIN up from the bottom.
-      const size = 78 * K;
+      const size = CAPTION_SIZES[edit.captions.size ?? "normal"] * K;
       ctx.font = `${size}px "${CAPTION_FONT}", sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "bottom";
@@ -73,7 +79,7 @@ export function drawFrame(ctx: CanvasRenderingContext2D, video: HTMLVideoElement
       ctx.lineWidth = 12 * K;
       ctx.strokeStyle = "#000";
       ctx.strokeText(text, x, y, PREVIEW_W - 120 * K);
-      ctx.fillStyle = "#fff";
+      ctx.fillStyle = CAPTION_COLOURS[edit.captions.color ?? "white"];
       ctx.fillText(text, x, y, PREVIEW_W - 120 * K);
     }
   }

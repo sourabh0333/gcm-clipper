@@ -221,3 +221,14 @@ h2 { font-size: 1.1rem; margin: 1.4rem 0 0.6rem; }
 .wordlist { display: flex; flex-wrap: wrap; gap: 6px; max-height: 180px; overflow-y: auto; }
 .wordlist .word { min-height: 34px; padding: 0.25rem 0.6rem; font-size: 0.9rem; }
 .wordlist .word.fixed { border-color: var(--accent); color: var(--accent); }
+
+/* Brand kit (M3.6) */
+textarea { font: inherit; width: 100%; padding: 0.7rem 0.8rem; border-radius: 10px; border: 1px solid var(--line); background: #11131a; color: var(--text); resize: vertical; }
+.brandform .chip { min-height: 34px; background: transparent; }
+.brandform .chip.on { color: #1a1200; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+.brandlogo { width: 52px; height: 52px; object-fit: contain; border-radius: 8px; background: #11131a; }
+.brandstrip { width: 100%; margin-top: 12px; border-radius: 6px; background: repeating-linear-gradient(45deg, #333 0 12px, #555 12px 24px); }
+.brandclip { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.brandclip video { width: 120px; border-radius: 8px; background: #000; }
+.filebutton { position: relative; overflow: hidden; }
+.filebutton input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }

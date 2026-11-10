@@ -100,6 +100,24 @@ def write_markers(session, stream, folder):
         write_json(folder / "markers.json", found)
 
 
+def write_brand(session, stream, folder, settings):
+    """The owner's brand kit and its files, in the job's brand.json, for the engine's render stage."""
+    from .db.models import BrandKitRow
+    from .jobs import write_json
+    from .studio import brand
+
+    row = session.get(BrandKitRow, stream.user_id)
+    try:
+        kit = brand.BrandKit.model_validate(row.data) if row else brand.BrandKit()
+    except Exception:
+        kit = brand.BrandKit()
+    found = brand.files(settings.jobs_dir, stream.user_id)
+    write_json(folder / "brand.json", {
+        "kit": kit.model_dump(mode="json"), "defaults": brand.defaults(kit, found),
+        "strip": str(brand.strip_for(settings.jobs_dir, stream.user_id, kit) or "") if kit.lower_third else "",
+        "intro": str(found["intro"] or ""), "outro": str(found["outro"] or "")})
+
+
 def kill_tree(proc):
     if proc.poll() is not None:
         return
@@ -219,6 +237,10 @@ class Worker:
                 s.commit()
                 return
             write_markers(s, stream, folder)
+            try:
+                write_brand(s, stream, folder, self.settings)
+            except Exception as exc:   # a broken kit must never stop a stream: its clips just go unbranded
+                log(f"worker: brand kit not applied: {exc!r}")
             cmd = self.command(stream, folder)
         log(f"worker: starting {stream_id}")
         self.current_stream = stream_id

@@ -15,9 +15,11 @@ from pathlib import Path
 from ..jobs import log
 from ..media import run, tool
 from ..safety import mute_filter
-from .edit import H, W, hook_box, span_to_output, to_output
+from .edit import H, W, hook_box, output_length, span_to_output, to_output
 
 CAPTION_FONT = "Mukta ExtraBold"   # bundled in assets/fonts; has both Latin and Devanagari
+CAPTION_COLOURS = {"white": "&H00FFFFFF", "yellow": "&H0000E6FF"}   # ASS is &HAABBGGRR
+CAPTION_SIZES = {"normal": 78, "large": 92}
 
 FPS = 30
 FONTS = Path(__file__).resolve().parents[2] / "assets" / "fonts"
@@ -58,10 +60,12 @@ def _panel_lines(i, panel, zoom, keep_hud):
             f"[pg{i}][hud{i}]overlay=0:0[p{i}]"]
 
 
-def build_graph(edit, input_start, has_audio, captions_name=None, mute=(), hook_input=None):
+def build_graph(edit, input_start, has_audio, captions_name=None, mute=(), hook_input=None, strip_input=None,
+                intro_input=None, outro_input=None):
     """The -filter_complex text. `input_start` is the source time of the input's first frame (after any
     `-ss`), so the parts are trimmed relative to it; zooms stay in source time. `mute` is output-time spans
-    to silence."""
+    to silence. The other inputs, when given, are ffmpeg input numbers: the hook image, the brand kit's
+    lower-third strip, and the intro and outro (already 1080x1920, 30 fps, stereo; brand.save_clip)."""
     segs = edit.segments
     n = len(segs)
     lines = []
@@ -102,11 +106,30 @@ def build_graph(edit, input_start, has_audio, captions_name=None, mute=(), hook_
         lines.append(f"[{hook_input}:v]format=rgba[hook]")
         lines.append(f"{base}[hook]overlay=0:{y}:eof_action=repeat[withhook]")
         base = "[withhook]"
+    if strip_input is not None:
+        from .brand import STRIP_Y
+
+        lines.append(f"[{strip_input}:v]format=rgba[strip]")
+        lines.append(f"{base}[strip]overlay=0:{STRIP_Y}:eof_action=repeat[withstrip]")
+        base = "[withstrip]"
     tail = f",subtitles={captions_name}:fontsdir=fonts" if captions_name else ""
-    lines.append(f"{base}null{tail},format=yuv420p[v]")
+    joins = [i for i in (intro_input, outro_input) if i is not None]
+    main_v, main_a = ("[mv]", "[ma]") if joins else ("[v]", "[a]")
+    lines.append(f"{base}null{tail},format=yuv420p,setsar=1{main_v}")
     if has_audio:
         silence = f"{mute_filter(mute)}," if mute else ""
-        lines.append(f"[ca]{silence}aresample=48000[a]")
+        stereo = ",aformat=channel_layouts=stereo" if joins else ""
+        lines.append(f"[ca]{silence}aresample=48000{stereo}{main_a}")
+    elif joins:
+        # The intro and outro have sound; the clip needs a silent track of its own length to join them.
+        lines.append(f"anullsrc=r=48000:cl=stereo,atrim=duration={output_length(edit.segments):.3f}{main_a}")
+    if joins:
+        for i in joins:
+            lines.append(f"[{i}:v:0]setsar=1,fps={FPS},format=yuv420p[j{i}v]")
+            lines.append(f"[{i}:a:0]aresample=48000,aformat=channel_layouts=stereo[j{i}a]")
+        pieces = ([f"[j{intro_input}v][j{intro_input}a]"] if intro_input is not None else []) + [main_v + main_a] \
+            + ([f"[j{outro_input}v][j{outro_input}a]"] if outro_input is not None else [])
+        lines.append("".join(pieces) + f"concat=n={len(pieces)}:v=1:a=1[v][a]")
     return ";".join(lines)
 
 
@@ -138,10 +161,15 @@ def output_mute(edit, clip_start, spans):
 
 
 def render(edit, window_file, window_start, has_audio, out_path, transcript=None, mute_spans=(), threads=3,
-           hook_png=None):
+           hook_png=None, strip_png=None, intro=None, outro=None):
     """Render `edit` from the window file (time 0 = source time `window_start`) into out_path, with the
-    hook image (from hook.py) laid over its box when given."""
+    hook image (hook.py) and the brand kit's lower-third strip laid over it, and its intro and outro joined,
+    when given and switched on in the edit."""
     from ..captions import to_ass
+
+    strip_png = strip_png if edit.lower_third else None
+    intro = intro if edit.intro else None
+    outro = outro if edit.outro else None
 
     out_path = Path(out_path)
     first = min(s.start for s in edit.segments) - window_start
@@ -153,16 +181,21 @@ def render(edit, window_file, window_start, has_audio, out_path, transcript=None
             if chunks:
                 captions_name = "captions.ass"
                 margin = CAPTION_MARGIN.get(edit.layout.template, 380)
-                (Path(tmp) / captions_name).write_text(to_ass(chunks, margin, CAPTION_FONT), encoding="utf-8")
+                (Path(tmp) / captions_name).write_text(
+                    to_ass(chunks, margin, CAPTION_FONT, colour=CAPTION_COLOURS[edit.captions.color],
+                           size=CAPTION_SIZES[edit.captions.size]), encoding="utf-8")
                 shutil.copytree(FONTS, Path(tmp) / "fonts")
-        hook_input = 1 if hook_png else None
-        graph = build_graph(edit, window_start + seek, has_audio, captions_name, mute_spans, hook_input)
-        partial = out_path.with_name(out_path.stem + ".part.mp4")
         cmd = [tool("ffmpeg"), "-v", "error", "-y", "-ss", f"{seek:.3f}", "-i", str(Path(window_file).resolve())]
-        if hook_png:
-            cmd += ["-i", str(Path(hook_png).resolve())]
+        numbers = {}
+        for name, path in (("hook", hook_png), ("strip", strip_png), ("intro", intro), ("outro", outro)):
+            if path:
+                numbers[name] = 1 + len(numbers)
+                cmd += ["-i", str(Path(path).resolve())]
+        graph = build_graph(edit, window_start + seek, has_audio, captions_name, mute_spans, numbers.get("hook"),
+                            numbers.get("strip"), numbers.get("intro"), numbers.get("outro"))
+        partial = out_path.with_name(out_path.stem + ".part.mp4")
         cmd += ["-filter_complex", graph, "-filter_complex_threads", str(threads), "-map", "[v]"]
-        if has_audio:
+        if has_audio or intro or outro:
             cmd += ["-map", "[a]", "-c:a", "aac", "-b:a", "128k"]
         cmd += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-r", str(FPS), "-threads", str(threads),
                 "-movflags", "+faststart", str(partial.resolve())]

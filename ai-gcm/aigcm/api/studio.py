@@ -118,7 +118,10 @@ def export(clip_id: int, body: ExportBody, request: Request, user=Depends(curren
     version = (latest.version if latest else 0) if body.version is None else body.version
     if version and not any(e.version == version for e in clip.edits):
         raise HTTPException(404, "That version of the edit doesn't exist.")
-    params = {"version": version, "sponsor_safe": body.sponsor_safe}
+    # The same version can look different later: the automatic edit (version 0) follows the brand kit and
+    # the stream's camera box, and any version shows the kit's current strip, intro and outro. So an
+    # earlier export is reused only when all of that is unchanged too.
+    params = {"version": version, "sponsor_safe": body.sponsor_safe, "look": look(settings, db, clip, version)}
     for earlier in db.scalars(select(Render).where(Render.clip_id == clip.id, Render.kind == "export",
                                                    Render.status.in_(("queued", "running", "done")))).all():
         if earlier.params == params and (earlier.status != "done" or lane.export_path(settings, clip, earlier)):
@@ -128,6 +131,26 @@ def export(clip_id: int, body: ExportBody, request: Request, user=Depends(curren
     db.add(AuditEntry(user_id=user.id, action="export", detail={"clip": clip.id, "version": version}))
     db.commit()
     return render_view(render)
+
+
+def look(settings, db, clip, version):
+    """A short fingerprint of everything an export of this version depends on besides its frames."""
+    import hashlib
+    import json
+
+    from ..studio import brand
+
+    if version:
+        data = next(e.data for e in clip.edits if e.version == version)
+    else:
+        _, details = project.window_state(db, settings, clip)
+        data = project.default_for(settings, clip, details).model_dump(mode="json")
+    found = brand.files(settings.jobs_dir, clip.stream.user_id)
+    kit = project.kit_for(clip)
+    stamps = [brand.strip_name(kit, found["logo"])] + [
+        str(found[k].stat().st_mtime_ns) if found[k] else "" for k in ("intro", "outro")]
+    blob = json.dumps(data, sort_keys=True, ensure_ascii=False) + "|" + "|".join(stamps)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
 
 def own_render(db, user, render_id):
@@ -212,6 +235,20 @@ def convert_script(clip_id: int, body: ConvertBody, user=Depends(current_user), 
     except script.Unavailable as exc:
         raise HTTPException(503, str(exc))
     return {"script": body.script, "words": [{"t": t, "w": w} for t, w in zip(times, converted)]}
+
+
+@router.get("/api/clips/{clip_id}/post-text")
+def post_text(clip_id: int, user=Depends(current_user), db=Depends(get_db)):
+    """Title, description and hashtags to post with: the engine's (stream link, game line) and the brand kit's
+    (standard description, hashtags, own game line)."""
+    from ..studio import brand
+
+    clip = own_clip(db, user, clip_id)
+    saved = project.latest_edit(db, clip)
+    title = (saved.data.get("hook") or {}).get("text") if saved else None
+    details = clip.details or {}
+    return brand.post_text(title or clip.title, details.get("description"), details.get("hashtags"),
+                           project.kit_for(clip))
 
 
 FONT_FILES = {"Anton-Regular.ttf", "Mukta-ExtraBold.ttf"}

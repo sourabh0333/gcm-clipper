@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Navigate, NavLink, Route, Routes, useLocation } from "react-router";
 import { api, ApiError, type Me } from "./api";
+import Brand from "./pages/Brand";
 import Editor from "./pages/Editor";
 import Library from "./pages/Library";
 import Live from "./pages/Live";
@@ -57,6 +58,7 @@ export default function App() {
           <Route path="/clips/:id/edit" element={<Editor />} />
           <Route path="/live" element={<Live />} />
           <Route path="/settings" element={<Settings me={me} />} />
+          <Route path="/brand" element={<Brand />} />
           <Route path="*" element={<p>Page not found. <NavLink to="/">Back to your streams</NavLink></p>} />
         </Routes>
       </main>
