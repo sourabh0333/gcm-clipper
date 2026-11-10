@@ -25,6 +25,7 @@ export default function StudioPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  const [exportNote, setExportNote] = useState("");
   const asked = useRef(false);
 
   const load = useCallback(() => {
@@ -53,7 +54,10 @@ export default function StudioPage() {
     setBusy(true);
     try {
       await api<RenderJob>(`/api/clips/${id}/export`, { body: { sponsor_safe: sponsorSafe } });
+      setExportNote("Making the finished video on the laptop (about a minute). It appears below under Exports, "
+        + "with Post to YouTube and Download.");
       load();
+      window.setTimeout(() => document.getElementById("exports")?.scrollIntoView({ behavior: "smooth" }), 400);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -116,6 +120,9 @@ export default function StudioPage() {
               <button disabled={busy} onClick={() => exportNow()}>Export</button>
               {clip.safe_video && <button disabled={busy} onClick={() => exportNow(true)}>Export sponsor-safe</button>}
             </div>
+            <p className="small muted">
+              {exportNote || "Export makes the finished video on the laptop. Nothing downloads to your phone unless you tap Download."}
+            </p>
           </div>
         </>
       )}
@@ -135,7 +142,7 @@ export default function StudioPage() {
         {note && <p className="small">{note}</p>}
       </div>
 
-      {studio.exports.length > 0 && <h2>Exports</h2>}
+      {studio.exports.length > 0 && <h2 id="exports">Exports</h2>}
       {studio.exports.map((job) => (
         <div key={job.id} className="card studio">
           <div className="spread">
