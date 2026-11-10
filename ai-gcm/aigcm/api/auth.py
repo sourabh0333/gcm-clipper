@@ -134,9 +134,15 @@ def google_callback(request: Request, code: str = "", state: str = "", error: st
     except (ValueError, TypeError):
         pending = None
     if error:
+        if pending and pending.get("purpose") == "youtube":
+            from .youtube import _back
+            return _back("cancelled")
         return _fail(f"Google sign-in was cancelled ({error}).")
     if not pending or not code or not secrets.compare_digest(state, pending.get("state", "")):
         return _fail("This sign-in link has expired. Start again.")
+    if pending.get("purpose") == "youtube":
+        from .youtube import finish_connect
+        return finish_connect(request, db, pending, code)
     http = request.app.state.http
     response = http.post(TOKEN_URL, data={
         "client_id": settings.google_client_id, "client_secret": settings.google_client_secret,

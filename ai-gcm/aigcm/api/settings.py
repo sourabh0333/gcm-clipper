@@ -28,6 +28,8 @@ class ApiSettings:
     # A sign-in without Google, for tests and development on the laptop only (see auth.dev_login_allowed).
     dev_login: bool = False
     telegram_bot_token: str = ""
+    # Encrypts creators' YouTube tokens at rest (M4). Made once by `python -m aigcm.manage token-key`, kept in .env.
+    token_key: str = ""
     session_days: int = 30
     max_upload_bytes: int = 10 * 1024**3
     max_chunk_bytes: int = 16 * 1024**2
@@ -48,6 +50,7 @@ class ApiSettings:
             admins=_emails(os.environ.get("AIGCM_ADMINS")),
             dev_login=os.environ.get("AIGCM_DEV_LOGIN", "") == "1",
             telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", "").strip(),
+            token_key=os.environ.get("KAATCLIP_TOKEN_KEY", "").strip(),
         )
         for key, value in overrides.items():
             setattr(s, key, value)

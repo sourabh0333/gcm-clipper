@@ -115,6 +115,22 @@ def prepare_kept(session, settings):
     return queued
 
 
+def token_key(env_file):
+    """Make the key that encrypts creators' YouTube tokens and add it to .env, once. Never printed: losing it only
+    means creators reconnect; changing it does the same, so an existing key is never replaced."""
+    from .youtube import new_key
+
+    text = env_file.read_text(encoding="utf-8") if env_file.exists() else ""
+    if any(line.strip().startswith("KAATCLIP_TOKEN_KEY=") and line.split("=", 1)[1].strip()
+           for line in text.splitlines()):
+        return False
+    with env_file.open("a", encoding="utf-8", newline="\n") as f:
+        f.write(("" if not text or text.endswith("\n") else "\n")
+                + "# Encrypts creators' YouTube tokens (M4). Keep it; never share it.\n"
+                + f"KAATCLIP_TOKEN_KEY={new_key()}\n")
+    return True
+
+
 def main(argv=None):
     from .api.settings import ApiSettings
 
@@ -124,7 +140,13 @@ def main(argv=None):
     p.add_argument("--owner", required=True, help="the Google email of the account that will own them")
     sub.add_parser("prepare-kept", help="queue studio footage for kept clips that have none yet")
     sub.add_parser("backfill-library", help="spoken text and posters for the library, for existing streams")
+    sub.add_parser("token-key", help="add the YouTube token key to .env if it has none (never printed)")
     args = parser.parse_args(argv)
+    if args.command == "token-key":
+        from .config import ROOT
+        made = token_key(ROOT / ".env")
+        print("token key added to .env" if made else ".env already has a token key; left as it is")
+        return 0
 
     settings = ApiSettings.from_env()
     engine = database.make_engine(settings.db_url)

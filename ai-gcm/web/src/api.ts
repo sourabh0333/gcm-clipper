@@ -28,6 +28,17 @@ export type Me = { email: string; name: string | null; picture: string | null; a
 
 export type Stage = { name: string; status: string; seconds: number | null };
 
+export type YouTubeChannel = {
+  id: string;
+  channel_id: string;
+  title: string;
+  thumbnail: string | null;
+  status: "ok" | "expired";
+  connected_at: string;
+  settings: { made_for_kids: boolean; synthetic: boolean };
+};
+export type YouTubeState = { available: boolean; channels: YouTubeChannel[] };
+
 export type StreamSummary = {
   id: string;
   title: string;

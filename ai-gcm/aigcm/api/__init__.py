@@ -7,7 +7,8 @@ from sqlalchemy import text
 
 from .. import db
 from ..telegram import Bot
-from . import admin, auth, brand, clips, compilations, library, live, notifications, streams, studio, uploads, web
+from . import (admin, auth, brand, clips, compilations, library, live, notifications, streams, studio, uploads, web,
+               youtube)
 from .deps import csrf_guard
 from .settings import ApiSettings
 
@@ -28,7 +29,8 @@ def create_app(settings: ApiSettings | None = None, http: httpx.Client | None = 
     app.state.google_certs = auth.GoogleCerts(app.state.http.get)
     app.state.bot = Bot(settings.telegram_bot_token, http=http) if settings.telegram_bot_token else None
     app.middleware("http")(csrf_guard)
-    for module in (auth, admin, streams, uploads, clips, library, studio, brand, compilations, live, notifications):
+    for module in (auth, admin, streams, uploads, clips, library, studio, brand, compilations, live, notifications,
+                   youtube):
         app.include_router(module.router)
     app.include_router(streams.worker_router)
 

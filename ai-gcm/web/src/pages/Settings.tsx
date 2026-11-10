@@ -1,6 +1,17 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router";
-import { api, type Me } from "../api";
+import { Link, useSearchParams } from "react-router";
+import { api, type Me, type YouTubeChannel, type YouTubeState } from "../api";
+
+// What came back from Google's consent screen (the server sends ?youtube=<result> to this page).
+const YT_RESULTS: Record<string, string> = {
+  connected: "YouTube connected.",
+  cancelled: "Connecting YouTube was cancelled.",
+  scopes: "Kaatclip needs all three permissions (upload, see your channel, see its stats). Connect again and leave every box ticked.",
+  "no-channel": "That Google account has no YouTube channel. Make one on YouTube first, or pick another account.",
+  refused: "Google didn't accept the connection. Try again.",
+  "signed-out": "You were signed out while connecting. Sign in, then connect again.",
+  "not-ready": "YouTube isn't set up on the laptop yet.",
+};
 
 export default function Settings({ me }: { me: Me }) {
   const [invites, setInvites] = useState<{ email: string }[]>([]);
@@ -8,11 +19,55 @@ export default function Settings({ me }: { me: Me }) {
   const [message, setMessage] = useState("");
   const [telegram, setTelegram] = useState<{ available: boolean; linked: boolean } | null>(null);
   const [tgNote, setTgNote] = useState("");
+  const [youtube, setYoutube] = useState<YouTubeState | null>(null);
+  const [params, setParams] = useSearchParams();
+  const [ytNote, setYtNote] = useState(YT_RESULTS[params.get("youtube") ?? ""] ?? "");
 
   useEffect(() => {
     if (me.admin) api<{ email: string }[]>("/api/admin/invites").then(setInvites).catch(() => {});
     api<{ available: boolean; linked: boolean }>("/api/telegram").then(setTelegram).catch(() => {});
+    api<YouTubeState>("/api/youtube").then(setYoutube).catch(() => {});
+    if (params.get("youtube")) setParams({}, { replace: true });
   }, [me.admin]);
+
+  function connectYouTube() {
+    // A plain navigation to Google's consent screen; Google sends the browser back to this page.
+    location.href = "/auth/youtube/start";
+  }
+
+  function replaceChannel(row: YouTubeChannel) {
+    setYoutube((y) => y && { ...y, channels: y.channels.map((c) => (c.id === row.id ? row : c)) });
+  }
+
+  async function checkChannel(c: YouTubeChannel) {
+    try {
+      const row = await api<YouTubeChannel>(`/api/youtube/${c.id}/check`, { method: "POST" });
+      replaceChannel(row);
+      setYtNote(row.status === "ok" ? `${row.title} is connected.` : `${row.title} needs reconnecting.`);
+    } catch (err) {
+      setYtNote((err as Error).message);
+    }
+  }
+
+  async function disconnectChannel(c: YouTubeChannel) {
+    if (!confirm(`Disconnect ${c.title}? Kaatclip's access is removed at Google and its saved connection deleted.`)) return;
+    try {
+      await api(`/api/youtube/${c.id}`, { method: "DELETE" });
+      setYoutube((y) => y && { ...y, channels: y.channels.filter((x) => x.id !== c.id) });
+      setYtNote(`${c.title} disconnected.`);
+    } catch (err) {
+      setYtNote((err as Error).message);
+    }
+  }
+
+  async function setAnswer(c: YouTubeChannel, key: "made_for_kids" | "synthetic", value: boolean) {
+    try {
+      replaceChannel(await api<YouTubeChannel>(`/api/youtube/${c.id}/settings`,
+        { method: "PUT", body: { ...c.settings, [key]: value } }));
+    } catch (err) {
+      setYtNote((err as Error).message);
+    }
+  }
 
   async function connectTelegram() {
     try {
@@ -61,6 +116,54 @@ export default function Settings({ me }: { me: Me }) {
         <div className="small muted">{me.email}{me.admin ? " · owner" : ""}</div>
         <button style={{ marginTop: 12 }} onClick={signOut}>Sign out</button>
       </div>
+      <h2>YouTube</h2>
+      {youtube && !youtube.available && <p className="muted small">YouTube posting isn't set up on this laptop yet.</p>}
+      {youtube?.available && (
+        <>
+          {youtube.channels.map((c) => (
+            <div key={c.id} className="card">
+              <div className="row" style={{ alignItems: "center", gap: 10 }}>
+                {c.thumbnail && <img src={c.thumbnail} alt="" width={40} height={40} style={{ borderRadius: "50%" }} referrerPolicy="no-referrer" />}
+                <div style={{ flex: 1 }}>
+                  <div className="title">{c.title}</div>
+                  <div className="small muted">{c.status === "ok" ? "Connected" : "Connection expired: reconnect to keep posting"}</div>
+                </div>
+              </div>
+              {c.status === "ok" && (
+                <div className="small" style={{ marginTop: 4 }}>
+                  <label className="tick">
+                    <input type="checkbox" checked={c.settings.made_for_kids}
+                      onChange={(e) => setAnswer(c, "made_for_kids", e.target.checked)} />
+                    My videos on this channel are made for kids
+                  </label>
+                  <label className="tick">
+                    <input type="checkbox" checked={c.settings.synthetic}
+                      onChange={(e) => setAnswer(c, "synthetic", e.target.checked)} />
+                    My clips include realistic altered or AI-made content
+                  </label>
+                </div>
+              )}
+              <div className="row" style={{ marginTop: 10 }}>
+                {c.status === "expired"
+                  ? <button className="primary" onClick={connectYouTube}>Reconnect</button>
+                  : <button onClick={() => checkChannel(c)}>Check</button>}
+                <button className="danger" onClick={() => disconnectChannel(c)}>Disconnect</button>
+              </div>
+            </div>
+          ))}
+          <div className="card">
+            <div className="small muted">
+              {youtube.channels.length
+                ? "Post to another channel too (a Shorts channel, say): pick it on Google's screen."
+                : "Connect your channel to post approved clips to YouTube. Kaatclip can upload and see your channel and its stats; it can't edit or delete your videos, and nothing is posted without your approval."}
+            </div>
+            <button className="primary" style={{ marginTop: 10 }} onClick={connectYouTube}>
+              {youtube.channels.length ? "Connect another channel" : "Connect YouTube"}
+            </button>
+          </div>
+        </>
+      )}
+      {ytNote && <p className="small" role="status">{ytNote}</p>}
       <h2>Brand kit</h2>
       <Link to="/brand" className="card">
         <div className="title">Your look, lower-third, intro and post text</div>

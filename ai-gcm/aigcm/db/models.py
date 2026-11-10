@@ -182,6 +182,25 @@ class Render(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
+class YouTubeChannel(Base):
+    """A creator's connected YouTube channel (M4.1). The refresh token is encrypted (aigcm.youtube.seal) and
+    deleted on disconnect; nothing else from YouTube is kept here beyond the channel's name and picture."""
+    __tablename__ = "youtube_channels"
+    __table_args__ = (UniqueConstraint("user_id", "channel_id"),)
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=lambda: new_id("yt"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    channel_id: Mapped[str] = mapped_column(String(64))
+    title: Mapped[str] = mapped_column(String(200))
+    thumbnail: Mapped[str | None] = mapped_column(String(500))
+    scopes: Mapped[str] = mapped_column(Text, default="")
+    refresh_token: Mapped[str] = mapped_column(Text)            # encrypted
+    status: Mapped[str] = mapped_column(String(12), default="ok")   # ok, expired
+    settings: Mapped[dict] = mapped_column(JSON, default=dict)  # made_for_kids, synthetic: the creator's answers
+    connected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    checked_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class BrandKitRow(Base):
     """A creator's brand kit (M3.6): settings as JSON (aigcm.studio.brand.BrandKit); files in the jobs folder."""
     __tablename__ = "brand_kits"
