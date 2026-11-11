@@ -74,9 +74,16 @@ def connect(client, google):
     return done, query
 
 
+def accept(client):
+    from aigcm.api.legal import TERMS_VERSION
+
+    assert client.post("/api/me/accept", json={"version": TERMS_VERSION}).status_code == 200
+
+
 def signed_in(tmp_path, google, **settings):
     client = TestClient(app_with_key(tmp_path, google, **settings), headers=APP)
     sign_in(client, google)
+    accept(client)
     return client
 
 
@@ -152,6 +159,7 @@ def test_connect_needs_sign_in_and_the_key(tmp_path, google):
     assert client.get("/auth/youtube/start", follow_redirects=False).status_code == 401
     no_key = TestClient(build(tmp_path / "b", google), headers=APP)
     sign_in(no_key, google)
+    accept(no_key)
     assert no_key.get("/api/youtube").json() == {"available": False, "channels": []}
     assert no_key.get("/auth/youtube/start", follow_redirects=False).status_code == 503
 

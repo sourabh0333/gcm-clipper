@@ -212,7 +212,10 @@ def logout(request: Request, user=Depends(optional_user), db=Depends(get_db)):
 
 @router.get("/api/me")
 def me(user=Depends(current_user)):
-    return {"email": user.email, "name": user.name, "picture": user.picture, "admin": user.is_admin}
+    from .legal import TERMS_VERSION
+
+    return {"email": user.email, "name": user.name, "picture": user.picture, "admin": user.is_admin,
+            "accepted": user.terms_version == TERMS_VERSION, "terms_version": TERMS_VERSION}
 
 
 @router.get("/api/auth-config")

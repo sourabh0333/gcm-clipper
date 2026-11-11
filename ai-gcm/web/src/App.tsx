@@ -12,6 +12,7 @@ import Settings from "./pages/Settings";
 import PostPage from "./pages/PostPage";
 import Posts from "./pages/Posts";
 import SignIn from "./pages/SignIn";
+import Accept from "./pages/Accept";
 import StreamPage from "./pages/StreamPage";
 import StudioPage from "./pages/StudioPage";
 import Streams from "./pages/Streams";
@@ -42,6 +43,7 @@ export default function App() {
     );
   if (me === undefined) return <div className="shell"><p className="muted">Loading…</p></div>;
   if (me === null) return <SignIn />;
+  if (me.accepted === false) return <Accept me={me} onAccepted={() => setMe({ ...me, accepted: true })} />;
 
   return (
     <>

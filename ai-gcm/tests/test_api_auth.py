@@ -93,7 +93,8 @@ def test_google_sign_in_with_pkce_creates_a_session(tmp_path, google):
     assert done.status_code == 302 and done.headers["location"] == "/streams/abc"
     assert google.exchanges[0]["code_verifier"][0] and google.exchanges[0]["code"] == ["c0de"]
     me = client.get("/api/me").json()
-    assert me == {"email": "creator@example.com", "name": "Creator", "picture": None, "admin": False}
+    assert {k: me[k] for k in ("email", "name", "picture", "admin", "accepted")} == {
+        "email": "creator@example.com", "name": "Creator", "picture": None, "admin": False, "accepted": False}
     cookie = done.headers["set-cookie"]
     assert "httponly" in cookie.lower() and "samesite=lax" in cookie.lower()
 

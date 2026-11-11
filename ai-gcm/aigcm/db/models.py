@@ -33,6 +33,9 @@ class User(Base):
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # The privacy policy and terms version this person accepted, and when (M4.8; aigcm.api.legal.TERMS_VERSION).
+    terms_version: Mapped[str | None] = mapped_column(String(20))
+    terms_accepted_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     # Deleting an account deletes its streams (and through them clips and uploads): the database's ON DELETE
     # CASCADE does it, so the ORM must not try to blank the owner first.

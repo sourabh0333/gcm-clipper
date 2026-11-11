@@ -30,6 +30,8 @@ class ApiSettings:
     telegram_bot_token: str = ""
     # Encrypts creators' YouTube tokens at rest (M4). Made once by `python -m aigcm.manage token-key`, kept in .env.
     token_key: str = ""
+    # Where creators write with privacy questions (the privacy policy and terms show it). Default: the first admin.
+    contact_email: str = ""
     session_days: int = 30
     max_upload_bytes: int = 10 * 1024**3
     max_chunk_bytes: int = 16 * 1024**2
@@ -51,6 +53,7 @@ class ApiSettings:
             dev_login=os.environ.get("AIGCM_DEV_LOGIN", "") == "1",
             telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", "").strip(),
             token_key=os.environ.get("KAATCLIP_TOKEN_KEY", "").strip(),
+            contact_email=os.environ.get("KAATCLIP_CONTACT", "").strip(),
         )
         for key, value in overrides.items():
             setattr(s, key, value)

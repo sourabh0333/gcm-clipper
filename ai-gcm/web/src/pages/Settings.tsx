@@ -86,6 +86,20 @@ export default function Settings({ me }: { me: Me }) {
       (r) => ({ available: true, linked: r.linked })));
   }
 
+  const [deleting, setDeleting] = useState(false);
+  const [confirmEmail, setConfirmEmail] = useState("");
+  const [deleteNote, setDeleteNote] = useState("");
+
+  async function deleteAccount(event: React.FormEvent) {
+    event.preventDefault();
+    try {
+      await api("/api/me", { method: "DELETE", body: { email: confirmEmail } });
+      location.href = "/about";
+    } catch (err) {
+      setDeleteNote((err as Error).message);
+    }
+  }
+
   async function signOut() {
     await api("/auth/logout", { method: "POST" }).catch(() => {});
     location.href = "/";
@@ -202,6 +216,33 @@ export default function Settings({ me }: { me: Me }) {
           ))}
         </>
       )}
+      <h2>Your account</h2>
+      <div className="card">
+        <div className="small muted">
+          <a href="/privacy" target="_blank" rel="noreferrer">Privacy policy</a> ·{" "}
+          <a href="/terms" target="_blank" rel="noreferrer">Terms</a> · You can also remove Kaatclip's YouTube access at{" "}
+          <a href="https://security.google.com/settings/security/permissions" target="_blank" rel="noreferrer">your Google account</a>.
+        </div>
+        {!deleting
+          ? <button className="danger" style={{ marginTop: 10 }} onClick={() => setDeleting(true)}>Delete my account and data</button>
+          : (
+            <form onSubmit={deleteAccount} style={{ marginTop: 10 }}>
+              <p className="small">
+                This removes your recordings, clips, edits, exports, post records, brand kit and YouTube connection, and
+                removes Kaatclip's access to YouTube. Videos already on YouTube stay there. It can't be undone.
+              </p>
+              <label htmlFor="del-email">Type your email address to confirm</label>
+              <input id="del-email" type="email" required value={confirmEmail} onChange={(e) => setConfirmEmail(e.target.value)} />
+              <div className="row" style={{ marginTop: 10 }}>
+                <button type="submit" className="danger" disabled={confirmEmail.trim().toLowerCase() !== me.email.toLowerCase()}>
+                  Delete everything
+                </button>
+                <button type="button" onClick={() => { setDeleting(false); setConfirmEmail(""); }}>Keep my account</button>
+              </div>
+              {deleteNote && <p className="small error">{deleteNote}</p>}
+            </form>
+          )}
+      </div>
     </>
   );
 }

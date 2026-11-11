@@ -32,6 +32,9 @@ export default function SignIn() {
           Continue with Google
         </a>
       )}
+      <p className="small muted" style={{ marginTop: 16 }}>
+        <a href="/about">What is Kaatclip?</a> · <a href="/privacy">Privacy policy</a> · <a href="/terms">Terms</a>
+      </p>
       {config && !config.google && !config.dev && (
         <p className="banner">Google sign-in isn't set up on this laptop yet.</p>
       )}

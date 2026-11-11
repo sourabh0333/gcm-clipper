@@ -228,7 +228,7 @@ def _token(http, settings, sessions, channel_id):
         with sessions() as db:
             channel = db.get(YouTubeChannel, channel_id)
             if channel is not None:
-                channel.status = "expired"
+                channel.status, channel.checked_at = "expired", utcnow()
                 db.commit()
         raise
 

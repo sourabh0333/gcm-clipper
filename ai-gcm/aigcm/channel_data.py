@@ -13,6 +13,8 @@ RECENT_DAYS = 28
 RECENT_EVERY = timedelta(hours=6)
 STATS_EVERY = timedelta(hours=12)
 KEEP = timedelta(days=30)
+CHECK_EVERY = timedelta(days=7)    # re-check permission weekly, so data from a revoked grant goes within 30 days
+EXPIRED_KEEP = timedelta(days=7)   # an expired channel row (name, picture, dead token) goes 7 days after expiring
 
 
 def _spend(db, units):
@@ -55,7 +57,7 @@ def refresh(db, settings, http, channel, now=None, stats=False):
             channel.stats_at = now
         channel.checked_at = now
     except yt.Expired:
-        channel.status = "expired"
+        channel.status, channel.checked_at = "expired", now
         forget(channel)
     except Exception as exc:   # nice-to-have numbers: never break the page over them
         log(f"channel data: {channel.id}: {exc}")
@@ -64,10 +66,10 @@ def refresh(db, settings, http, channel, now=None, stats=False):
 
 
 def retention(db, settings, http, now=None):
-    """The daily 30-day job: delete cached data older than 30 days; every 30 days make sure the creator's
+    """The daily job: delete cached data older than 30 days; every 7 days make sure the creator's
     permission still works, and if not, mark the channel expired and delete its cached data."""
     now = now or utcnow()
-    forgotten = checked = expired = 0
+    forgotten = checked = expired = removed = 0
     from sqlalchemy import select
 
     for channel in db.scalars(select(YouTubeChannel)).all():
@@ -77,16 +79,20 @@ def retention(db, settings, http, now=None):
         if channel.stats_at and now - channel.stats_at > KEEP:
             channel.stats = channel.stats_at = None
             forgotten += 1
-        if channel.status == "ok" and settings.token_key and now - channel.checked_at > KEEP:
+        if channel.status == "ok" and settings.token_key and now - channel.checked_at > CHECK_EVERY:
             try:
                 token_for(settings, http, channel)
                 channel.checked_at = now
                 checked += 1
             except yt.Expired:
-                channel.status = "expired"
+                channel.status, channel.checked_at = "expired", now
                 forget(channel)
                 expired += 1
             except Exception as exc:
                 log(f"channel data: can't check {channel.id}: {exc}")
+        elif channel.status == "expired" and now - channel.checked_at > EXPIRED_KEEP:
+            # The creator didn't reconnect: remove the rest of what came from YouTube (III.D.2).
+            db.delete(channel)
+            removed += 1
     db.commit()
-    return {"forgotten": forgotten, "checked": checked, "expired": expired}
+    return {"forgotten": forgotten, "checked": checked, "expired": expired, "removed": removed}

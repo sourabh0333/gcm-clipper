@@ -114,16 +114,24 @@ def test_the_30_day_job_deletes_old_data_and_rechecks_permission(app, fake):
     client.get("/api/channel")
     settings, http = app.state.settings, app.state.http
     with app.state.sessions() as s:
-        assert channel_data.retention(s, settings, http) == {"forgotten": 0, "checked": 0, "expired": 0}
+        assert channel_data.retention(s, settings, http) == {"forgotten": 0, "checked": 0, "expired": 0, "removed": 0}
         channel = s.scalar(select(YouTubeChannel))
         assert channel.recent and channel.stats
         later = utcnow() + timedelta(days=31)
-        assert channel_data.retention(s, settings, http, now=later) == {"forgotten": 2, "checked": 1, "expired": 0}
+        assert channel_data.retention(s, settings, http, now=later) == {"forgotten": 2, "checked": 1, "expired": 0,
+                                                                        "removed": 0}
         assert channel.recent is None and channel.stats is None and channel.status == "ok"
+        # Permission is re-checked weekly, so a grant removed on Google's side is noticed within days.
+        assert channel_data.retention(s, settings, http, now=later + timedelta(days=3))["checked"] == 0
 
         fake.expired = True
-        assert channel_data.retention(s, settings, http, now=later + timedelta(days=31))["expired"] == 1
+        week = later + timedelta(days=8)
+        assert channel_data.retention(s, settings, http, now=week)["expired"] == 1
         assert channel.status == "expired"
+        # Not reconnected within 7 days: the channel row (name, picture, dead token) is deleted too.
+        assert channel_data.retention(s, settings, http, now=week + timedelta(days=6))["removed"] == 0
+        assert channel_data.retention(s, settings, http, now=week + timedelta(days=8))["removed"] == 1
+        assert s.scalar(select(YouTubeChannel)) is None
 
 
 def test_an_expired_connection_on_refresh_deletes_the_copy(app, fake):

@@ -39,6 +39,10 @@ def youtube_start(request: Request, user=Depends(current_user)):
     settings = request.app.state.settings
     if not ready(settings):
         raise HTTPException(503, "YouTube isn't set up on the laptop yet.")
+    from .legal import TERMS_VERSION
+
+    if user.terms_version != TERMS_VERSION:
+        raise HTTPException(403, "Accept the privacy policy and terms first.")
     state, verifier = secrets.token_urlsafe(32), secrets.token_urlsafe(48)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
     query = urlencode({"client_id": settings.google_client_id, "redirect_uri": redirect_uri(settings),

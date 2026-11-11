@@ -24,7 +24,7 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   return data as T;
 }
 
-export type Me = { email: string; name: string | null; picture: string | null; admin: boolean };
+export type Me = { email: string; name: string | null; picture: string | null; admin: boolean; accepted?: boolean; terms_version?: string };
 
 export type Stage = { name: string; status: string; seconds: number | null };
 
