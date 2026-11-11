@@ -64,6 +64,11 @@ export type Post = {
   posted_at: string | null;
   thumbnail: string | null;
   next_try_at: string | null;
+  stream_link: string | null;
+  stream_title: string | null;
+  has_link: boolean;
+  teaser_for: string | null;
+  studio: { url: string; comment: string | null; related: string | null; done: boolean } | null;
 };
 export type Quota = { uploads: number; uploads_limit: number; units: number; units_limit: number };
 

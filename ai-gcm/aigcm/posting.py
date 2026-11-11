@@ -21,6 +21,21 @@ LIVE_STATES = ("approved", "uploading", "scheduled", "posted")   # a post that i
 LINK = re.compile(r"^https://(www\.|m\.)?(youtube\.com/(watch\?v=|live/|shorts/)|youtu\.be/)[\w-]{11}([?&#][\w=&%.-]*)?$")
 
 
+YOUTUBE_LINK = re.compile(r"https?://(www\.|m\.)?(youtube\.com/(watch\?v=|live/)|youtu\.be/)[\w-]{11}")
+
+
+def has_link(text):
+    """Does the description send viewers to a stream (a watch, live or youtu.be link)?"""
+    return bool(YOUTUBE_LINK.search(text or ""))
+
+
+def with_link(description, link):
+    """The description with "Full stream: <link>" on top, unless the link is already in it."""
+    if not link or link in (description or ""):
+        return description
+    return f"Full stream: {link}\n\n{description}" if description else f"Full stream: {link}"
+
+
 class PostError(ValueError):
     """Something the creator has to fix before approving, in plain words."""
 

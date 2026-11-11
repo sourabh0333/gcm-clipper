@@ -158,8 +158,20 @@ def recent_uploads(http, token, since, pages=4):
             length = seconds((v.get("contentDetails") or {}).get("duration"))
             at = (v.get("status") or {}).get("publishAt") or (v.get("snippet") or {}).get("publishedAt")
             items.append({"id": v["id"], "at": at, "seconds": length, "live": live,
-                          "short": (not live) and 0 < length <= SHORT_MAX_S})
+                          "short": (not live) and 0 < length <= SHORT_MAX_S,
+                          "title": ((v.get("snippet") or {}).get("title") or "")[:200]})
     return items, units
+
+
+def upcoming_streams(http, token):
+    """The channel's scheduled lives: id, title, start (ISO, UTC). 1 unit."""
+    data = _get(http, token, "liveBroadcasts", part="snippet", broadcastStatus="upcoming", maxResults=10)
+    out = []
+    for b in data.get("items") or []:
+        snippet = b.get("snippet") or {}
+        if snippet.get("scheduledStartTime"):
+            out.append({"id": b["id"], "title": (snippet.get("title") or "")[:200], "start": snippet["scheduledStartTime"]})
+    return out
 
 
 def revoke(http, token):

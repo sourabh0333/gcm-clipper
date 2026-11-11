@@ -47,16 +47,27 @@ export default function StreamPage() {
     }
   }
 
-  async function saveLink() {
+  async function saveLink(value = link ?? "") {
     try {
-      const saved = await api<{ link: string | null }>(`/api/streams/${id}/link`, { method: "PUT", body: { link: link ?? "" } });
+      const saved = await api<{ link: string | null; drafts_updated: number }>(`/api/streams/${id}/link`,
+        { method: "PUT", body: { link: value } });
       setStream((s) => s && { ...s, link: saved.link });
       setLink(null);
-      setLinkNote(saved.link ? "Saved. New posts from this stream start with it." : "Link removed.");
+      setLinkNote(saved.link
+        ? `Saved. New posts from this stream start with it${saved.drafts_updated ? `; added to ${saved.drafts_updated} draft${saved.drafts_updated > 1 ? "s" : ""}` : ""}.`
+        : "Link removed.");
     } catch (err) {
       setLinkNote((err as Error).message);
     }
   }
+
+  // Lives on the creator's channel that look like this stream (same day or about as long).
+  const [suggestions, setSuggestions] = useState<{ url: string; title: string; at: string; seconds: number | null }[]>([]);
+  useEffect(() => {
+    if (stream?.status === "done" && !stream.link) {
+      api<typeof suggestions>(`/api/streams/${id}/link-suggestions`).then(setSuggestions, () => {});
+    }
+  }, [id, stream?.status, stream?.link]);
 
   async function remove() {
     if (!confirm("Delete this stream, its recording and all its clips? This can't be undone.")) return;
@@ -133,8 +144,17 @@ export default function StreamPage() {
             <div className="row" style={{ marginTop: 8, flexWrap: "nowrap" }}>
               <input aria-label="Stream link" placeholder="https://youtube.com/live/…" value={link ?? stream.link ?? ""}
                      onChange={(e) => setLink(e.target.value)} />
-              <button disabled={link === null} onClick={saveLink}>Save</button>
+              <button disabled={link === null} onClick={() => saveLink()}>Save</button>
             </div>
+            {!stream.link && suggestions.map((s) => (
+              <div key={s.url} className="row small" style={{ marginTop: 8, flexWrap: "nowrap" }}>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  Is it <b>{s.title || "this live"}</b>? {new Date(s.at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                  {s.seconds ? ` · ${duration(s.seconds)}` : ""}
+                </span>
+                <button className="chip" onClick={() => saveLink(s.url)}>Use it</button>
+              </div>
+            ))}
             {linkNote && <p className="small">{linkNote}</p>}
           </div>
           {clips.length > 0 && id && <Thumbnails streamId={id} />}

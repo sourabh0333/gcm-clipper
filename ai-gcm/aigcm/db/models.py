@@ -204,6 +204,7 @@ class YouTubeChannel(Base):
     # every few hours while the calendar is used, deleted with the channel, never older than 30 days (III.E.4).
     recent: Mapped[list | None] = mapped_column(JSON)
     recent_at: Mapped[datetime | None] = mapped_column(DateTime)
+    upcoming: Mapped[list | None] = mapped_column(JSON)    # scheduled lives (id, title, start), for teasers (M4.5)
 
 
 class Post(Base):
@@ -238,6 +239,10 @@ class Post(Base):
     thumbnail: Mapped[str | None] = mapped_column(String(200))
     posted_at: Mapped[datetime | None] = mapped_column(DateTime)
     checked_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # The stream funnel (M4.5): the creator ticked "finished in Studio" (related video and pinned comment), and
+    # the upcoming live this post is a teaser for.
+    studio_done: Mapped[bool] = mapped_column(Boolean, default=False)
+    teaser_for: Mapped[str | None] = mapped_column(String(32))
 
     clip: Mapped["Clip | None"] = relationship()
     channel: Mapped["YouTubeChannel | None"] = relationship()

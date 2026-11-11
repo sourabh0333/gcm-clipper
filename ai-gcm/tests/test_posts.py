@@ -85,7 +85,7 @@ def test_a_draft_comes_from_the_export_with_the_stream_link(app):
     stream_id = client.get(f"/api/clips/{clip_id}/studio").json()["clip"]["stream_id"]
     assert client.put(f"/api/streams/{stream_id}/link", json={"link": "https://evil.com/x"}).status_code == 422
     link = "https://www.youtube.com/live/abcdefghijk"
-    assert client.put(f"/api/streams/{stream_id}/link", json={"link": link}).json() == {"link": link}
+    assert client.put(f"/api/streams/{stream_id}/link", json={"link": link}).json() == {"link": link, "drafts_updated": 0}
     assert client.get(f"/api/streams/{stream_id}").json()["link"] == link
 
     post = client.post("/api/posts", json={"render_id": render_id}).json()

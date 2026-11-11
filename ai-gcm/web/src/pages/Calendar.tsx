@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { api, type Post } from "../api";
 import { POST_LABEL } from "../format";
 
@@ -8,7 +8,8 @@ export type Gauge = {
   channel: string; shorts: number; uploads: number; planned: number; share: number; warn: boolean; limit: number;
   days: number; ahead: number; as_of: string | null;
 };
-type CalendarData = { start: string; days: number; posts: CalendarPost[]; unscheduled: Post[]; gauge: Gauge | null };
+export type Live = { id: string; title: string; start: string; channel: string; day: string; teased: boolean; can_tease: boolean };
+type CalendarData = { start: string; days: number; posts: CalendarPost[]; unscheduled: Post[]; gauge: Gauge | null; lives?: Live[] };
 type FillResult = { placed: Post[]; free_left: number; exports_left: number; drafts_left: number };
 type BatchResult = { approved: Post[]; problems: { id: string; error: string }[] };
 
@@ -87,6 +88,7 @@ export function WeekView({ start, setStart }: { start: string; setStart: (day: s
   const [note, setNote] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [problems, setProblems] = useState<{ id: string; error: string }[]>([]);
+  const navigate = useNavigate();
   const today = ymd(new Date());
 
   if (!data) return error ? <p className="error">{error}</p> : <p className="muted">Loading…</p>;
@@ -103,6 +105,15 @@ export function WeekView({ start, setStart }: { start: string; setStart: (day: s
       setMoving(null);
       setNote(`Moved to ${dayName(day)}.`);
       await load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  async function makeTeaser(live: Live) {
+    try {
+      const post = await api<Post>("/api/calendar/teaser", { body: { live_id: live.id, tz: TZ } });
+      navigate(`/posts/${post.id}`);     // check the teaser's title and text, then approve it
     } catch (err) {
       setError((err as Error).message);
     }
@@ -174,6 +185,13 @@ export function WeekView({ start, setStart }: { start: string; setStart: (day: s
               <h3 style={{ margin: 0, opacity: past ? 0.6 : 1 }}>{dayName(day)}{day === today ? " · today" : ""}</h3>
               {moving && !past && moving.day !== day && <button className="chip" onClick={() => moveTo(day)}>Move here</button>}
             </div>
+            {(data.lives ?? []).filter((l) => l.day === day).map((live) => (
+              <div key={live.id} className="row small" style={{ margin: "6px 0", flexWrap: "nowrap" }}>
+                <span style={{ flex: 1, minWidth: 0 }}>🔴 Live {clockOf(live.start)}: <b>{live.title || "your stream"}</b></span>
+                {live.teased ? <span className="chip done">teaser planned</span>
+                  : live.can_tease && <button className="chip" onClick={() => makeTeaser(live)}>Make a teaser</button>}
+              </div>
+            ))}
             {rows.length === 0 && <p className="small muted" style={{ margin: "4px 0" }}>{past ? "Nothing posted" : "Free evening"}</p>}
             {rows.map((p) => (
               <PostCard key={p.id} post={p} moving={moving?.id === p.id}

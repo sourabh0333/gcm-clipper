@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from .. import posting
-from ..db.models import AuditEntry, Post, Render, YouTubeChannel, utcnow
+from ..db.models import AuditEntry, Clip, Post, Render, YouTubeChannel, utcnow
 from ..studio import brand, lane, project
 from .clips import own_clip
 from .deps import current_user, get_db, own_stream
@@ -21,9 +21,31 @@ def stamp(value):
     return value.isoformat() + "Z" if value else None
 
 
+def funnel_link(post):
+    """Where the Short sends viewers: the upcoming live for a teaser, else the stream it was cut from."""
+    if post.teaser_for:
+        return f"https://www.youtube.com/watch?v={post.teaser_for}"
+    return post.clip.stream.link if post.clip else None
+
+
+def studio_view(post):
+    """The "Finish in Studio" checklist (M4.5): what the API can't set, ready to paste."""
+    if not post.video_id:
+        return None
+    link = funnel_link(post)
+    comment = None
+    if link:
+        comment = f"🔴 Watch me live: {link}" if post.teaser_for else f"Full stream 👉 {link}"
+    return {"url": f"https://studio.youtube.com/video/{post.video_id}/edit", "comment": comment,
+            "related": None if post.teaser_for else (post.clip.stream.title if post.clip else None),
+            "done": bool(post.studio_done)}
+
+
 def post_view(post):
     clip = post.clip
-    return {"id": post.id, "status": post.status, "kind": post.kind, "clip_id": post.clip_id,
+    return {"stream_link": funnel_link(post), "has_link": posting.has_link(post.description),
+            "stream_title": clip.stream.title if clip else None, "studio": studio_view(post),
+            "teaser_for": post.teaser_for,"id": post.id, "status": post.status, "kind": post.kind, "clip_id": post.clip_id,
             "clip_title": (clip.title if clip else None), "stream_id": clip.stream_id if clip else None,
             "render_id": post.render_id, "video": f"/media/renders/{post.render_id}" if post.render_id else None,
             "cover": f"/media/renders/{post.render_id}/cover" if post.render_id else None,
@@ -58,10 +80,7 @@ def draft_text(db, clip):
     hook = (saved.data.get("hook") or {}).get("text") if saved else None
     details = clip.details or {}
     text = brand.post_text(hook or clip.title, details.get("description"), details.get("hashtags"), project.kit_for(clip))
-    description = text["description"]
-    link = clip.stream.link
-    if link and link not in description:
-        description = f"Full stream: {link}\n\n{description}" if description else f"Full stream: {link}"
+    description = posting.with_link(text["description"], clip.stream.link)
     title = text["title"] or clip.title or next(iter(details.get("titles") or []), None)
     if not title:
         from ..studio.compile import fallback_title
@@ -266,5 +285,54 @@ def stream_link(stream_id: str, body: StreamLink, user=Depends(current_user), db
         stream.link = posting.clean_link(body.link)
     except posting.PostError as exc:
         raise HTTPException(422, str(exc)) from exc
+    # Drafts from this stream's clips get the link too (approved posts are frozen; teasers link the coming live).
+    updated = 0
+    if stream.link:
+        for post in db.scalars(select(Post).join(Clip, Post.clip_id == Clip.id)
+                               .where(Clip.stream_id == stream.id, Post.status == "draft", Post.teaser_for.is_(None))):
+            if not posting.has_link(post.description):
+                post.description, post.updated_at = posting.with_link(post.description, stream.link), utcnow()
+                updated += 1
     db.commit()
-    return {"link": stream.link}
+    return {"link": stream.link, "drafts_updated": updated}
+
+
+@router.get("/api/streams/{stream_id}/link-suggestions")
+def link_suggestions(stream_id: str, user=Depends(current_user), db=Depends(get_db)):
+    """Lives on the creator's channels that look like this stream: recorded the same day (or a day either side,
+    for time zones and midnight streams) or about as long. From the calendar's copy of recent uploads: no units."""
+    from datetime import date as date_
+    from datetime import datetime as datetime_
+
+    stream = own_stream(db, user, stream_id)
+    day = date_.fromisoformat(stream.recorded_on) if stream.recorded_on else None
+    found = []
+    for channel in db.scalars(select(YouTubeChannel).where(YouTubeChannel.user_id == user.id)):
+        for item in channel.recent or []:
+            if not item.get("live") or not item.get("at"):
+                continue
+            at = datetime_.fromisoformat(item["at"].replace("Z", "+00:00"))
+            same_day = day is not None and abs((at.date() - day).days) <= 1
+            length = stream.duration_s or 0
+            close = length > 0 and abs((item.get("seconds") or 0) - length) <= max(600, 0.15 * length)
+            if same_day or close:
+                found.append({"url": f"https://www.youtube.com/watch?v={item['id']}", "title": item.get("title") or "",
+                              "at": item["at"], "seconds": item.get("seconds"), "channel": channel.title,
+                              "score": 2 * same_day + close})
+    found.sort(key=lambda f: (-f["score"], f["at"]))
+    return [{k: v for k, v in f.items() if k != "score"} for f in found[:3]]
+
+
+class StudioDone(BaseModel):
+    done: bool = True
+
+
+@router.post("/api/posts/{post_id}/studio")
+def studio_done(post_id: str, body: StudioDone, user=Depends(current_user), db=Depends(get_db)):
+    """The creator finished the related video and pinned comment in YouTube Studio (or takes the tick back)."""
+    post = own_post(db, user, post_id)
+    if not post.video_id:
+        raise HTTPException(409, "It isn't on YouTube yet.")
+    post.studio_done = body.done
+    db.commit()
+    return post_view(post)

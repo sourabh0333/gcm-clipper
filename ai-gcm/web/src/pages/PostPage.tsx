@@ -21,6 +21,41 @@ export function nextEvening(now = new Date()): string {
   return d.toISOString();
 }
 
+// "Finish in Studio" (M4.5): the related video and the pinned comment, which YouTube's API can't set. The text is
+// ready to copy; the creator ticks it off when done.
+export function FinishInStudio({ post, onChange }: { post: Post; onChange: (p: Post) => void }) {
+  const studio = post.studio!;
+  const [copied, setCopied] = useState(false);
+  async function mark(done: boolean) {
+    onChange(await api<Post>(`/api/posts/${post.id}/studio`, { body: { done } }));
+  }
+  if (studio.done) {
+    return (
+      <p className="small" style={{ marginTop: 10 }}>
+        Finished in Studio ✓ <button className="chip" onClick={() => mark(false)}>Undo</button>
+      </p>
+    );
+  }
+  return (
+    <div className="card" style={{ marginTop: 10 }} aria-label="Finish in Studio">
+      <div className="title">Finish in YouTube Studio</div>
+      <ol className="small">
+        {studio.related && <li>Related video: pick <b>{studio.related}</b>, so the Short links to the full stream.</li>}
+        {studio.comment
+          ? <li>Pinned comment: copy this, post it on the Short and pin it.<br /><code>{studio.comment}</code>{" "}
+              <button className="chip" onClick={() => navigator.clipboard.writeText(studio.comment!).then(() => setCopied(true), () => {})}>
+                {copied ? "Copied" : "Copy"}
+              </button></li>
+          : <li>Pinned comment: add the stream's link on the stream page first.</li>}
+      </ol>
+      <div className="row">
+        <a className="button primary" href={studio.url} target="_blank" rel="noreferrer">Open in Studio</a>
+        <button onClick={() => mark(true)}>Done</button>
+      </div>
+    </div>
+  );
+}
+
 type Form = { title: string; description: string; tags: string; channel_id: string; mode: "schedule" | "now"; at: string };
 
 function formFor(post: Post, channels: YouTubeChannel[]): Form {
@@ -179,6 +214,16 @@ export default function PostPage() {
             <dt>Made for kids</dt><dd>{channel?.settings.made_for_kids ? "Yes" : "No"}</dd>
             <dt>Altered or AI-made</dt><dd>{channel?.settings.synthetic ? "Yes" : "No"}</dd>
           </dl>
+          {!review.has_link && (
+            <div className="banner small">
+              No stream link in the description: viewers can't find your stream from this Short.{" "}
+              {review.stream_link
+                ? <button className="chip" onClick={() => set({ description: `Full stream: ${review.stream_link}${form.description ? `\n\n${form.description}` : ""}` })}>
+                    Add it
+                  </button>
+                : review.stream_id && <Link to={`/streams/${review.stream_id}`}>Add the stream's link on its page</Link>}
+            </div>
+          )}
           <p className="small muted">
             Approving uploads this video to {review.channel?.title ?? "the channel"}
             {review.mode === "now" ? " as public." : " as private, and YouTube makes it public at that time."} After
@@ -220,11 +265,14 @@ export default function PostPage() {
                   Watch on YouTube
                 </a>
               )}
-              <a className="button" href={`https://studio.youtube.com/video/${post.video_id}/edit`} target="_blank" rel="noreferrer">
-                Change in YouTube Studio
-              </a>
+              {(!post.studio || post.studio.done) && (
+                <a className="button" href={`https://studio.youtube.com/video/${post.video_id}/edit`} target="_blank" rel="noreferrer">
+                  Change in YouTube Studio
+                </a>
+              )}
             </div>
           )}
+          {post.studio && <FinishInStudio post={post} onChange={setPost} />}
           <div className="row" style={{ marginTop: 10 }}>
             {(post.status === "approved" || post.status === "failed") && <button disabled={busy} onClick={cancel}>Cancel post</button>}
             {(post.status === "cancelled" || post.status === "failed") && (

@@ -108,11 +108,12 @@ def post_message(post, event, public_url):
 
     title = f"“{post.title}”"
     channel = post.channel.title if post.channel else "YouTube"
+    finish = "" if post.studio_done else f"\nFinish in Studio (related video, pinned comment): {public_url}/posts/{post.id}"
     if event == "scheduled":
         return (f"📅 {title} is on {channel}, private until {when_india(post.publish_at)} (India time). "
-                f"YouTube makes it public then.")
+                f"YouTube makes it public then.{finish}")
     if event in ("posted", "live"):
-        return f"✅ {title} is live on {channel}: https://youtube.com/shorts/{post.video_id}"
+        return f"✅ {title} is live on {channel}: https://youtube.com/shorts/{post.video_id}{finish}"
     if event == "failed":
         return f"⚠️ {title} didn't post: {post.error or 'unknown error'}\nOpen it: {public_url}/posts/{post.id}"
     return None

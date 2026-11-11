@@ -60,6 +60,11 @@ def refresh_recent(request, db, channel, now):
     try:
         token = yt.access_token(http, settings, yt.unseal(settings.token_key, channel.refresh_token))
         items, units = yt.recent_uploads(http, token, now - timedelta(days=GAUGE_DAYS))
+        try:
+            upcoming = yt.upcoming_streams(http, token)
+            units += 1
+        except yt.YouTubeError:
+            upcoming = channel.upcoming
     except yt.Expired:
         channel.status = "expired"
         db.commit()
@@ -69,7 +74,7 @@ def refresh_recent(request, db, channel, now):
     from ..uploader import spend
 
     spend(db, units=units)
-    channel.recent, channel.recent_at = items, now
+    channel.recent, channel.recent_at, channel.upcoming = items, now, upcoming
     db.commit()
 
 
@@ -133,7 +138,18 @@ def calendar(request: Request, start: date, days: int = 7, tz: str = "Asia/Kolka
         now = utcnow()
         refresh_recent(request, db, target, now)
         meter = gauge(db, target, now)
+    lives = []
+    for channel_row in channels:
+        teased = {p.teaser_for for p in rows if p.teaser_for}
+        for live in channel_row.upcoming or []:
+            begins = parse_iso(live["start"])
+            if lo <= begins < hi and begins > utcnow():
+                lives.append({**live, "channel_id": channel_row.id, "channel": channel_row.title,
+                              "day": local_day(begins, zone_).isoformat(), "teased": live["id"] in teased,
+                              "can_tease": begins - TEASER_BEFORE >= utcnow() + timedelta(minutes=20)})
+    lives.sort(key=lambda live: live["start"])
     return {"start": start.isoformat(), "days": days, "posts": placed, "unscheduled": unscheduled, "gauge": meter,
+            "lives": lives,
             "channels": [{"id": c.id, "title": c.title} for c in channels]}
 
 
@@ -213,6 +229,53 @@ def fill(body: Fill, request: Request, user=Depends(current_user), db=Depends(ge
     db.commit()
     return {"placed": [post_view(p) for p in placed], "free_left": len(free) - len(placed),
             "exports_left": len(exports), "drafts_left": len(waiting)}
+
+
+TEASER_BEFORE = timedelta(hours=2)
+
+
+def parse_iso(text):
+    return datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone(UTC).replace(tzinfo=None)
+
+
+class Teaser(BaseModel):
+    live_id: str = Field(max_length=32)
+    tz: str = "Asia/Kolkata"
+
+
+@router.post("/api/calendar/teaser")
+def teaser(body: Teaser, request: Request, user=Depends(current_user), db=Depends(get_db)):
+    """A draft teaser Short for an upcoming live: the best kept clip with a finished export and no post yet, going
+    public two hours before the live, titled "LIVE at 8 pm" and linking the live. The creator checks and approves it."""
+    channels = db.scalars(select(YouTubeChannel).where(YouTubeChannel.user_id == user.id)).all()
+    found = next(((c, live) for c in channels for live in c.upcoming or [] if live["id"] == body.live_id), None)
+    if found is None:
+        raise HTTPException(404, "Not found.")
+    channel, live = found
+    if db.scalar(select(Post).where(Post.teaser_for == live["id"], Post.status != "cancelled")) is not None:
+        raise HTTPException(409, "This live already has a teaser.")
+    begins = parse_iso(live["start"])
+    publish_at = begins - TEASER_BEFORE
+    if publish_at < utcnow() + timedelta(minutes=20):
+        raise HTTPException(409, "The live starts too soon for a teaser.")
+    ready = ready_exports(db, request.app.state.settings, user)
+    if not ready:
+        raise HTTPException(409, "No finished export to use. Export a kept clip in the Library first.")
+    clip, render = ready[0]
+    title, description, tags = draft_text(db, clip)
+    if clip.stream.link:     # a teaser points at the coming live, not at the old stream the clip came from
+        description = description.replace(f"Full stream: {clip.stream.link}", "").strip()
+    local = begins.replace(tzinfo=UTC).astimezone(zone(body.tz))
+    hour = local.strftime("%I:%M %p").lstrip("0").replace(":00", "").lower()
+    lead = f"LIVE at {hour} today! "
+    link = f"https://www.youtube.com/watch?v={live['id']}"
+    post = Post(user_id=user.id, clip_id=clip.id, render_id=render.id, channel_id=channel.id, mode="schedule",
+                publish_at=publish_at, teaser_for=live["id"], tags=tags,
+                title=(lead + title)[:posting.TITLE_MAX],
+                description=f"🔴 Live at {hour} today: {link}" + ("\n\n" + description if description else ""))
+    db.add(post)
+    db.commit()
+    return post_view(post)
 
 
 class Move(BaseModel):
