@@ -345,6 +345,28 @@ class Worker:
                 log(f"worker: posting lane error: {exc!r}")
                 self.stopping.wait(POLL_S * 5)
 
+    def chat_step(self):
+        """Look at the chat of every open Live session that is due (M4.7). Returns how many were looked at."""
+        from . import livechat
+
+        if not self.settings.token_key:
+            return 0
+        if self.http is None:
+            self.http = httpx.Client(timeout=httpx.Timeout(30, write=180, read=180))
+        with self.sessions() as s:
+            ids = livechat.due(s)
+        for live_id in ids:
+            livechat.step(self.settings, self.sessions, self.http, live_id)
+        return len(ids)
+
+    def chat_loop(self):
+        while not self.stopping.is_set():
+            try:
+                self.chat_step()
+            except Exception as exc:  # the listener must keep going whatever one chat does
+                log(f"worker: live chat error: {exc!r}")
+            self.stopping.wait(10)
+
     def render_loop(self):
         while not self.stopping.is_set():
             try:
@@ -358,6 +380,7 @@ class Worker:
         self.start()
         threading.Thread(target=self.render_loop, daemon=True, name="render-lane").start()
         threading.Thread(target=self.post_loop, daemon=True, name="posting-lane").start()
+        threading.Thread(target=self.chat_loop, daemon=True, name="live-chat").start()
         log(f"worker: waiting for streams (jobs in {self.settings.jobs_dir})")
         while True:
             if not self.step():

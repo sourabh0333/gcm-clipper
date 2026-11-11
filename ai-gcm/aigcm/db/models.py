@@ -73,6 +73,14 @@ class LiveSession(Base):
     title: Mapped[str | None] = mapped_column(String(300))
     started_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # The chat listener (M4.7): the YouTube live found for this session, where reading its chat got to, when to
+    # read next, and a line for the Live screen.
+    channel_id: Mapped[str | None] = mapped_column(String(32))
+    broadcast_id: Mapped[str | None] = mapped_column(String(32))
+    chat_id: Mapped[str | None] = mapped_column(String(200))
+    chat_token: Mapped[str | None] = mapped_column(String(300))
+    chat_at: Mapped[datetime | None] = mapped_column(DateTime)
+    chat_note: Mapped[str | None] = mapped_column(String(200))
 
 
 class Stream(Base):
@@ -281,6 +289,7 @@ class Marker(Base):
     stream_id: Mapped[str | None] = mapped_column(ForeignKey("streams.id", ondelete="CASCADE"))
     at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     source: Mapped[str] = mapped_column(String(12), default="button")
+    by: Mapped[str | None] = mapped_column(String(100))       # who typed !clip in chat
 
 
 class TelegramLink(Base):

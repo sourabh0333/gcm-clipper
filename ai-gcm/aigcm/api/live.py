@@ -22,7 +22,10 @@ def view(session, db):
     markers = db.scalars(select(Marker).where(Marker.live_session_id == session.id).order_by(Marker.at)).all()
     return {"id": session.id, "title": session.title, "started_at": session.started_at.isoformat() + "Z",
             "ended_at": session.ended_at.isoformat() + "Z" if session.ended_at else None,
-            "markers": [round((m.at - session.started_at).total_seconds(), 1) for m in markers]}
+            "markers": [round((m.at - session.started_at).total_seconds(), 1) for m in markers],
+            "marks": [{"t": round((m.at - session.started_at).total_seconds(), 1), "source": m.source, "by": m.by}
+                      for m in markers],
+            "chat": session.chat_note if session.ended_at is None else None}
 
 
 def own_live(db, user, live_id):

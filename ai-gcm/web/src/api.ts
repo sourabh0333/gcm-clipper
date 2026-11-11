@@ -123,7 +123,11 @@ export type LibraryPage = {
   facets: { streams: { id: string; title: string; count: number }[]; types: { type: string; count: number }[] };
 };
 
-export type LiveSession = { id: string; title: string | null; started_at: string; ended_at: string | null; markers: number[] };
+export type LiveMark = { t: number; source: string; by: string | null };
+export type LiveSession = {
+  id: string; title: string | null; started_at: string; ended_at: string | null; markers: number[];
+  marks?: LiveMark[]; chat?: string | null;
+};
 
 export type WorkerStatus = { online: boolean; busy: boolean; queue_waiting: boolean };
 
