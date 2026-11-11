@@ -146,7 +146,7 @@ class Worker:
         self.sessions = database.session_factory(self.engine)
         self.command = command
         self.notify = list(notify)   # callables (stream, event) -> None; Telegram joins in M2.7
-        self.last_beat = self.last_housekeeping = 0.0
+        self.last_beat = self.last_housekeeping = self.last_retention = 0.0
         self.current_stream = None    # the stream job running now, if any (renders use fewer threads then)
         self.stopping = threading.Event()
 
@@ -170,7 +170,23 @@ class Worker:
         if removed:
             log(f"worker: removed {len(removed)} unfinished uploads untouched for days")
         self.check_disk()
+        self.youtube_retention()
         self.last_housekeeping = time.time()
+
+    def youtube_retention(self):
+        """Once a day: delete cached YouTube data older than 30 days and re-check old permissions (M4.6)."""
+        if not self.settings.token_key or time.time() - self.last_retention < 86400:
+            return None
+        from .channel_data import retention
+
+        if self.http is None:
+            self.http = httpx.Client(timeout=httpx.Timeout(30, write=180, read=180))
+        with self.sessions() as s:
+            result = retention(s, self.settings, self.http)
+        if any(result.values()):
+            log(f"worker: YouTube data: {result}")
+        self.last_retention = time.time()
+        return result
 
     def check_disk(self):
         """Tell the owner (at most once a day) when the jobs disk runs low: uploads are refused then."""

@@ -150,17 +150,58 @@ def recent_uploads(http, token, since, pages=4):
             break
     items = []
     for start in range(0, len(ids), 50):
-        data = _get(http, token, "videos", part="contentDetails,liveStreamingDetails,snippet,status",
+        data = _get(http, token, "videos", part="contentDetails,liveStreamingDetails,snippet,status,statistics",
                     id=",".join(ids[start:start + 50]))
         units += 1
         for v in data.get("items") or []:
             live = "liveStreamingDetails" in v
             length = seconds((v.get("contentDetails") or {}).get("duration"))
             at = (v.get("status") or {}).get("publishAt") or (v.get("snippet") or {}).get("publishedAt")
+            views = (v.get("statistics") or {}).get("viewCount")
             items.append({"id": v["id"], "at": at, "seconds": length, "live": live,
                           "short": (not live) and 0 < length <= SHORT_MAX_S,
-                          "title": ((v.get("snippet") or {}).get("title") or "")[:200]})
+                          "title": ((v.get("snippet") or {}).get("title") or "")[:200],
+                          "views": int(views) if views is not None else None,
+                          "privacy": (v.get("status") or {}).get("privacyStatus")})
     return items, units
+
+
+ANALYTICS = "https://youtubeanalytics.googleapis.com/v2/reports"
+CONTENT_TYPES = {"SHORTS": "shorts", "LIVE_STREAM": "live", "VIDEO_ON_DEMAND": "videos"}
+
+
+def channel_report(http, token, start, end):
+    """Views, watch minutes and subscribers gained per content type (Shorts, live, videos; anything else counts as
+    other) between two dates, and the last day YouTube had numbers for ("data through"; Analytics lags 2-3 days).
+    Uses the YouTube Analytics API, which has its own quota."""
+    params = {"ids": "channel==MINE", "startDate": start.isoformat(), "endDate": end.isoformat(),
+              "metrics": "views,estimatedMinutesWatched,subscribersGained", "dimensions": "day,creatorContentType",
+              "sort": "day"}
+    response = http.get(ANALYTICS, params=params, headers={"Authorization": f"Bearer {token}"})
+    if response.status_code == 400:
+        # Not every channel report takes day with creatorContentType: fall back to the totals (no "data through").
+        params.update(dimensions="creatorContentType")
+        params.pop("sort")
+        response = http.get(ANALYTICS, params=params, headers={"Authorization": f"Bearer {token}"})
+    if response.status_code == 401:
+        raise Expired("The YouTube connection has expired. Reconnect the channel.")
+    if response.status_code == 403:
+        raise YouTubeError("YouTube didn't allow reading the channel's stats. Reconnect and keep every box ticked.")
+    if response.status_code != 200:
+        raise YouTubeError(f"YouTube Analytics didn't answer ({response.status_code}). Try again later.")
+    data = response.json()
+    names = [h["name"] for h in data.get("columnHeaders") or []]
+    totals = {kind: {"views": 0, "minutes": 0, "subscribers": 0} for kind in ("shorts", "live", "videos", "other")}
+    through = None
+    for row in data.get("rows") or []:
+        cell = dict(zip(names, row))
+        kind = CONTENT_TYPES.get(str(cell.get("creatorContentType", "")).upper(), "other")
+        totals[kind]["views"] += int(cell.get("views") or 0)
+        totals[kind]["minutes"] += int(cell.get("estimatedMinutesWatched") or 0)
+        totals[kind]["subscribers"] += int(cell.get("subscribersGained") or 0)
+        if cell.get("day") and any(cell.get(m) for m in ("views", "estimatedMinutesWatched")):
+            through = max(through or cell["day"], cell["day"])
+    return {"start": start.isoformat(), "end": end.isoformat(), "through": through, "by_type": totals}
 
 
 def upcoming_streams(http, token):

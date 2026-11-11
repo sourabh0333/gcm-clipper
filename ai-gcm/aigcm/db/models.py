@@ -205,6 +205,10 @@ class YouTubeChannel(Base):
     recent: Mapped[list | None] = mapped_column(JSON)
     recent_at: Mapped[datetime | None] = mapped_column(DateTime)
     upcoming: Mapped[list | None] = mapped_column(JSON)    # scheduled lives (id, title, start), for teasers (M4.5)
+    # The last 28 days of YouTube Analytics by content type (M4.6). Like `recent`, refreshed while used and
+    # deleted when older than 30 days or when the connection no longer works (Developer Policies III.E.4).
+    stats: Mapped[dict | None] = mapped_column(JSON)
+    stats_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 class Post(Base):

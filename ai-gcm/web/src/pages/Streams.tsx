@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { api, type StreamSummary, type WorkerStatus } from "../api";
 import { bytes, duration, STATUS_LABEL } from "../format";
+import YourChannel from "./YourChannel";
 
 export function StreamCard({ stream }: { stream: StreamSummary }) {
   const fraction =
@@ -79,6 +80,7 @@ export default function Streams() {
         </div>
       )}
       {streams?.map((s) => <StreamCard key={s.id} stream={s} />)}
+      {streams !== null && <YourChannel />}
     </>
   );
 }

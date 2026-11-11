@@ -53,29 +53,10 @@ def to_utc(day, at, tz):
 # --- the Shorts-share gauge ----------------------------------------------------------------------------------
 
 def refresh_recent(request, db, channel, now):
-    """Re-read the channel's last 28 days of uploads if the copy is older than 6 hours. Problems leave the old copy."""
-    if channel.status != "ok" or (channel.recent_at and now - channel.recent_at < REFRESH):
-        return
-    settings, http = request.app.state.settings, request.app.state.http
-    try:
-        token = yt.access_token(http, settings, yt.unseal(settings.token_key, channel.refresh_token))
-        items, units = yt.recent_uploads(http, token, now - timedelta(days=GAUGE_DAYS))
-        try:
-            upcoming = yt.upcoming_streams(http, token)
-            units += 1
-        except yt.YouTubeError:
-            upcoming = channel.upcoming
-    except yt.Expired:
-        channel.status = "expired"
-        db.commit()
-        return
-    except (yt.YouTubeError, Exception):   # the gauge is a nice-to-have: never break the calendar over it
-        return
-    from ..uploader import spend
+    """Re-read the channel's uploads and scheduled lives if the copy is older than 6 hours (aigcm.channel_data)."""
+    from ..channel_data import refresh
 
-    spend(db, units=units)
-    channel.recent, channel.recent_at, channel.upcoming = items, now, upcoming
-    db.commit()
+    refresh(db, request.app.state.settings, request.app.state.http, channel, now)
 
 
 def gauge(db, channel, now):
