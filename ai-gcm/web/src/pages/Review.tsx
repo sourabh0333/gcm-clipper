@@ -25,6 +25,8 @@ export default function Review() {
   const [index, setIndex] = useState(0);
   const [history, setHistory] = useState<number[]>([]);
   const [muted, setMuted] = useState(readMuted);
+  // The next clip loads only once this one can play through, so the two don't share a slow link.
+  const [buffered, setBuffered] = useState<number | null>(null);
   const [askReason, setAskReason] = useState<Clip | null>(null);
   const [error, setError] = useState("");
   const [drag, setDrag] = useState(0);
@@ -159,7 +161,8 @@ export default function Review() {
           }}
           onPointerCancel={() => { start.current = null; setDrag(0); }}
         >
-          <video ref={video} src={clip.video} autoPlay loop playsInline muted={muted} preload="auto" />
+          <video ref={video} src={clip.play ?? clip.video} autoPlay loop playsInline muted={muted} preload="auto"
+                 onCanPlayThrough={() => setBuffered(clip.id)} />
           <div className="stamp keep" style={{ opacity: Math.max(0, drag / SWIPE_PX) }}>KEEP</div>
           <div className="stamp reject" style={{ opacity: Math.max(0, -drag / SWIPE_PX) }}>NOPE</div>
           <div className="clipinfo">
@@ -171,7 +174,7 @@ export default function Review() {
             {flags.length > 0 && <div className="small error">⚠ {flags.join(", ")}</div>}
           </div>
         </div>
-        {next && <link rel="preload" as="video" href={next.video} />}
+        {next && buffered === clip.id && <link rel="preload" as="video" href={next.play ?? next.video} />}
       </div>
       {reasonBar}
       {error && <p className="error">{error}</p>}

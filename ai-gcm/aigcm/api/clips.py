@@ -26,7 +26,7 @@ def clip_view(clip):
         "hashtags": details.get("hashtags") or [], "description": details.get("description"),
         "labels": details.get("labels") or {}, "flags": details.get("flags") or [],
         "decision": clip.decision, "reason": clip.decision_reason,
-        "video": f"/media/clips/{clip.id}", "safe_video": f"/media/clips/{clip.id}?safe=1" if clip.safe_file_name else None,
+        "video": f"/media/clips/{clip.id}", "play": f"/media/clips/{clip.id}?view=1", "safe_video": f"/media/clips/{clip.id}?safe=1" if clip.safe_file_name else None,
     }
 
 
@@ -78,18 +78,37 @@ def decide(clip_id: int, body: Decision, request: Request, user=Depends(current_
     return clip_view(clip)
 
 
+def lighter(request, path, stream_id):
+    """The light copy of a video for playing in the app, if made; otherwise the full file, and the stream's
+    posters job is queued to make the missing light copies (once, in the background)."""
+    from ..studio import lane, project
+
+    light = lane.view_path(path)
+    if light.is_file():
+        return light
+    with request.app.state.sessions() as writer:
+        stream = writer.get(Stream, stream_id)
+        if stream is not None:
+            project.queue_posters(writer, stream)
+            writer.commit()
+    return path
+
+
 @router.get("/media/clips/{clip_id}")
-def clip_video(clip_id: int, request: Request, safe: int = 0, download: int = 0, user=Depends(current_user),
-               db=Depends(get_db)):
+def clip_video(clip_id: int, request: Request, safe: int = 0, download: int = 0, view: int = 0,
+               user=Depends(current_user), db=Depends(get_db)):
     clip = own_clip(db, user, clip_id)
     name = clip.safe_file_name if safe else clip.file_name
     if not name:
         raise HTTPException(404, "Not found.")
     folder = (request.app.state.settings.jobs_dir / clip.stream.job_dir / "clips").resolve()
     path = (folder / Path(name).name).resolve()
+    stream_id = clip.stream_id
     db.close()  # the video may stream for minutes; no transaction may stay open that long
     if path.parent != folder or not path.is_file():
         raise HTTPException(404, "This clip's video is no longer on the laptop.")
+    if view and not safe and not download:
+        path = lighter(request, path, stream_id)
     return FileResponse(path, media_type="video/mp4", filename=path.name if download else None,
                         content_disposition_type="attachment" if download else "inline",
                         headers={"Cache-Control": "private, max-age=3600"})

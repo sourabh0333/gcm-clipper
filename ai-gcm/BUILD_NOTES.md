@@ -171,6 +171,8 @@ Reviewed before any code: [plans/M4 Plan and post plan.md](../plans/M4%20Plan%20
 
 ## Known slow spots
 
+- **Clips stalling on the phone (fixed 11 Nov):** clips and exports are 1080p at 5-6 Mbps, and the phone reaches the laptop through Tailscale Funnel with no direct path (relayed through Tailscale's Mumbai server), so playback buffered at times; Review also preloaded the next clip at full size while the current one played. Now every clip and export also gets a light copy for playing in the app (`<name>.view.mp4`, 720 px wide, CRF 26 capped at 2 Mbps, faststart; a 60 s clip goes from 43.5 MB to 13.8 MB and takes about 25 s to make): made by the stream's posters job (which now also covers its exports) and right after each export, and queued the first time a clip without one is played (the full file plays meanwhile). Players use `play` (`?view=1`); Download, Share, the sponsor-safe copy and YouTube uploads always use the full file. Review preloads the next clip only after the current one can play through. Light copies for the 17 existing streams were queued on 11 Nov.
+
 - Gemini free tier: the judge spends most of its time in 503 "busy" retries (7–22 min per job). The paid tier at launch (M6) should remove that.
 - Vertical layouts now scan at 0.25–0.65× realtime (8–19 min per 30 min) after the Spectating rebuild; the enlarged search for the text costs about 1 s per try until it is found, so streams where it is found late (Aashi, Beast: never found in 30 min) are the slower ones. Landscape 720 is 0.2×.
 

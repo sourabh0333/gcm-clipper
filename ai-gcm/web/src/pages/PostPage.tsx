@@ -148,7 +148,7 @@ export default function PostPage() {
       </div>
       {post.video && (
         <div className="card studio" style={{ marginTop: 12 }}>
-          <video src={post.video} poster={post.cover ?? undefined} controls playsInline preload="metadata" />
+          <video src={post.play ?? post.video} poster={post.cover ?? undefined} controls playsInline preload="metadata" />
         </div>
       )}
 

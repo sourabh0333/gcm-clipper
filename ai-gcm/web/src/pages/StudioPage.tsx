@@ -154,7 +154,7 @@ export default function StudioPage() {
           {job.status === "failed" && <p className="small error">{job.error}</p>}
           {job.video && (
             <>
-              <video src={job.video} controls playsInline preload="metadata" style={{ marginTop: 8 }}
+              <video src={job.play ?? job.video} controls playsInline preload="metadata" style={{ marginTop: 8 }}
                      poster={job.cover ?? undefined} />
               <div className="row" style={{ marginTop: 8 }}>
                 <button className="primary" onClick={() => api<Post>("/api/posts", { body: { render_id: job.id } })

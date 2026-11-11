@@ -29,6 +29,7 @@ def render_view(render):
             "created_at": render.created_at.isoformat() + "Z" if render.created_at else None,
             "finished_at": render.finished_at.isoformat() + "Z" if render.finished_at else None,
             "video": f"/media/renders/{render.id}" if done else None,
+            "play": f"/media/renders/{render.id}?view=1" if done else None,
             "cover": f"/media/renders/{render.id}/cover" if done else None}
 
 
@@ -169,14 +170,19 @@ def render_status(render_id: str, user=Depends(current_user), db=Depends(get_db)
 
 
 @router.get("/media/renders/{render_id}")
-def render_video(render_id: str, request: Request, download: int = 0, user=Depends(current_user),
+def render_video(render_id: str, request: Request, download: int = 0, view: int = 0, user=Depends(current_user),
                  db=Depends(get_db)):
     render = own_render(db, user, render_id)
     clip = own_clip(db, user, render.clip_id) if render.clip_id else None
     path = lane.export_path(request.app.state.settings, clip, render) if clip else None
+    stream_id = clip.stream_id if clip else None
     db.close()  # the video may stream for minutes; no transaction may stay open that long
     if path is None:
         raise HTTPException(404, "This video is no longer on the laptop.")
+    if view and not download:
+        from .clips import lighter
+
+        path = lighter(request, path, stream_id)
     return FileResponse(path, media_type="video/mp4", filename=f"kaatclip_{path.name}" if download else None,
                         content_disposition_type="attachment" if download else "inline",
                         headers={"Cache-Control": "private, max-age=3600"})

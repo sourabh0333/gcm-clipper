@@ -48,6 +48,7 @@ def post_view(post):
             "teaser_for": post.teaser_for,"id": post.id, "status": post.status, "kind": post.kind, "clip_id": post.clip_id,
             "clip_title": (clip.title if clip else None), "stream_id": clip.stream_id if clip else None,
             "render_id": post.render_id, "video": f"/media/renders/{post.render_id}" if post.render_id else None,
+            "play": f"/media/renders/{post.render_id}?view=1" if post.render_id else None,
             "cover": f"/media/renders/{post.render_id}/cover" if post.render_id else None,
             "channel": ({"id": post.channel.id, "title": post.channel.title, "thumbnail": post.channel.thumbnail,
                          "status": post.channel.status} if post.channel else None),

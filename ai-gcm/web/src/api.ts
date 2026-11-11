@@ -49,6 +49,7 @@ export type Post = {
   stream_id: string | null;
   render_id: string | null;
   video: string | null;
+  play?: string | null;      // the light copy for playing in the app
   cover: string | null;
   channel: { id: string; title: string; thumbnail: string | null; status: string } | null;
   title: string;
@@ -110,6 +111,7 @@ export type Clip = {
   decision: "keep" | "reject" | null;
   reason: string | null;
   video: string;
+  play?: string;             // the light copy for playing in the app; video is the full file
   safe_video: string | null;
   stream_title?: string;
 };
@@ -200,6 +202,7 @@ export type RenderJob = {
   created_at: string | null;
   finished_at: string | null;
   video: string | null;
+  play?: string | null;
   cover?: string | null;
 };
 export type Studio = {

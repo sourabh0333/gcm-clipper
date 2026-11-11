@@ -8,6 +8,8 @@ the M2 lesson), then recorded in a second short transaction."""
 import shutil
 from pathlib import Path
 
+from sqlalchemy import select
+
 from ..db.models import Clip, Render, Stream, utcnow
 from ..jobs import log, read_json, write_json
 from . import project
@@ -48,6 +50,34 @@ def plan_prepare(settings, session, render):
 
 def cover_path(video):
     return Path(video).with_suffix(".jpg")
+
+
+VIEW_W = 720
+VIEW_CRF, VIEW_MAX = 26, "2M"
+
+
+def view_path(video):
+    """The light copy played in the app: 720 px wide, about 1.5-2 Mbps (the full clip is 1080p at 5-6 Mbps,
+    too much for the phone's link through the relay). Downloads, shares and YouTube posts use the full file."""
+    video = Path(video)
+    return video.with_name(f"{video.stem}.view.mp4")
+
+
+def make_view(video, threads=2):
+    from ..media import run, tool
+
+    out = view_path(video)
+    partial = out.with_name(f"{video.stem}.view.part.mp4")
+    try:
+        run([tool("ffmpeg"), "-v", "error", "-y", "-i", str(video), "-vf", f"scale={VIEW_W}:-2", "-c:v", "libx264",
+             "-preset", "veryfast", "-crf", str(VIEW_CRF), "-maxrate", VIEW_MAX, "-bufsize", "4M", "-pix_fmt", "yuv420p",
+             "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", "-threads", str(threads), str(partial)])
+        partial.replace(out)
+        return out
+    except RuntimeError as exc:   # one broken video must not stop the others
+        log(f"studio: no light copy of {Path(video).name}: {exc}")
+        partial.unlink(missing_ok=True)
+        return None
 
 
 def save_cover(video, at):
@@ -109,6 +139,7 @@ def plan_export(settings, session, render):
                     strip_png=brand.strip_for(settings.jobs_dir, owner, kit) if edit.lower_third else None,
                     intro=intro, outro=outro)
         save_cover(out_dir / name, cover_time(edit, found["intro_s"] if intro else 0.0))
+        make_view(out_dir / name, threads)
         return name
     return task
 
@@ -120,6 +151,15 @@ def plan_posters(settings, session, render):
     folder = Path(settings.jobs_dir) / stream.job_dir
     todo = [(folder / "clips" / Path(c.file_name).name, project.poster_path(settings, c), project.poster_time(c))
             for c in stream.clips if not project.poster_path(settings, c).exists()]
+    # The light copies played in the app, for clips and finished exports that have none yet.
+    videos = [folder / "clips" / Path(c.file_name).name for c in stream.clips]
+    clip_ids = [c.id for c in stream.clips]
+    if clip_ids:
+        for done in session.scalars(select(Render).where(Render.clip_id.in_(clip_ids), Render.kind == "export",
+                                                         Render.status == "done")).all():
+            if done.output:
+                videos.append(folder / EXPORTS / Path(done.output).name)
+    light = [v for v in videos if v.exists() and not view_path(v).exists()]
 
     def task(threads):
         from ..media import run, tool
@@ -139,6 +179,9 @@ def plan_posters(settings, session, render):
                 log(f"studio: no poster for {video.name}: {exc}")
                 partial.unlink(missing_ok=True)
         log(f"studio: {made} posters for {folder.name}")
+        views = sum(make_view(v, threads) is not None for v in light if v.exists())
+        if views:
+            log(f"studio: {views} light copies for {folder.name}")
         return None
     return task
 
