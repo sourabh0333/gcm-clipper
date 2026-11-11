@@ -200,6 +200,10 @@ class YouTubeChannel(Base):
     settings: Mapped[dict] = mapped_column(JSON, default=dict)  # made_for_kids, synthetic: the creator's answers
     connected_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     checked_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    # The last 28 days of uploads (ids, dates, lengths, live or not) for the Shorts-share gauge (M4.4); refreshed
+    # every few hours while the calendar is used, deleted with the channel, never older than 30 days (III.E.4).
+    recent: Mapped[list | None] = mapped_column(JSON)
+    recent_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 class Post(Base):

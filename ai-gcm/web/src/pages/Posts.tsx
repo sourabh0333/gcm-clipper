@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { api, type Post, type Quota } from "../api";
 import { POST_LABEL, when } from "../format";
+import { mondayOf, MonthView, WeekView, ymd } from "./Calendar";
 
 type BatchResult = { approved: Post[]; problems: { id: string; error: string }[] };
 
@@ -27,9 +28,34 @@ function Row({ post, pick }: { post: Post; pick?: { on: boolean; toggle: () => v
   );
 }
 
-// Every post: drafts to approve (one by one, or an explicit list at once), then what's on its way and done.
-// The calendar views come in M4.4.
+// The Posts tab: the week (default), the month, or every post as a list. The view and the week or month shown
+// live in the address, so the back button and a refresh keep them.
 export default function Posts() {
+  const [params, setParams] = useSearchParams();
+  const view = params.get("view") ?? "week";
+  const today = ymd(new Date());
+  const week = params.get("week") ?? mondayOf(today);
+  const month = params.get("month") ?? today.slice(0, 7);
+  const go = (next: Record<string, string>) => setParams({ view, week, month, ...next });
+  return (
+    <>
+      <h1>Posts</h1>
+      <div className="chips" role="tablist">
+        {[["week", "Week"], ["month", "Month"], ["list", "List"]].map(([key, label]) => (
+          <button key={key} role="tab" aria-selected={view === key} className={`chip${view === key ? " on" : ""}`}
+                  onClick={() => go({ view: key })}>{label}</button>
+        ))}
+      </div>
+      {view === "week" && <WeekView start={week} setStart={(d) => go({ week: d })} />}
+      {view === "month" && <MonthView month={month} setMonth={(m) => go({ month: m })}
+                                      openWeek={(d) => go({ view: "week", week: mondayOf(d) })} />}
+      {view === "list" && <PostList />}
+    </>
+  );
+}
+
+// Every post: drafts to approve (one by one, or an explicit list at once), then what's on its way and done.
+export function PostList() {
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
   const [confirming, setConfirming] = useState(false);
@@ -72,7 +98,6 @@ export default function Posts() {
 
   return (
     <>
-      <h1>Posts</h1>
       {posts.length === 0 && (
         <p className="muted">No posts yet. Open a clip in the Library, export it, and tap <b>Post to YouTube</b>.</p>
       )}

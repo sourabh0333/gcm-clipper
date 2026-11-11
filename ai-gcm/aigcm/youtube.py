@@ -4,7 +4,9 @@ finding the connected channel, and revoking. See plans/M4 Plan and post plan.md 
 Only three narrow scopes: upload, read, and analytics. Never `youtube`, `youtube.force-ssl` or
 `youtubepartner`: the app never edits or deletes a creator's videos, and the consent screen says so."""
 
+import re
 import time
+from datetime import datetime
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -98,6 +100,66 @@ def my_channel(http, token):
     thumbs = item["snippet"].get("thumbnails") or {}
     picture = (thumbs.get("default") or thumbs.get("medium") or {}).get("url")
     return {"id": item["id"], "title": item["snippet"].get("title") or item["id"], "thumbnail": picture}
+
+
+DURATION = re.compile(r"^P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$")
+SHORT_MAX_S = 180          # Shorts can be up to 3 minutes; the API has no Shorts flag, so length decides
+
+
+def seconds(iso):
+    m = DURATION.match(iso or "")
+    if not m:
+        return 0
+    d, h, mi, s = (int(x or 0) for x in m.groups())
+    return d * 86400 + h * 3600 + mi * 60 + s
+
+
+def _get(http, token, path, **params):
+    response = http.get(f"{API}/{path}", params=params, headers={"Authorization": f"Bearer {token}"})
+    if response.status_code == 401:
+        raise Expired("The YouTube connection has expired. Reconnect the channel.")
+    if response.status_code != 200:
+        raise YouTubeError(f"YouTube didn't answer ({response.status_code}). Try again shortly.")
+    return response.json()
+
+
+def recent_uploads(http, token, since, pages=4):
+    """The channel's uploads published since `since` (naive UTC), newest first: id, when, length, live or not,
+    Short or not. Returns (items, units used). A few units: the uploads list, then 50 videos per call."""
+    units = 1
+    found = _get(http, token, "channels", part="contentDetails", mine="true").get("items") or []
+    if not found:
+        return [], units
+    playlist = found[0]["contentDetails"]["relatedPlaylists"]["uploads"]
+    ids, page = [], None
+    for _ in range(pages):
+        params = {"part": "contentDetails", "playlistId": playlist, "maxResults": 50}
+        if page:
+            params["pageToken"] = page
+        data = _get(http, token, "playlistItems", **params)
+        units += 1
+        older = False
+        for item in data.get("items") or []:
+            at = (item.get("contentDetails") or {}).get("videoPublishedAt")
+            if at and datetime.fromisoformat(at.replace("Z", "+00:00")).replace(tzinfo=None) < since:
+                older = True
+                continue
+            ids.append(item["contentDetails"]["videoId"])
+        page = data.get("nextPageToken")
+        if older or not page:
+            break
+    items = []
+    for start in range(0, len(ids), 50):
+        data = _get(http, token, "videos", part="contentDetails,liveStreamingDetails,snippet,status",
+                    id=",".join(ids[start:start + 50]))
+        units += 1
+        for v in data.get("items") or []:
+            live = "liveStreamingDetails" in v
+            length = seconds((v.get("contentDetails") or {}).get("duration"))
+            at = (v.get("status") or {}).get("publishAt") or (v.get("snippet") or {}).get("publishedAt")
+            items.append({"id": v["id"], "at": at, "seconds": length, "live": live,
+                          "short": (not live) and 0 < length <= SHORT_MAX_S})
+    return items, units
 
 
 def revoke(http, token):

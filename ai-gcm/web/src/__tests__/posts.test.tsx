@@ -66,7 +66,7 @@ describe("post this?", () => {
 
 describe("posts list", () => {
   it("approves an explicit list after showing each one, and keeps the ones with problems", async () => {
-    render(<MemoryRouter><Posts /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={["/posts?view=list"]}><Posts /></MemoryRouter>);
     expect(await screen.findByText("Drafts (2)")).toBeTruthy();
     expect(screen.getByText("Posted (1)")).toBeTruthy();
     fireEvent.click(screen.getByLabelText("Pick 1v4 clutch"));
