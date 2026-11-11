@@ -9,7 +9,13 @@ can use the maintained tus-js-client (M2 review R5):
 Each upload belongs to a new stream. The bytes are written straight into the stream's job folder as
 source.<ext> (review R6), so the engine uses the file in place. When the last byte arrives the file is
 checked with ffprobe; a readable video queues the stream for the worker. Chunks are small (the browser
-sends 8 MB) so each request stays well inside Cloudflare's 100 MB and 125 s limits later on."""
+sends 8 MB) so each request stays well inside Cloudflare's 100 MB and 125 s limits later on.
+
+Uploading while streaming: the browser creates the upload with `Upload-Defer-Length: 1` (tus
+creation-defer-length) because OBS is still writing the recording, sends the file as it grows, and gives the
+final size with the last PATCH. When recording stops, OBS rewrites the start of an MKV or MP4 (measured 11 Nov:
+the first 64 KB), so before the last bytes the browser compares piece hashes (`GET .../hashes`) and re-sends any
+piece that changed (`PUT .../rewrite?at=`)."""
 
 import asyncio
 import base64
@@ -31,6 +37,8 @@ EXTENSIONS = {".mp4", ".mkv", ".mov"}
 GAMES = {"bgmi"}
 MAX_OPEN_UPLOADS = 3            # unfinished uploads one creator may have at a time
 STALE_AFTER = timedelta(days=3)  # unfinished uploads untouched this long are removed
+GROWING_RESERVE = 12 * 1024**3   # disk kept free for a recording of unknown size (a long 1080p OBS stream)
+HASH_PIECE = 8 * 1024 * 1024     # the piece size for comparing the laptop's copy with the finished recording
 _locks: dict[str, asyncio.Lock] = {}
 
 
@@ -53,7 +61,8 @@ def source_path(settings, stream, upload):
 
 def committed_bytes(db):
     """Bytes promised to unfinished uploads but not written yet: the disk must keep room for them."""
-    return sum(u.length - u.offset for u in db.scalars(select(Upload).where(Upload.completed_at.is_(None))))
+    return sum(max(0, (u.length or (GROWING_RESERVE if u.growing else 0)) - u.offset)
+               for u in db.scalars(select(Upload).where(Upload.completed_at.is_(None))))
 
 
 def own_upload(db, user, upload_id):
@@ -66,15 +75,16 @@ def own_upload(db, user, upload_id):
 @router.post("", status_code=201)
 def create_upload(request: Request, user=Depends(current_user), db=Depends(get_db)):
     settings = request.app.state.settings
+    growing = request.headers.get("upload-defer-length") == "1"
     try:
-        length = int(request.headers.get("upload-length", ""))
+        length = 0 if growing else int(request.headers.get("upload-length", ""))
     except ValueError:
         raise HTTPException(400, "Upload-Length is missing.") from None
     meta = parse_metadata(request.headers.get("upload-metadata"))
     filename = Path(meta.get("filename", "")).name[:200]
     if Path(filename).suffix.lower() not in EXTENSIONS:
         raise HTTPException(415, "Upload an MP4, MKV or MOV recording.")
-    if length <= 0 or length > settings.max_upload_bytes:
+    if not growing and (length <= 0 or length > settings.max_upload_bytes):
         raise HTTPException(413, f"Recordings up to {settings.max_upload_bytes // 1024**3} GB can be uploaded.")
     game = meta.get("game", "bgmi").lower()
     if game not in GAMES:
@@ -84,7 +94,7 @@ def create_upload(request: Request, user=Depends(current_user), db=Depends(get_d
         raise HTTPException(429, "Finish or cancel your other uploads first.")
     settings.jobs_dir.mkdir(parents=True, exist_ok=True)
     free = shutil.disk_usage(settings.jobs_dir).free
-    if free - committed_bytes(db) - length < settings.min_free_bytes:
+    if free - committed_bytes(db) - (GROWING_RESERVE if growing else length) < settings.min_free_bytes:
         raise HTTPException(507, "The laptop is short of disk space right now. Try again later.")
 
     title = (meta.get("title") or Path(filename).stem).strip()[:300] or "Stream"
@@ -96,15 +106,16 @@ def create_upload(request: Request, user=Depends(current_user), db=Depends(get_d
         live = None
     stream_id = new_id("st")
     stream = Stream(id=stream_id, job_dir=stream_id, user_id=user.id, title=title, game=game,
-                    recorded_on=recorded_on, source_name=filename, size_bytes=length, status="uploading",
+                    recorded_on=recorded_on, source_name=filename, size_bytes=length or None, status="uploading",
                     live_session_id=live.id if live else None)
-    upload = Upload(user_id=user.id, stream_id=stream.id, filename=filename, length=length)
+    upload = Upload(user_id=user.id, stream_id=stream.id, filename=filename, length=length, growing=growing)
     db.add_all([stream, upload])
     db.flush()
     path = source_path(settings, stream, upload)
     path.parent.mkdir(parents=True, exist_ok=False)
     path.touch()
-    db.add(AuditEntry(user_id=user.id, action="upload_start", detail={"stream": stream.id, "bytes": length}))
+    db.add(AuditEntry(user_id=user.id, action="upload_start",
+                      detail={"stream": stream.id, "bytes": length, "growing": growing}))
     db.commit()
     return Response(status_code=201, headers={**TUS, "Location": f"/api/uploads/{upload.id}",
                                               "X-Stream-Id": stream.id})
@@ -113,9 +124,9 @@ def create_upload(request: Request, user=Depends(current_user), db=Depends(get_d
 @router.head("/{upload_id}")
 def upload_offset(upload_id: str, user=Depends(current_user), db=Depends(get_db)):
     upload = own_upload(db, user, upload_id)
-    return Response(status_code=200, headers={**TUS, "Upload-Offset": str(upload.offset),
-                                              "Upload-Length": str(upload.length), "Cache-Control": "no-store",
-                                              "X-Stream-Id": upload.stream_id})
+    size = {"Upload-Length": str(upload.length)} if upload.length else {"Upload-Defer-Length": "1"}
+    return Response(status_code=200, headers={**TUS, "Upload-Offset": str(upload.offset), **size,
+                                              "Cache-Control": "no-store", "X-Stream-Id": upload.stream_id})
 
 
 def _finish(db, upload_id, path):
@@ -133,6 +144,7 @@ def _finish(db, upload_id, path):
     upload = db.get(Upload, upload_id)
     stream = db.get(Stream, upload.stream_id)
     upload.completed_at = utcnow()
+    stream.size_bytes = upload.length
     if info is None:
         stream.status, stream.error = "failed", "This file isn't a video we can read. Upload an MP4, MKV or MOV recording."
     else:
@@ -158,9 +170,19 @@ async def append_chunk(upload_id: str, request: Request, user=Depends(current_us
         if claimed != upload.offset:
             # The browser lost track (e.g. a chunk landed but the answer didn't); it asks HEAD and resumes.
             raise HTTPException(409, "Upload-Offset doesn't match; ask for the current offset.")
+        if upload.growing and not upload.length and request.headers.get("upload-length"):
+            # The recording has stopped: this is its final size (tus creation-defer-length).
+            try:
+                final = int(request.headers["upload-length"])
+            except ValueError:
+                raise HTTPException(400, "Upload-Length is not a number.") from None
+            if final < upload.offset or final > settings.max_upload_bytes:
+                raise HTTPException(413, "That final size doesn't fit this upload.")
+            upload.length = final
         stream = db.get(Stream, upload.stream_id)
         path = source_path(settings, stream, upload)
         start, length, stream_id = upload.offset, upload.length, upload.stream_id
+        room = (length or settings.max_upload_bytes) - start   # a growing recording's size is unknown yet
         # Receiving a chunk can take a minute on mobile data: no transaction stays open meanwhile.
         db.commit()
         written = 0
@@ -168,7 +190,7 @@ async def append_chunk(upload_id: str, request: Request, user=Depends(current_us
             f.seek(start)
             try:
                 async for piece in request.stream():
-                    if written + len(piece) > min(length - start, settings.max_chunk_bytes):
+                    if written + len(piece) > min(room, settings.max_chunk_bytes):
                         raise HTTPException(413, "Too many bytes in this request.")
                     await run_in_threadpool(f.write, piece)
                     written += len(piece)
@@ -185,7 +207,7 @@ async def append_chunk(upload_id: str, request: Request, user=Depends(current_us
                 upload.updated_at = utcnow()
                 db.commit()
         offset = start + written
-        if offset == length:
+        if length and offset == length:
             await run_in_threadpool(_finish, db, upload_id, path)
             _locks.pop(upload_id, None)
     return Response(status_code=204, headers={**TUS, "Upload-Offset": str(offset), "X-Stream-Id": stream_id})
@@ -224,3 +246,55 @@ def expire_uploads(db, settings, now=None):
             db.delete(stream)
     db.commit()
     return removed
+
+
+def _piece_hashes(path, end, piece):
+    import hashlib
+
+    out = []
+    with open(path, "rb") as f:
+        for start in range(0, end, piece):
+            f.seek(start)
+            out.append(hashlib.sha256(f.read(min(piece, end - start))).hexdigest())
+    return out
+
+
+@router.get("/{upload_id}/hashes")
+async def piece_hashes(upload_id: str, request: Request, user=Depends(current_user), db=Depends(get_db)):
+    """SHA-256 of each 8 MB piece the laptop has so far, for the browser to find pieces OBS changed when the
+    recording stopped. Reading a long recording takes a little while, so it runs off the event loop."""
+    upload = own_upload(db, user, upload_id)
+    if not upload.growing or upload.completed_at is not None:
+        raise HTTPException(409, "Only an unfinished upload of a growing recording is compared.")
+    stream = db.get(Stream, upload.stream_id)
+    path, end = source_path(request.app.state.settings, stream, upload), upload.offset
+    db.commit()
+    hashes = await run_in_threadpool(_piece_hashes, path, end, HASH_PIECE)
+    return {"piece": HASH_PIECE, "offset": end, "hashes": hashes}
+
+
+@router.put("/{upload_id}/rewrite", status_code=204)
+async def rewrite_piece(upload_id: str, at: int, request: Request, user=Depends(current_user), db=Depends(get_db)):
+    """Replace bytes the laptop already has with what the finished recording holds there (a piece OBS rewrote
+    when recording stopped). Only inside what was already received; the end still grows by PATCH."""
+    settings = request.app.state.settings
+    body = await request.body()
+    lock = _locks.setdefault(upload_id, asyncio.Lock())
+    async with lock:
+        upload = own_upload(db, user, upload_id)
+        if not upload.growing or upload.completed_at is not None:
+            raise HTTPException(409, "Only an unfinished upload of a growing recording can be corrected.")
+        if at < 0 or not body or len(body) > settings.max_chunk_bytes or at + len(body) > upload.offset:
+            raise HTTPException(416, "That piece isn't inside what was uploaded.")
+        stream = db.get(Stream, upload.stream_id)
+        path = source_path(settings, stream, upload)
+        upload.updated_at = utcnow()
+        db.commit()
+
+        def write():
+            with open(path, "r+b") as f:
+                f.seek(at)
+                f.write(body)
+
+        await run_in_threadpool(write)
+    return Response(status_code=204)

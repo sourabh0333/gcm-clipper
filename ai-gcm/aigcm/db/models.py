@@ -130,6 +130,9 @@ class Upload(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # Uploading while streaming: the recording is still growing, so `length` is 0 (unknown) until the
+    # browser sends the final size (tus creation-defer-length).
+    growing: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class Clip(Base):

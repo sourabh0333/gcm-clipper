@@ -3,8 +3,44 @@ import { Link } from "react-router";
 import { api, type LiveSession } from "../api";
 import { bytes, duration } from "../format";
 import {
+  carryOn, clearLive, liveCurrent, liveSubscribe, liveSupported, savedLive, startLive, stopLive, streamEnded,
+  type LiveState,
+} from "../liveUpload";
+import {
   clearUpload, current, pauseUpload, resumeUpload, startUpload, subscribe, uploadMetadata, type UploadState,
 } from "../uploader";
+
+// While uploading during a stream: what's sent, what OBS has written, and the way to finish.
+function LiveProgress({ live }: { live: LiveState }) {
+  const still = Math.round((Date.now() - live.grewAt) / 1000);
+  const busy = live.status === "uploading" || live.status === "finishing";
+  return (
+    <>
+      <h1>{live.status === "done" ? "Uploaded" : live.status === "stopped" ? "Stopped" : "Uploading while you stream"}</h1>
+      <p className="muted small">{live.fileName}</p>
+      <div className="bar"><div style={{ width: `${live.size ? Math.round((live.sent / live.size) * 100) : 0}%` }} /></div>
+      <div className="small muted">
+        {bytes(live.sent)} sent · the recording is {bytes(live.size)}
+        {live.status === "uploading" && (still < 15 ? " and growing" : ` · no new video for ${still} s`)}
+      </div>
+      {live.status === "uploading" && (
+        <p className="small muted">
+          Keep this tab open while you stream (it can stay in the background). When you stop recording in OBS, the
+          last part goes up by itself within about 2 minutes, or tap Stream ended.
+        </p>
+      )}
+      {live.note && <p className="small">{live.note}</p>}
+      <div className="row" style={{ marginTop: 16 }}>
+        {live.status === "uploading" && <button className="primary" onClick={streamEnded}>Stream ended</button>}
+        {busy && <button className="danger" onClick={() => { if (confirm("Stop and throw away this upload?")) void stopLive(); }}>Stop</button>}
+        {live.status === "done" && live.streamId && (
+          <Link className="button primary" to={`/streams/${live.streamId}`} onClick={clearLive}>See the stream</Link>
+        )}
+        {!busy && <button onClick={clearLive}>Upload another</button>}
+      </div>
+    </>
+  );
+}
 
 export default function NewStream() {
   const [file, setFile] = useState<File | null>(null);
@@ -13,9 +49,19 @@ export default function NewStream() {
   const [liveId, setLiveId] = useState("");
   const [sessions, setSessions] = useState<LiveSession[]>([]);
   const [up, setUp] = useState<UploadState | null>(current());
+  const [live, setLive] = useState<LiveState | null>(liveCurrent());
+  const [mode, setMode] = useState<"file" | "live">(liveSupported() ? "live" : "file");
+  const [, tick] = useState(0);
   const [message, setMessage] = useState("");
+  const saved = savedLive();
 
   useEffect(() => subscribe(setUp), []);
+  useEffect(() => liveSubscribe(setLive), []);
+  useEffect(() => {          // the "no new video for N s" counter
+    if (!live || live.status !== "uploading") return;
+    const timer = window.setInterval(() => tick((n) => n + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [live]);
 
   useEffect(() => {
     api<{ open: LiveSession | null; recent: LiveSession[] }>("/api/live")
@@ -37,6 +83,20 @@ export default function NewStream() {
       setMessage((err as Error).message);
     }
   }
+
+  async function startWhileStreaming() {
+    setMessage("");
+    try {
+      const meta: Record<string, string> = { title: title || "Stream", game: "bgmi" };
+      if (recordedOn) meta.recorded_on = recordedOn;
+      if (liveId) meta.live_session = liveId;
+      await startLive(meta);
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") setMessage((err as Error).message);
+    }
+  }
+
+  if (live) return <LiveProgress live={live} />;
 
   if (up) {
     const fraction = up.total ? up.sent / up.total : 0;
@@ -70,14 +130,41 @@ export default function NewStream() {
   return (
     <>
       <h1>Upload a stream</h1>
-      <p className="muted small">
-        The recording from OBS or your streaming app (MP4, MKV or MOV). Use Wi-Fi for big files. If the upload stops,
-        open this page again and pick the same file: it carries on from where it stopped.
-      </p>
-      <label htmlFor="file">Recording</label>
-      <input id="file" type="file" accept="video/mp4,video/x-matroska,video/quicktime,.mp4,.mkv,.mov"
-        onChange={(e) => pick(e.target.files?.[0] ?? null)} />
-      {file && <p className="muted small">{file.name} · {bytes(file.size)}</p>}
+      {saved && (
+        <div className="banner small">
+          An upload of <b>{saved.name}</b> didn't finish.{" "}
+          <button className="chip" onClick={() => carryOn().catch((err) => setMessage((err as Error).message))}>Carry on</button>{" "}
+          (pick the same recording)
+        </div>
+      )}
+      {liveSupported() && (
+        <div className="chips" role="tablist">
+          <button role="tab" aria-selected={mode === "live"} className={`chip${mode === "live" ? " on" : ""}`} onClick={() => setMode("live")}>
+            Upload while I stream
+          </button>
+          <button role="tab" aria-selected={mode === "file"} className={`chip${mode === "file" ? " on" : ""}`} onClick={() => setMode("file")}>
+            Upload a recording
+          </button>
+        </div>
+      )}
+      {mode === "live" ? (
+        <p className="muted small">
+          On the PC you stream from: start recording in OBS when you go live (OBS Settings → Advanced → Automatically
+          record when streaming), then pick the recording here. Kaatclip uploads it while you stream, so the clips
+          start a few minutes after you stop.
+        </p>
+      ) : (
+        <>
+          <p className="muted small">
+            The recording from OBS (MP4, MKV or MOV). Use Wi-Fi for big files. If the upload stops, open this page again
+            and pick the same file: it carries on from where it stopped.
+          </p>
+          <label htmlFor="file">Recording</label>
+          <input id="file" type="file" accept="video/mp4,video/x-matroska,video/quicktime,.mp4,.mkv,.mov"
+            onChange={(e) => pick(e.target.files?.[0] ?? null)} />
+          {file && <p className="muted small">{file.name} · {bytes(file.size)}</p>}
+        </>
+      )}
       <label htmlFor="title">Title</label>
       <input id="title" value={title} maxLength={300} onChange={(e) => setTitle(e.target.value)} />
       <label htmlFor="date">Streamed on</label>
@@ -97,7 +184,9 @@ export default function NewStream() {
       )}
       {message && <p className="error">{message}</p>}
       <div className="row" style={{ marginTop: 18 }}>
-        <button className="primary" disabled={!file} onClick={start}>Start upload</button>
+        {mode === "live"
+          ? <button className="primary" onClick={startWhileStreaming}>Pick the OBS recording and start</button>
+          : <button className="primary" disabled={!file} onClick={start}>Start upload</button>}
       </div>
     </>
   );
