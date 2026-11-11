@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { api, type LiveSession } from "../api";
 import { bytes, duration } from "../format";
 import {
-  carryOn, clearLive, liveCurrent, liveSubscribe, liveSupported, savedLive, startLive, stopLive, streamEnded,
+  carryOn, clearLive, handleFromDrop, liveCurrent, liveSubscribe, liveSupported, savedLive, startLive, stopLive, streamEnded,
   type LiveState,
 } from "../liveUpload";
 import {
@@ -57,6 +57,22 @@ export default function NewStream() {
 
   useEffect(() => subscribe(setUp), []);
   useEffect(() => liveSubscribe(setLive), []);
+  // In "Upload while I stream", a recording dropped anywhere on the page starts the upload (Chrome would
+  // otherwise open the dropped video in a new window).
+  useEffect(() => {
+    if (mode !== "live" || live || up) return;
+    const over = (e: DragEvent) => e.preventDefault();
+    const drop = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer) void startWhileStreaming(e.dataTransfer.items);
+    };
+    window.addEventListener("dragover", over);
+    window.addEventListener("drop", drop);
+    return () => {
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("drop", drop);
+    };
+  });
   useEffect(() => {          // the "no new video for N s" counter
     if (!live || live.status !== "uploading") return;
     const timer = window.setInterval(() => tick((n) => n + 1), 1000);
@@ -84,15 +100,18 @@ export default function NewStream() {
     }
   }
 
-  async function startWhileStreaming() {
+  async function startWhileStreaming(dropped?: DataTransferItemList) {
     setMessage("");
     try {
       const meta: Record<string, string> = { title: title || "Stream", game: "bgmi" };
       if (recordedOn) meta.recorded_on = recordedOn;
       if (liveId) meta.live_session = liveId;
-      await startLive(meta);
+      await startLive(meta, dropped ? await handleFromDrop(dropped) : undefined);
     } catch (err) {
-      if ((err as Error).name !== "AbortError") setMessage((err as Error).message);
+      const e = err as Error;
+      setMessage(e.name === "AbortError"
+        ? `No recording was picked (${e.message}). Try dragging the file from the Videos folder onto this box instead.`
+        : e.message);
     }
   }
 
@@ -185,7 +204,12 @@ export default function NewStream() {
       {message && <p className="error">{message}</p>}
       <div className="row" style={{ marginTop: 18 }}>
         {mode === "live"
-          ? <button className="primary" onClick={startWhileStreaming}>Pick the OBS recording and start</button>
+          ? (
+            <div className="dropzone">
+              <button className="primary" onClick={() => startWhileStreaming()}>Pick the OBS recording and start</button>
+              <div className="small muted" style={{ marginTop: 8 }}>or drag the recording here from File Explorer (Videos folder)</div>
+            </div>
+          )
           : <button className="primary" disabled={!file} onClick={start}>Start upload</button>}
       </div>
     </>

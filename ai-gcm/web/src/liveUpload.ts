@@ -189,9 +189,21 @@ async function pick(): Promise<{ handle: Handle; file: File }> {
   return { handle: picked, file };
 }
 
-export async function startLive(meta: Record<string, string>) {
+// A recording dragged onto the page from File Explorer: Chrome and Edge give a handle that can be re-read,
+// the same as the picker's, without the picker window.
+export async function handleFromDrop(items: DataTransferItemList): Promise<Handle> {
+  const item = Array.from(items).find((i) => i.kind === "file") as
+    (DataTransferItem & { getAsFileSystemHandle?: () => Promise<(Handle & { kind: string }) | null> }) | undefined;
+  if (!item?.getAsFileSystemHandle) throw new Error("This browser can't upload while recording. Use Chrome or Edge.");
+  const dropped = await item.getAsFileSystemHandle();
+  if (!dropped || dropped.kind !== "file") throw new Error("Drag the recording file itself, not a folder.");
+  return dropped;
+}
+
+export async function startLive(meta: Record<string, string>, dropped?: Handle) {
   if (state && (state.status === "uploading" || state.status === "finishing")) throw new Error("An upload is already going.");
-  const picked = await pick();
+  const picked = dropped ? { handle: dropped, file: await dropped.getFile() } : await pick();
+  if (!/\.(mkv|mp4|mov)$/i.test(picked.file.name)) throw new Error("That isn't an MKV, MP4 or MOV recording.");
   const res = await fetch("/api/uploads", {
     method: "POST", credentials: "same-origin",
     headers: { ...TUS, "Upload-Defer-Length": "1", "Upload-Metadata": encodeMeta({ ...meta, filename: picked.file.name }) },

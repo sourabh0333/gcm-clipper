@@ -278,3 +278,5 @@ textarea { font: inherit; width: 100%; padding: 0.7rem 0.8rem; border-radius: 10
 .tlmusic { position: absolute; bottom: 0; height: 5px; background: #9b6bff; border-radius: 3px; pointer-events: none; }
 .musicwarn { display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; }
 .musicwarn.danger { background: #2a0d10; border-color: #6a1d25; }
+
+.dropzone { border: 2px dashed var(--line); border-radius: var(--radius); padding: 14px; text-align: center; }
