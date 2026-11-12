@@ -400,7 +400,8 @@ def check(settings, sessions, http, post_id, notify=None, now=None):
         if status == "scheduled" and publish_at and publish_at <= now:
             moved = _parse(state.get("publishAt"))
             if state.get("privacyStatus") == "public":
-                changes.update(status="posted", posted_at=now)
+                # YouTube made it public at its time; the laptop may only be looking now (it was off).
+                changes.update(status="posted", posted_at=min(now, moved or publish_at))
                 event = "posted"
             elif moved is not None and moved > now:
                 changes["publish_at"] = moved          # the creator moved it in YouTube Studio: follow YouTube
