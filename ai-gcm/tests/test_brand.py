@@ -202,3 +202,15 @@ def test_an_export_is_reused_only_while_its_look_is_unchanged(app):
         clip = s.query(Clip).first()
         after = look(app.state.settings, s, clip, 0)
         assert after != before and look(app.state.settings, s, clip, 0) == after
+
+
+def test_the_ai_judges_note_never_reaches_a_public_description():
+    from aigcm.studio import brand
+    from aigcm.titles import KRAFTON_LINE
+
+    engine = "\n\n".join(["Full stream: https://youtu.be/abcdefghijk",
+                          "The screen is black and there is no notable gameplay.", KRAFTON_LINE, "#bgmi #shorts"])
+    text = brand.post_text("Clutch", engine, ["#bgmi"], None)
+    assert "screen is black" not in text["description"]
+    assert text["description"].startswith("Full stream: https://youtu.be/abcdefghijk")
+    assert KRAFTON_LINE in text["description"] and "#bgmi" in text["description"]

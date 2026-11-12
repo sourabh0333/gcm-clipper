@@ -17,7 +17,8 @@ def decorate(ranked, info, transcript, settings, history=()):
         clip["titles"] = titles.suggest(labels, said, verdict.get("title") or None, series)
         clip["title"] = clip["titles"][0] if clip["titles"] else clip.get("title", "")
         clip["hashtags"] = tags
-        clip["description"] = titles.description(stream_url, game, tags, verdict.get("summary", ""))
+        # The judge's summary stays in the clip's "why"; it is a note for the creator, never public text.
+        clip["description"] = titles.description(stream_url, game, tags)
         clip["flags"] = safety.check(clip["title"], clip["description"], words, labels)
         clip["mute_spans"] = safety.mute_spans(words)
         clip["sponsor_safe"] = safety.sponsor_safe(clip["flags"])

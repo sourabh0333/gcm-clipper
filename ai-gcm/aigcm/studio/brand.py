@@ -282,7 +282,9 @@ def post_text(title, engine_description, engine_tags, kit):
     tags = tags[:8]
     parts = [p for p in (engine_description or "").split("\n\n") if p.strip()]
     had_game_line = KRAFTON_LINE in parts
-    parts = [p for p in parts if p != KRAFTON_LINE and not p.strip().startswith("#")]
+    # Only the stream link is kept from the engine's text: anything else there is the AI judge's private note
+    # about the clip ("The screen is black..."), which must never reach a public description (found 12 Nov).
+    parts = [p for p in parts if p.strip().startswith("Full stream:")]
     if kit.description.strip():
         parts.append(kit.description.strip())
     game_line = KRAFTON_LINE if kit.disclaimer is None and had_game_line else (kit.disclaimer or "").strip()
