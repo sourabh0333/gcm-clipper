@@ -1,0 +1,33 @@
+{
+  "job": "acc_bixi_handcam_pro",
+  "duration": 1800,
+  "orientation": "landscape",
+  "layout_notes": "1280x720. The game is slightly scaled down with a thin black band at the top and a black strip at the bottom carrying a UPI id at the right. Hand cam (top-down view of the phone and hands) bottom-left, about x 0-0.2, y 0.72-0.95, overlapping the game. HUD Remaining/Eliminations counters top-left at about x 0.03-0.18, y 0.085-0.12. All three matches are Ranked Classic TPP squad on Erangel during the vampire 'Bloodline Awakening' event (bat wings, respawn, boss health bar).",
+  "parts": [
+    {"start": 0, "end": 287, "kind": "match", "match": 1, "what": "already running at 0 s (Remaining 40, Eliminations 6)"},
+    {"start": 287, "end": 337, "kind": "between", "what": "death cam, #13/26 result, MVP, loading, lobby, settings, loading"},
+    {"start": 337, "end": 1004, "kind": "match", "match": 2, "what": "includes ~40 s of in-game Settings (pick-up config) screens on the spawn island and an event respawn at ~791"},
+    {"start": 1004, "end": 1018, "kind": "between", "what": "abrupt cut to the BGMI loading screen, then loading"},
+    {"start": 1018, "end": 1800, "kind": "match", "match": 3, "what": "runs to the end of the file"}
+  ],
+  "matches": [
+    {
+      "n": 1, "mode": "classic", "map": "erangel", "start": 0, "end": 287, "ended": "death",
+      "placement": 13, "kills": 0, "kill_times": [], "knocked_streamer": [],
+      "result_screen_seen": true, "tolerance_s": 3,
+      "notes": "Already running at 0 s (start=0 is the file start). The Eliminations counter reads 6 at 0 s and is still 6 at death, so 0 kills inside the file (match total 6). Fighting in Yasnaya Polyana houses; hit at 286 and death cam at 287; result '#13 BETTER LUCK NEXT TIME /26' at 291."
+    },
+    {
+      "n": 2, "mode": "classic", "map": "erangel", "start": 337, "end": 1004, "ended": "unknown",
+      "placement": null, "kills": 3, "kill_times": [623, 744, 791], "knocked_streamer": [791],
+      "result_screen_seen": false, "tolerance_s": 5,
+      "notes": "Spawn island from 337; from 339 to ~382 the streamer has the in-game Settings (pick-up / custom attachment) screens open, which hide the HUD. Plane ~396 (Mylta on the map). The streamer dies ~791 and an event 'Respawn Countdown' runs (793-797), then a respawn plane (799-821) and a parachute; the 2 -> 3 kill happens in that hidden stretch (counter 2 at 790, 3 at 798), so its time is +-4 s. At 1003 he is alive and fighting (boss health bar on screen), and at 1004 the video cuts straight to the BGMI loading screen with no death, result or lobby. It may be a disconnect or crash, or the streamer quitting; the end reason is unknown. 'knocked_streamer' lists the death at 791 (respawned)."
+    },
+    {
+      "n": 3, "mode": "classic", "map": "erangel", "start": 1018, "end": 1800, "ended": "cut_off",
+      "placement": null, "kills": 9, "kill_times": [1163, 1183, 1192, 1210, 1270, 1556, 1610, 1692, 1762], "knocked_streamer": [],
+      "result_screen_seen": false, "tolerance_s": 3,
+      "notes": "Spawn island from 1018 (notice dialogs 1019-1024), plane ~1075 (Stalber/Yasnaya Polyana on the map). Counter 9 with Remaining 47 at the end; the streamer is alive and fighting in the blue zone at 1800. All kill times from 1 s steps."
+    }
+  ]
+}

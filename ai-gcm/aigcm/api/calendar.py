@@ -81,7 +81,7 @@ def gauge(db, channel, now):
             continue
         planned += 1
         total += 1
-        shorts += 1
+        shorts += post.kind == "short"      # a highlight (kind "video") is a long upload
     share = shorts / total if total else 0.0
     return {"channel": channel.title, "shorts": shorts, "uploads": total, "planned": planned,
             "share": round(share, 3), "warn": total >= 5 and share > GAUGE_WARN, "limit": GAUGE_WARN,

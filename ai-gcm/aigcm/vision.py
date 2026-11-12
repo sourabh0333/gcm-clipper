@@ -582,6 +582,69 @@ class Counter:
         return None
 
 
+HUD_GAP_S = 8.0          # the counters can vanish for a few seconds in a match (effects, a map open); still one run
+SPECTATE_GAP_S = 10.0
+MAX_ELIMS = 60
+RESULT_READS_S = (2.0, 5.0, 9.0, 14.0, 20.0)   # after the counters vanish at the end of a long run, read the frame
+RESULT_MIN_RUN_S = 60.0                          # only after the HUD was up this long (a match, not a flicker)
+RESULT_MAX_LINES = 40
+
+
+TEAMS_TOKEN = re.compile(r"^[/xX7lI|(]\s?(\d{2,3})$")
+
+
+def rank_on_result(frame, lines, ocr):
+    """The placement on BGMI's result screen: a big stylised "#6" left of "/25" (the number of teams), which
+    the line reader misses; read that spot with the digit reader. None if the screen isn't there."""
+    for text, conf, (x0, y0, x1, y1) in lines:
+        found = TEAMS_TOKEN.match(text.strip())
+        if not found:
+            continue
+        h = y1 - y0
+        crop = frame[max(0, int(y0 - 1.6 * h)): int(y1 + 0.2 * h), max(0, int(x0 - 2.6 * h)): int(x0 + 0.1 * h)]
+        if crop.size == 0:
+            continue
+        value = parse_number(ocr.read_digits([crop])[0][0])
+        if value and 1 <= value <= int(found.group(1)):
+            return value, int(found.group(1))
+    return None
+
+
+class Runs:
+    """Spans of time when something was seen: [[start, end], ...], gaps shorter than `gap` joined."""
+
+    def __init__(self, gap, spans=None):
+        self.gap = gap
+        self.spans = [list(s) for s in spans or []]
+
+    def see(self, t):
+        if self.spans and t - self.spans[-1][1] <= self.gap:
+            self.spans[-1][1] = round(t, 2)
+        else:
+            self.spans.append([round(t, 2), round(t, 2)])
+
+    def last_end(self):
+        return self.spans[-1][1] if self.spans else None
+
+    def current_length(self):
+        return self.spans[-1][1] - self.spans[-1][0] if self.spans else 0.0
+
+
+def hud_visible(reads):
+    """True when the in-match counters are on screen: every counter box reads a plausible number. The lobby
+    and menus show other numbers in that corner, so Eliminations must be 0-60 and Remaining 1-100."""
+    if not reads:
+        return False
+    for name, (value, conf) in reads.items():
+        if value is None or conf < 0.5:
+            return False
+        if name == "elims" and not 0 <= value <= MAX_ELIMS:
+            return False
+        if name == "remaining" and not 0 < value <= MAX_PLAYERS:
+            return False
+    return True
+
+
 def counter_events(change):
     """Kill events for an Eliminations change; a reset to 0 means a new match started."""
     t, old, new = change
@@ -637,7 +700,14 @@ def scan(src, info, settings, checkpoint=None):
     recent = {}
     events, ocr_calls, index = [], 0, 0
     next_report = 600
+    # For the stream map: when the in-match HUD was on screen, when "Spectating" was, and what the screen said
+    # just after a long HUD run ended (the result screen: placement, kills, Chicken Dinner).
+    hud, spectating = Runs(HUD_GAP_S), Runs(SPECTATE_GAP_S)
+    results, result_plan = [], []      # result_plan: times still to read after the HUD vanished
     if saved:
+        hud = Runs(HUD_GAP_S, saved.get("hud"))
+        spectating = Runs(SPECTATE_GAP_S, saved.get("spectating"))
+        results, result_plan = saved.get("results", []), saved.get("result_plan", [])
         for name, state in saved["counters"].items():
             counters[name].restore(state)
         remaining = [tuple(r) for r in saved["remaining"]]
@@ -664,6 +734,7 @@ def scan(src, info, settings, checkpoint=None):
             "spectate_box": spectate_box, "last_change": last_change,
             "spectate_ref": spectate_ref.tolist() if spectate_ref is not None else None,
             "lobby_open": lobby_open, "last_read": last_read, "feed": feed,
+            "hud": hud.spans, "spectating": spectating.spans, "results": results, "result_plan": result_plan,
             "recent": [[kind, text, t] for (kind, text), t in recent.items()],
             "events": events, "ocr_calls": ocr_calls, "index": index, "next_report": next_report})
 
@@ -686,6 +757,22 @@ def scan(src, info, settings, checkpoint=None):
             if counter_boxes:
                 names = list(counter_boxes)
                 reads = ocr.read_digits(crop_region(frame, counter_boxes[n]) for n in names)
+                parsed = {n: (parse_number(text) if conf >= 0.2 else None, conf) for n, (text, conf) in zip(names, reads)}
+                if hud_visible(parsed):
+                    hud.see(t)
+                    result_plan = []
+                elif (not result_plan and hud.last_end() is not None and t - hud.last_end() >= RESULT_READS_S[0]
+                        and hud.current_length() >= RESULT_MIN_RUN_S
+                        and not any(r["after"] == hud.last_end() for r in results[-len(RESULT_READS_S):])):
+                    result_plan = [hud.last_end() + d for d in RESULT_READS_S]
+                if result_plan and t >= result_plan[0]:
+                    result_plan.pop(0)
+                    ocr_calls += 1
+                    found = ocr.lines(frame)
+                    lines = [text for text, conf, _ in found if conf >= 0.5][:RESULT_MAX_LINES]
+                    rank = rank_on_result(frame, found, ocr)
+                    results.append({"t": round(t, 2), "after": hud.last_end(), "lines": lines,
+                                    "rank": list(rank) if rank else None})
                 for name, (text, conf) in zip(names, reads):
                     value = parse_number(text) if conf >= 0.2 else None
                     if name == "elims":
@@ -726,6 +813,7 @@ def scan(src, info, settings, checkpoint=None):
                                 elif os.environ.get("AIGCM_DEBUG_VISION"):
                                     log(f"vision: no Spectating text at {t:.0f}s (read {value}, counter {counters[name].value})")
                         if seen:
+                            spectating.see(t)
                             spectating_until = t + SPECTATE_HOLD_S
                             if recent_change:
                                 # The change just accepted was a teammate's counter: undo it.
@@ -818,4 +906,4 @@ def scan(src, info, settings, checkpoint=None):
     events.sort(key=lambda e: e["t"])
     return {"events": events, "remaining": remaining, "counter_boxes": counter_boxes, "frames": index,
             "ocr_calls": ocr_calls, "frame_size": [out_w, out_h], "feed_box": feed_box, "feed": feed,
-            "player_name": player_name}
+            "player_name": player_name, "hud": hud.spans, "spectating": spectating.spans, "results": results}

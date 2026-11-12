@@ -246,7 +246,7 @@ def upload(settings, sessions, http, post_id, notify=None, chunk=CHUNK, now=None
         post = db.get(Post, post_id)
         approval, url = dict(post.approval), post.upload_url
         clip, render = post.clip, db.get(Render, post.render_id) if post.render_id else None
-        video = lane.export_path(settings, clip, render) if clip and render else None
+        video = lane.render_file(settings, db, render, clip)
         limit = usage(db, now)
     try:
         if video is None:
@@ -368,7 +368,7 @@ def check(settings, sessions, http, post_id, notify=None, now=None):
         post = db.get(Post, post_id)
         video_id, channel_id = post.video_id, post.channel_id or (post.approval or {}).get("channel", {}).get("id")
         render = db.get(Render, post.render_id) if post.render_id else None
-        video = lane.export_path(settings, post.clip, render) if post.clip and render else None
+        video = lane.render_file(settings, db, render, post.clip)
         status, publish_at, approved_at, thumbnail = post.status, post.publish_at, post.approved_at, post.thumbnail
         post.checked_at = now
         db.commit()

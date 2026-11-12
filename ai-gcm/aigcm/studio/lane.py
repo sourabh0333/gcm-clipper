@@ -342,8 +342,153 @@ def plan_compilation(settings, session, render):
     return task
 
 
+HIGHLIGHTS = "highlights"
+
+
+def highlight_folder(settings, stream, render_id):
+    return Path(settings.jobs_dir) / stream.job_dir / HIGHLIGHTS / Path(render_id).name
+
+
+def plan_map(settings, session, render):
+    """The stream map (Highlights Stage 1): matches, lobby and not-BGMI parts; then the highlight of the best
+    match is queued, unless the creator already asked for one."""
+    stream = session.get(Stream, (render.params or {}).get("stream_id"))
+    if stream is None:
+        raise RuntimeError("That stream no longer exists.")
+    folder = Path(settings.jobs_dir) / stream.job_dir
+    stream_id, user_id, auto = stream.id, stream.user_id, bool((render.params or {}).get("then_highlight"))
+
+    def task(threads):
+        from ..jobs import Job
+        from ..streammap import make
+
+        if not (folder / "vision.json").exists():
+            raise RuntimeError("This stream hasn't been scanned yet.")
+        found = make(Job(folder), read_frames=project.source_file(folder) is not None)
+        return f"{len(found['matches'])} matches"
+
+    def after(s, done):
+        if not auto:
+            return
+        found = read_json(folder / "map.json", {}) or {}
+        if found.get("best") and not s.scalar(select(Render).where(Render.kind == "highlight",
+                                                                   Render.params["stream_id"].as_string() == stream_id)):
+            s.add(Render(user_id=user_id, kind="highlight", params={"stream_id": stream_id, "auto": True}))
+    task.after = after
+    return task
+
+
+def plan_highlight(settings, session, render):
+    """A kill-match highlight from the stream map: the 16:9 video and its light copy, three thumbnails, titles,
+    the post text, and Shorts cut from it (a teaser and the best fights) as clips of the stream."""
+    from .. import titles as title_maker
+    from . import brand, facecam, highlight
+
+    params = render.params or {}
+    stream = session.get(Stream, params.get("stream_id"))
+    if stream is None or stream.user_id != render.user_id:
+        raise RuntimeError("That stream no longer exists.")
+    folder = Path(settings.jobs_dir) / stream.job_dir
+    source = project.source_file(folder)
+    if source is None:
+        raise RuntimeError("The recording is no longer on the laptop, so a highlight can't be made from it.")
+    stream_map = read_json(folder / "map.json")
+    if not stream_map:
+        raise RuntimeError("The stream map isn't ready yet.")
+    numbers = params.get("matches") or (stream_map["session"] if params.get("session") else [stream_map["best"]])
+    numbers = [n for n in numbers if n]
+    if not numbers:
+        raise RuntimeError("No match with kills was found in this stream.")
+    kit = project.kit_for(stream.clips[0]) if stream.clips else None
+    link = stream.link
+    out_dir = highlight_folder(settings, stream, render.id)
+    stream_id, user_id, render_id = stream.id, stream.user_id, render.id
+    drop = set(params.get("drop") or [])
+
+    def task(threads):
+        from ..media import probe
+        from .thumbs import Moment, make_set
+
+        info = dict(read_json(folder / "info.json"), path=str(source))
+        info.update(probe(source))
+        heard = _npz(folder / "sounds.npz")
+        loud = _npz(folder / "audio.npz")
+        said = read_json(folder / "transcript.json")
+        cam = (facecam.for_stream(folder, source) or {}).get("box")
+        the_plan = highlight.plan(stream_map, numbers, info["duration"], said, heard, loud,
+                                  read_json(folder / "moments.json", []) or [], cam)
+        if drop:
+            the_plan["pieces"] = [p for i, p in enumerate(the_plan["pieces"]) if i not in drop]
+            the_plan["dropped"] = sorted(drop)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        video = highlight.render(the_plan, source, info, out_dir / "video.mp4", threads)
+        make_view(video, threads)
+        names, words = highlight.titles_for(stream_map, numbers, the_plan)
+        moments = [Moment(source, t + 0.3, "kill", score=1.0)
+                   for m in stream_map["matches"] if m["n"] in numbers for t in m["kill_times"]
+                   if any(p["kind"] != "card" and p["start"] <= t <= p["end"] for p in the_plan["pieces"])]
+        if moments:
+            make_set(moments, cam, words, out_dir)
+            if (out_dir / "thumb_1.jpg").exists():
+                shutil.copy(out_dir / "thumb_1.jpg", cover_path(video))   # the cover YouTube gets
+        engine_text = (f"Full stream: {link}\n\n" if link else "") + title_maker.KRAFTON_LINE
+        post = brand.post_text(names[0], engine_text, ["#bgmi", "#bgmihighlights"], kit, own_text=True)
+        shorts = []
+        for i, moment in enumerate(highlight.short_moments(the_plan)):
+            moment["events"] = [{"t": t, "kind": "self_kill"} for m in stream_map["matches"] for t in m["kill_times"]
+                                if moment["start"] <= t <= moment["end"]]
+            kills = len(moment["events"])
+            moment["kills"] = kills
+            title = ("CHICKEN DINNER 🏆" if moment["role"] == "teaser" and any(
+                m["ended"] == "dinner" for m in stream_map["matches"] if m["n"] in numbers)
+                else f"{kills} FINISHES 🔥" if kills > 1 else "WAIT FOR IT 😱")
+            name = f"hl_{render_id[:8]}_{i + 1}.mp4"
+            (folder / "clips").mkdir(exist_ok=True)
+            highlight.render_short(moment, source, info, folder / "clips" / name, title, cam, None, None, threads)
+            shorts.append(dict(moment, file=name, title=title))
+        write_json(out_dir / "plan.json", the_plan)
+        write_json(out_dir / "titles.json", {"titles": names, "words": words})
+        write_json(out_dir / "post.json", post)
+        write_json(out_dir / "result.json", {"matches": numbers, "length": the_plan["length"], "kept": the_plan["kept"],
+                                             "kills": the_plan["kills"], "shorts": shorts,
+                                             "label": highlight.channel_label(stream_map, numbers)})
+        return "video.mp4"
+
+    def after(s, done):
+        result = read_json(out_dir / "result.json", {}) or {}
+        st = s.get(Stream, stream_id)
+        if st is None:
+            return
+        rank = max([c.rank for c in st.clips] + [0])
+        for i, short in enumerate(result.get("shorts", []), 1):
+            key = f"hl{render_id[:8]}{i}"
+            if any(c.clip_key == key for c in st.clips):
+                continue
+            labels = {"type": "fight", "game": st.game or "bgmi", "kills": short["kills"], "knocks": 0,
+                      "win": short["role"] == "teaser" and "DINNER" in short["title"], "marked": False,
+                      "talk": None, "players_left": None, "length_s": round(short["end"] - short["start"], 1)}
+            st.clips.append(Clip(clip_key=key, rank=rank + i, start_s=short["start"], end_s=short["end"],
+                                 type="win" if labels["win"] else "multi_kill" if short["kills"] > 1 else "fight",
+                                 score=100.0 - i, file_name=short["file"], title=short["title"],
+                                 why=f"From the highlight ({'teaser' if short['role'] == 'teaser' else 'best fight'})",
+                                 details={"labels": labels, "titles": [short["title"]], "anchor": short["end"] - 4,
+                                          "from_highlight": render_id, "role": short["role"]}))
+        project.queue_posters(s, st)
+    task.after = after
+    return task
+
+
+def _npz(path):
+    import numpy as np
+
+    if not Path(path).exists():
+        return None
+    with np.load(path) as data:
+        return {k: data[k] for k in data.files}
+
+
 PLANNERS = {"prepare": plan_prepare, "export": plan_export, "posters": plan_posters, "thumbs": plan_thumbs,
-            "compilation": plan_compilation}
+            "compilation": plan_compilation, "map": plan_map, "highlight": plan_highlight}
 
 
 def run(settings, sessions, render_id, threads):
@@ -364,6 +509,12 @@ def run(settings, sessions, render_id, threads):
             error = exc
     with sessions() as s:
         render = s.get(Render, render_id)
+        after = getattr(task, "after", None)
+        if error is None and after is not None:
+            try:
+                after(s, render)    # rows the finished work adds (a highlight's Shorts as clips)
+            except Exception as exc:
+                error = exc
         if error is None:
             render.status, render.output, render.error = "done", output, None
         else:
@@ -372,6 +523,21 @@ def run(settings, sessions, render_id, threads):
         render.finished_at = utcnow()
         s.commit()
         return render.status
+
+
+def render_file(settings, db, render, clip=None):
+    """The finished video of a render that can be posted: a clip's export, or a highlight; None if it's gone."""
+    if render is None:
+        return None
+    if render.kind == "highlight":
+        stream = db.get(Stream, (render.params or {}).get("stream_id"))
+        if stream is None or render.status != "done":
+            return None
+        path = highlight_folder(settings, stream, render.id) / "video.mp4"
+        return path if path.is_file() else None
+    if clip is None and render.clip_id:
+        clip = db.get(Clip, render.clip_id)
+    return export_path(settings, clip, render) if clip else None
 
 
 def export_path(settings, clip, render):

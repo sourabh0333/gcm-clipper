@@ -280,3 +280,18 @@ textarea { font: inherit; width: 100%; padding: 0.7rem 0.8rem; border-radius: 10
 .musicwarn.danger { background: #2a0d10; border-color: #6a1d25; }
 
 .dropzone { border: 2px dashed var(--line); border-radius: var(--radius); padding: 14px; text-align: center; }
+
+/* Highlights Stage 1: the stream map bar and highlight cards */
+.mapbar { display: flex; height: 22px; border-radius: 6px; overflow: hidden; background: #1b1d24; margin: 4px 0 6px; }
+.mapbar-part { height: 100%; font-size: 0.7rem; display: flex; align-items: center; justify-content: center; color: #111; font-weight: 700; min-width: 1px; }
+.mapbar-part.match { background: var(--accent); border-right: 1px solid #111; }
+.mapbar-part.match.best { background: var(--keep); }
+.mapbar-part.between { background: #3a3d48; }
+.mapbar-part.not_bgmi { background: repeating-linear-gradient(45deg, #23262f 0 4px, #2e313b 4px 8px); }
+.match-row { align-items: center; flex-wrap: nowrap; margin: 6px 0; }
+.highlight-video { width: 100%; border-radius: var(--radius); background: #000; margin: 8px 0; aspect-ratio: 16 / 9; }
+.thumbs img { width: calc(33% - 6px); border-radius: 6px; }
+.short-row { align-items: center; flex-wrap: nowrap; gap: 8px; margin: 6px 0; color: inherit; text-decoration: none; }
+.short-row img { width: 44px; height: 78px; object-fit: cover; border-radius: 6px; background: #000; }
+.piece { align-items: center; flex-wrap: nowrap; gap: 8px; margin: 4px 0; }
+.piece-card { margin: 2px 0 2px 28px; }

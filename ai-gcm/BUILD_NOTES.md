@@ -176,6 +176,47 @@ After rating the clips, the owner said they "aren't particularly interesting, fu
 
 **A-to-Z study of both channels per creator (12 Nov):** [reports/BGMI creators content A to Z.md](../reports/BGMI%20creators%20content%20A%20to%20Z.md), notes per channel in `research_notes/BGMI creators content A to Z/` (all six channels listed in full, every upload classified, about 70 stream→video pairs proven by captions). Main points: second channels are cut from the creator's own stream (overlay kept), main channels moved to camera vlogs (Joker) or clean phone edits (Goblin), LoLzZz's main takes only the headline record; a stream is many segments (chat, crates, custom rooms, other games, watch parties) and each has its own recipe; people in titles beat kill numbers; custom rooms are the best stream-only long format; Goblin and LoLzZz now stream partly on Kick (local OBS upload covers it). The report ends with 8 open questions; **the owner took all 8 defaults (12 Nov):** (1) split the stream into segments before any ranking; (2) after kill matches: custom room / TDM, then crate opening, then talk cut; (3) titles lead with people when a name is found with confidence, both titles offered; (4) one stream gives a batch (long video plus Shorts) with a suggested schedule, never auto-posted; (5) label each output "main" or "second channel" as a suggestion, one connected channel for now; (6) watch parties, reactions and other games are detected and skipped, with the reason shown; (7) no second player's recording for now; (8) leftover moments kept three weeks, no compilation feature yet. The research also changes one earlier default: **no running kill counter** (none of the six channels adds one). **Next:** the Stage 1 plan, [plans/Highlights Stage 1 plan.md](../plans/Highlights%20Stage%201%20plan.md), for the owner's approval before any code.
 
+## Highlights Stage 1: built, being measured (12 Nov, evening)
+
+The owner approved [plans/Highlights Stage 1 plan.md](../plans/Highlights%20Stage%201%20plan.md). **Built today (not yet checked end to end):**
+- **S1.1 hand labels** in `tests/data/labels/` (`.gitignore` now ignores only the top-level `/data/`). Agents read contact sheets: GtxPreet full (7 matches, 3 Dinners), ANJI full (5, one TDM), DIPENDU full (6), and the lolzzz, bixi, shlok (Ultimate Royale, 64 players) and rajput sections; 32 matches with kill times. Each `.md` lists the traps.
+- **Big lesson: BGMI 4.6 has recall and respawns.** A dead player spectates and can fly back in by plane, the counter shows a teammate's kills meanwhile, and Remaining can rise. So Spectating mid-match is not the end; the end is the last Spectating stretch that runs to the end of the HUD (`streammap.final_spectate`).
+- **S1.2 scan** (`vision.py`):
+  - saves `hud` runs (when the in-match counters are readable);
+  - saves `spectating` runs;
+  - after a HUD run of 60 s or more ends, saves `results` (5 reads of the result screen). The big stylised "#6" left of "/25" is read with the digit reader (`rank_on_result`; checked on GtxPreet: (6, 25)). Mode and map come from the "Ranked Classic Mode (TPP) - Squad - Erangel" line.
+- **S1.3 map** (`aigcm/streammap.py`, `python -m aigcm map JOB [--labels L]`):
+  - matches come from HUD runs, split on new-lobby signals;
+  - each match gets its end, how it ended, placement, kills, fights (kills joined with gunfire), mode and map;
+  - gaps between matches are split into lobby and not-BGMI by reading a frame every 30 s for lobby words;
+  - `compare()` scores a map against the labels.
+  - Old scans without `hud` get a rough map from counter changes.
+- **S1.4/S1.5 highlight** (`aigcm/studio/highlight.py`, `python -m aigcm highlight JOB [--matches N] [--render]`):
+  - cut list: a teaser under "IN THIS VIDEO", fights kept whole (the call up to 16 s before, the reaction after), Gemini talk moments rated 8 or more, a drop shot when the first fight is late, cards for skips over 150 s and "MATCH N", the ending (Dinner plus face), then black;
+  - cuts are snapped out of words;
+  - face punch-ins come from the facecam box on scream and laugh peaks;
+  - rendered at 1920x1080 and joined.
+  - Checked on two test pieces (frames: label, punch-in, cards and black all right; the label and card text were made bigger after).
+  - Not yet done: vertical streams still sit small over a blurred copy, as the owner chose. Cropping the game window to fill 16:9 is an option to show him.
+- **Lane and app:**
+  - render-lane jobs `map` and `highlight`, queued when a stream finishes;
+  - the highlight writes `video.mp4` plus its light copy, 3 thumbnails (thumb_1 is the cover), titles (`titles_for`), `post.json`, and 1 teaser plus 2 best-fight Shorts as clips `hl<render>N`, which re-import keeps;
+  - `api/highlights.py`: map and highlights per stream, make (matches, session, drop pieces), view, delete, media, plan-posts;
+  - plan-posts: the highlight at 12:00 IST the next day, the teaser at 21:30 tonight or tomorrow, the other Shorts at 21:00 on the following days, all drafts. Shorts without an export get a window and export queued;
+  - posts accept highlight renders (kind "video", `lane.render_file`, the stream from the render), and the Shorts gauge counts only Shorts;
+  - leftover fights (`aigcm/leftovers.py`): `cleanup` copies them out before deleting a source, and housekeeping removes them after 21 days.
+- **Web:** `studio/Highlights.tsx` on the stream page shows the map bar, the matches with "Make highlight", the session video, and each highlight with its player, titles, Shorts, parts to untick, "Make again", "Plan the posts" and the leftover count.
+
+**Tests:** `test_streammap.py` (9), `test_highlight.py` (5), `test_highlights_api.py` (4), web `highlights.test.tsx` (3).
+
+**First measurement:** a 30-minute piece of GtxPreet. Kills 4/4, each within 5 s; the end is 11 s from the labelled final death; the recall wasn't mistaken for an end. The start is about 55 s late, because the spawn island shows "Players", not "Remaining".
+
+**Next:**
+1. The rescans of the 3 full streams and 4 sections were started with the new scan (`scratchpad .../labels/rescan.py`). It writes `vision.json` and keeps `vision.old.json`, and resumes from `vision.partial.json` if stopped.
+2. Then run `python -m aigcm map <job> --labels tests/data/labels/<job>.json` for each job and tune the map toward the plan's targets: all matches found, edges within 20 s, kills exact in 9 of 10, all Dinners.
+3. Then render the 3 full-stream highlights and check them by frames, then the owner checks them (S1.10).
+4. Known risks: teammates' counters after a death in vertical layouts (ANJI, DIPENDU, rajput) still read as kills in the old scans; spawn-island starts are late.
+
 ## Three gaps from the market check (12 Nov)
 
 From [reports/Kaatclip feature gaps 2026.md](../reports/Kaatclip%20feature%20gaps%202026.md) the owner chose the three clearly useful ones; the rest wait for beta creators' feedback (sponsor proof pack, Shorts-to-live card, Discord posts, viewer !clip voting, Telegram recap). **Hook variety** (`aigcm/studio/variety.py`): YouTube's 1 Oct 2026 Shorts ranking holds back "template-based bulk changes". The engine already wrote up to three titles per clip (stat, Hinglish punchline, suspense) but every clip used the first: now the default edit takes the clip's turn by rank (rank 1 the first family, rank 2 the second...); a stat title the creator posted before gets the next series number from their own posts when a draft is made ("DOUBLE FINISH #3"; the engine's own series counter was never fed history); **Make another version** in Studio (`POST /api/clips/{id}/variant`) saves a new edit with the next title and the other length preset (moment or full fight; zooms, effects and the cover outside the new cut dropped) to export as an alternate cut. 164 of the owner's 196 clips have 2-3 title suggestions; the earliest kept ones have none, so their versions vary only in length. **Reels-ready** (`brand.reels_text`, `GET /api/clips/{id}/reels-text`): each export card has **Copy Reels caption** (the post's title with fallback and series, the kit's description, "Full stream on my YouTube channel 🔴 (link in bio)" since Reels caption links can't be tapped, the game line, hashtags with #shorts→#reels, #bgmishorts→#bgmireels, #ytshorts dropped, at most 10, 2,200 characters) beside Share (to Instagram) and Download; exports carry no Kaatclip watermark. **Shorts cover**: the uploader already set the cover after processing; YouTube's thumbnails.set takes Shorts officially since 3 Nov 2026 and lists no eligibility rule, but refuses unverified channels with a permission error, now stored as "not set: verify the channel" and shown on the post page with youtube.com/verify and **Set cover again** (`POST /api/posts/{id}/cover`, the worker retries within a minute or two). **Checked:** 7 tests (`tests/test_variety.py`, including a real alternate version in the Studio), the Studio page in the browser at phone size on a copy of the real database (another version: 60 s → 42 s; the Reels row).

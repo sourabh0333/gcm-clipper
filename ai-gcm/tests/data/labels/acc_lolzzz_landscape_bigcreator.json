@@ -1,0 +1,27 @@
+{
+  "job": "acc_lolzzz_landscape_bigcreator",
+  "duration": 1800,
+  "orientation": "landscape",
+  "layout_notes": "1280x720, game full frame. Facecam bottom-left (about x 0-0.27, y 0.67-0.92) with a big subscriber-style number '2,845,6xx' just above it (y ~0.62). Sponsor banner along the bottom (KICK, Paytm number, LoLzZz logo, iQOO 15R, AMD Ryzen AI), about y 0.86-1.0. This match is the 'Bloodline Awakening' vampire event, so the top-left HUD is NOT the normal Remaining/Eliminations box: it is three icon counters [person = players alive][crosshair = streamer's eliminations][bat = event counter], at about x 0.05-0.21, y 0-0.045. Team list below it at the left.",
+  "parts": [
+    {"start": 0, "end": 1725, "kind": "match", "match": 1, "what": "already running at 0 s (99 alive, 0 eliminations), one long match with event respawns"},
+    {"start": 1725, "end": 1800, "kind": "between", "what": "#4/99 and #2/26 result screens, MVP, rewards, loading, lobby, loading screen at the end"}
+  ],
+  "matches": [
+    {
+      "n": 1,
+      "mode": "classic",
+      "map": "erangel",
+      "start": 0,
+      "end": 1725,
+      "ended": "death",
+      "placement": 2,
+      "kills": 28,
+      "kill_times": [47, 47, 49, 52, 53, 60, 111, 111, 113, 146, 165, 195, 345, 430, 570, 580, 645, 650, 745, 790, 905, 925, 930, 1145, 1170, 1390, 1560, 1655],
+      "knocked_streamer": [358, 1199, 1724],
+      "result_screen_seen": true,
+      "tolerance_s": 5,
+      "notes": "Already running at 0 s (start=0 is the file start): the streamer is on the ground near Rozhok, with 99 alive and the crosshair (eliminations) counter at 0, so all 28 kills are inside the file. Ranked Classic Mode (TPP) Squad Erangel with the vampire event: the streamer is killed at ~358 and comes back after a 'Respawn Countdown' (~360-365), and is killed again at ~1199, when a 'Join the vampires and return to the battleground?' dialog shows (~1202); he keeps playing and his counter carries on (25). He is finally shot at 1724 with 4 players alive. Result screens: first '#4 You made the Top 10! /99' (personal rank), then '#2 Congratulations on getting 2nd place! /26' (team). Placement is the team's #2. Kill times: first 12 from 1 s steps (+-1 s), the rest from 5 s steps (+-3 s). 'knocked_streamer' here lists deaths (finished off), not knocks."
+    }
+  ]
+}

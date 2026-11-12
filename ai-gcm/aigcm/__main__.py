@@ -310,10 +310,17 @@ def cmd_cleanup(args, settings):
     days = args.days if args.days is not None else settings.source_keep_days
     files = stale_sources(settings.jobs_dir, days)
     size = sum(p.stat().st_size for p in files) / 1e9
+    from . import leftovers
+
     for p in files:
         print(f"{'would delete' if args.dry_run else 'deleting'} {p}")
         if not args.dry_run:
+            if p.name.startswith("source."):
+                leftovers.keep(p.parent, p)     # fights no highlight used, kept 21 days (Highlights decision 8)
             p.unlink()
+    if not args.dry_run:
+        for name in leftovers.expire(settings.jobs_dir):
+            print(f"removed the leftover fights of {name} (older than {leftovers.KEEP_DAYS} days)")
     print(f"{len(files)} files, {size:.1f} GB{' (dry run)' if args.dry_run else ' freed'}")
 
 
@@ -338,6 +345,50 @@ def cmd_eval(args, settings):
     missed = [l for l in top if l not in found]
     for l in missed:
         print(f"  missed {l['type'] or 'moment'} at {l['start']:.0f}-{l['end']:.0f}s (rating {l['rating']})")
+
+
+def cmd_map(args, settings):
+    """Build the stream map (matches, lobby, not-BGMI parts) and, with --labels, score it against hand labels."""
+    from . import streammap
+
+    job = Job(args.job if Path(args.job).is_dir() else settings.jobs_dir / args.job)
+    found = streammap.make(job, read_frames=not args.no_frames)
+    for row in streammap.summary(found):
+        print(row)
+    for part in found["parts"]:
+        if part["kind"] != "match":
+            print(f"  {part['kind']:9s} {part['start'] / 60:6.1f}-{part['end'] / 60:6.1f} min")
+    if args.labels:
+        report = streammap.compare(found, read_json(args.labels))
+        print(json.dumps(report, indent=1))
+
+
+def cmd_highlight(args, settings):
+    """Plan (and with --render, make) the kill-match highlight of a job from its stream map."""
+    from .studio import facecam, highlight
+
+    job = Job(args.job if Path(args.job).is_dir() else settings.jobs_dir / args.job)
+    stream_map = read_json(job.path("map.json"))
+    if stream_map is None:
+        log("highlight: no map.json yet; run `python -m aigcm map JOB` first")
+        return
+    info = read_json(job.path("info.json"))
+    numbers = [int(n) for n in args.matches.split(",")] if args.matches else (
+        stream_map["session"] if args.session and stream_map["session"] else [stream_map["best"]])
+    heard = sounds.load(job.path("sounds.npz")) if job.path("sounds.npz").exists() else None
+    loud = audio.load(job.path("audio.npz")) if job.path("audio.npz").exists() else None
+    cam = (facecam.for_stream(job.root, info["path"]) or {}).get("box")
+    the_plan = highlight.plan(stream_map, numbers, info["duration"], read_json(job.path("transcript.json")), heard, loud,
+                              read_json(job.path("moments.json"), []), cam)
+    name = "highlight_" + "_".join(str(n) for n in the_plan["matches"])
+    write_json(job.path(name + ".json"), the_plan)
+    print(f"matches {the_plan['matches']}: {the_plan['length'] / 60:.1f} min, kept {the_plan['kept']:.0%}, "
+          f"{the_plan['kills']} kills, {len(the_plan['pieces'])} pieces")
+    for p in the_plan["pieces"]:
+        what = p.get("text") if p["kind"] == "card" else f"{p['start'] / 60:6.2f}-{p['end'] / 60:6.2f} min ({p['end'] - p['start']:.0f}s)"
+        print(f"  {p['kind']:8s} {what} {'punch ' + str(p['punch']) if p.get('punch') else ''}")
+    if args.render:
+        highlight.render(the_plan, info["path"], info, job.path(name + ".mp4"), threads=args.threads)
 
 
 def cmd_serve(args, settings):
@@ -386,6 +437,20 @@ def main(argv=None):
     p.add_argument("job")
     p.add_argument("labels")
     p.set_defaults(fn=cmd_eval)
+
+    p = sub.add_parser("map", help="build a job's stream map (matches, lobby, not-BGMI parts)")
+    p.add_argument("job")
+    p.add_argument("--labels", help="hand labels (tests/data/labels/<job>.json) to score the map against")
+    p.add_argument("--no-frames", action="store_true", help="don't read frames to tell the lobby from not-BGMI")
+    p.set_defaults(fn=cmd_map)
+
+    p = sub.add_parser("highlight", help="plan (and --render) a job's kill-match highlight from its map")
+    p.add_argument("job")
+    p.add_argument("--matches", help="comma-separated match numbers (default: the best match)")
+    p.add_argument("--session", action="store_true", help="the session version: the map's strong matches in order")
+    p.add_argument("--render", action="store_true")
+    p.add_argument("--threads", type=int, default=4)
+    p.set_defaults(fn=cmd_highlight)
 
     p = sub.add_parser("cleanup", help="delete source videos of finished jobs to free disk space")
     p.add_argument("--days", type=int, help="keep sources this many days after clips are made (default 14)")

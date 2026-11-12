@@ -1,0 +1,59 @@
+{
+  "job": "acc_shlok_solo_vs_squad",
+  "duration": 1800,
+  "orientation": "landscape",
+  "layout_notes": "1280x720. Game fills the top ~82% of the frame; a red overlay banner 'SHLOK IS LIVE' with logo, Paytm UPI and Instagram handle covers the bottom ~18% (it hides the lower game HUD such as the health bar). No facecam. HUD Remaining/Eliminations counters top-left (about x 0.02-0.18, y 0-0.04). All matches are Ultimate Royale (TPP) squad on Erangel: 64 players / 16 teams, so placements are out of 16.",
+  "parts": [
+    {"start": 0, "end": 64, "kind": "match", "match": 1, "what": "already running at 0 s (Remaining 16, Eliminations 3)"},
+    {"start": 64, "end": 111, "kind": "between", "what": "death cam, #6/16 result, loading, lobby, loading"},
+    {"start": 111, "end": 337, "kind": "match", "match": 2},
+    {"start": 337, "end": 452, "kind": "between", "what": "spectating, #14/16 result, loading, lobby (Ultimate Royale mode select, Add Friend keyboard), loading"},
+    {"start": 452, "end": 650, "kind": "match", "match": 3},
+    {"start": 650, "end": 748, "kind": "between", "what": "spectating, #15/16 result, loading, lobby, Add Friend, career stats screens, loading"},
+    {"start": 748, "end": 846, "kind": "match", "match": 4, "what": "spawn island and plane only; server timeout, streamer leaves"},
+    {"start": 846, "end": 890, "kind": "between", "what": "loading, lobby, loading"},
+    {"start": 890, "end": 1030, "kind": "match", "match": 5},
+    {"start": 1030, "end": 1068, "kind": "between", "what": "spectating, #15/16 result, loading, lobby, loading"},
+    {"start": 1068, "end": 1800, "kind": "match", "match": 6, "what": "runs to the end of the file"}
+  ],
+  "matches": [
+    {
+      "n": 1, "mode": "other", "map": "erangel", "start": 0, "end": 64, "ended": "death",
+      "placement": 6, "kills": 0, "kill_times": [], "knocked_streamer": [],
+      "result_screen_seen": true, "tolerance_s": 3,
+      "notes": "Already running at 0 s (start=0 is the file start). Eliminations counter reads 3 at 0 s and is still 3 at 63 s, so 0 kills inside the file (match total 3). Death cam ~64 in a smoke-filled house, result '#6 You made the Top 10! /16' at 69. Mode Ultimate Royale (BR variant, 16 squads); map assumed Erangel like the other matches (header not read on this result)."
+    },
+    {
+      "n": 2, "mode": "other", "map": "erangel", "start": 111, "end": 337, "ended": "death",
+      "placement": 14, "kills": 2, "kill_times": [240, 318], "knocked_streamer": [330],
+      "result_screen_seen": true, "tolerance_s": 3,
+      "notes": "Spawn island ('Players 61') from 111. Knocked ~330 (5:30), finished ~337 (death cam 5:37), spectating 5:40-5:42 (counter shows teammate's 0), result #14/16 at 344. Kill times within ~3 s."
+    },
+    {
+      "n": 3, "mode": "other", "map": "erangel", "start": 452, "end": 650, "ended": "death",
+      "placement": 15, "kills": 0, "kill_times": [], "knocked_streamer": [],
+      "result_screen_seen": true, "tolerance_s": 3,
+      "notes": "Spawn island ('Players 60') from ~452. Counter stays 0. Killed ~650 (green hit effects then death cam 10:50), spectating 10:53-10:55, result '#15 BETTER LUCK NEXT TIME /16', header 'Ultimate Royale (TPP) - Squad - Erangel'."
+    },
+    {
+      "n": 4, "mode": "other", "map": "erangel", "start": 748, "end": 846, "ended": "left",
+      "placement": null, "kills": 0, "kill_times": [], "knocked_streamer": [],
+      "result_screen_seen": false, "tolerance_s": 3,
+      "notes": "Spawn island from 748 ('Match starts in 42 seconds'), plane from ~792 over Erangel (Pochinki/School on the map). 'Match server response timed out' dialog at 842, 'Leave the match?' at 846, loading then lobby. Never landed; no result screen."
+    },
+    {
+      "n": 5, "mode": "other", "map": "erangel", "start": 890, "end": 1030, "ended": "death",
+      "placement": 15, "kills": 0, "kill_times": [], "knocked_streamer": [],
+      "result_screen_seen": true, "tolerance_s": 3,
+      "notes": "Spawn island from 890, plane ~936. Short fight in a compound; killed ~1030 (death cam 17:10), spectating 17:12-17:16, result #15/16 at 1038 ('Ultimate Royale (TPP) - Squad - Erangel'). Counter stays 0."
+    },
+    {
+      "n": 6, "mode": "other", "map": "erangel", "start": 1068, "end": 1800, "ended": "cut_off",
+      "placement": null, "kills": 14,
+      "kill_times": [1195, 1217, 1228, 1247, 1284, 1284, 1343, 1343, 1394, 1493, 1569, 1578, 1622, 1628],
+      "knocked_streamer": [],
+      "result_screen_seen": false, "tolerance_s": 3,
+      "notes": "Spawn island from 1068 (notice dialog at 1067), plane ~1112. Counter 14 and Remaining 12 at the end of the file; streamer alive and fighting at 29:57. Double steps (4->6 at ~1284, 6->8 at ~1343) happen inside one 3 s sample, so the two kills of each pair are within ~3 s of each other. Kill times from 1 s steps for the first three and 3 s steps after that (+-3 s)."
+    }
+  ]
+}

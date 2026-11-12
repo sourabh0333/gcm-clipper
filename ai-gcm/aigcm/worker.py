@@ -74,9 +74,12 @@ def import_clips(session, stream, folder):
             del old[item["clip_key"]]
         else:
             rows.append(Clip(stream_id=stream.id, **item))
+    # Shorts cut from a highlight (clip keys "hl...") aren't the engine's: they stay.
+    rows += [c for c in old.values() if c.clip_key.startswith("hl")]
     # Replaced and vanished rows go first, so a new row may reuse their (stream, clip key).
     for gone in old.values():
-        stream.clips.remove(gone)
+        if not gone.clip_key.startswith("hl"):
+            stream.clips.remove(gone)
     session.flush()
     stream.clips[:] = rows
     session.flush()
@@ -170,6 +173,10 @@ class Worker:
         if removed:
             log(f"worker: removed {len(removed)} unfinished uploads untouched for days")
         self.check_disk()
+        from .leftovers import expire
+
+        for name in expire(self.settings.jobs_dir):
+            log(f"worker: removed the leftover fights of {name}")
         self.youtube_retention()
         self.last_housekeeping = time.time()
 
@@ -294,9 +301,10 @@ class Worker:
             elif returncode == 0:
                 count = import_clips(s, stream, folder)
                 stream.status, stream.error = "done", None
-                from .studio.project import queue_posters
+                from .studio.project import queue_map, queue_posters
 
                 queue_posters(s, stream)
+                queue_map(s, stream, then_highlight=True)
                 event = "done"
                 log(f"worker: {stream_id} done, {count} clips")
             else:

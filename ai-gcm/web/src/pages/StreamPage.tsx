@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { api, type Clip, type StreamSummary } from "../api";
 import { duration, STAGE_LABEL, STATUS_LABEL } from "../format";
+import Highlights from "../studio/Highlights";
 import Thumbnails from "../studio/Thumbnails";
 
 export default function StreamPage() {
@@ -157,6 +158,7 @@ export default function StreamPage() {
             ))}
             {linkNote && <p className="small">{linkNote}</p>}
           </div>
+          {id && <Highlights streamId={id} />}
           {clips.length > 0 && id && <Thumbnails streamId={id} />}
           <h2>Kept ({kept.length})</h2>
           {kept.length === 0 && <p className="muted small">Clips you keep show up here.</p>}

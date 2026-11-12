@@ -6,6 +6,6 @@ jobs/
 models/
 demo/*/decisions.json
 demo/*/run.log
-data/
+/data/
 web/node_modules/
 web/dist/

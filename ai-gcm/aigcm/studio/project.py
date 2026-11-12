@@ -192,6 +192,18 @@ def queue_prepare(db, settings, clip):
     return render
 
 
+def queue_prepare_and_export(db, settings, clip):
+    """Queue the clip's working window and then an export of its newest edit (the render lane takes them in
+    order, so the export finds the window ready). For a highlight's Shorts in a planned batch."""
+    if queue_prepare(db, settings, clip) is None and window_state(db, settings, clip)[0] != "ready":
+        return None      # the recording is gone: nothing to cut the Short from
+    latest = latest_edit(db, clip)
+    render = Render(user_id=clip.stream.user_id, clip_id=clip.id, kind="export",
+                    params={"version": latest.version if latest else 0, "sponsor_safe": False, "look": "batch"})
+    db.add(render)
+    return render
+
+
 def queue_posters(db, stream):
     """Queue posters for a stream's clips (the worker skips clips that already have one)."""
     for render in db.scalars(select(Render).where(Render.kind == "posters",
@@ -199,6 +211,17 @@ def queue_posters(db, stream):
         if (render.params or {}).get("stream_id") == stream.id:
             return render
     render = Render(user_id=stream.user_id, kind="posters", params={"stream_id": stream.id})
+    db.add(render)
+    return render
+
+
+def queue_map(db, stream, then_highlight=False):
+    """Queue the stream map (Highlights Stage 1); with then_highlight, the best match's highlight follows."""
+    for render in db.scalars(select(Render).where(Render.kind == "map",
+                                                  Render.status.in_(("queued", "running")))).all():
+        if (render.params or {}).get("stream_id") == stream.id:
+            return render
+    render = Render(user_id=stream.user_id, kind="map", params={"stream_id": stream.id, "then_highlight": then_highlight})
     db.add(render)
     return render
 

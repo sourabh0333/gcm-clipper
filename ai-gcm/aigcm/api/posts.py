@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from .. import posting
-from ..db.models import AuditEntry, Clip, Post, Render, YouTubeChannel, utcnow
+from ..db.models import AuditEntry, Clip, Post, Render, Stream, YouTubeChannel, utcnow
 from ..studio import brand, lane, project
 from .clips import own_clip
 from .deps import current_user, get_db, own_stream
@@ -21,11 +21,24 @@ def stamp(value):
     return value.isoformat() + "Z" if value else None
 
 
+def post_stream(post):
+    """The stream a post's video comes from: its clip's, or a highlight's."""
+    if post.clip is not None:
+        return post.clip.stream
+    from sqlalchemy.orm import object_session
+
+    db = object_session(post)
+    render = db.get(Render, post.render_id) if (db is not None and post.render_id) else None
+    stream_id = (render.params or {}).get("stream_id") if render is not None else None
+    return db.get(Stream, stream_id) if stream_id else None
+
+
 def funnel_link(post):
     """Where the Short sends viewers: the upcoming live for a teaser, else the stream it was cut from."""
     if post.teaser_for:
         return f"https://www.youtube.com/watch?v={post.teaser_for}"
-    return post.clip.stream.link if post.clip else None
+    stream = post_stream(post)
+    return stream.link if stream is not None else None
 
 
 def studio_view(post):
@@ -37,16 +50,17 @@ def studio_view(post):
     if link:
         comment = f"🔴 Watch me live: {link}" if post.teaser_for else f"Full stream 👉 {link}"
     return {"url": f"https://studio.youtube.com/video/{post.video_id}/edit", "comment": comment,
-            "related": None if post.teaser_for else (post.clip.stream.title if post.clip else None),
+            "related": None if post.teaser_for else getattr(post_stream(post), "title", None),
             "done": bool(post.studio_done)}
 
 
 def post_view(post):
     clip = post.clip
+    stream = post_stream(post)
     return {"stream_link": funnel_link(post), "has_link": posting.has_link(post.description),
-            "stream_title": clip.stream.title if clip else None, "studio": studio_view(post),
+            "stream_title": stream.title if stream is not None else None, "studio": studio_view(post),
             "teaser_for": post.teaser_for,"id": post.id, "status": post.status, "kind": post.kind, "clip_id": post.clip_id,
-            "clip_title": (clip.title if clip else None), "stream_id": clip.stream_id if clip else None,
+            "clip_title": (clip.title if clip else None), "stream_id": stream.id if stream is not None else None,
             "render_id": post.render_id, "video": f"/media/renders/{post.render_id}" if post.render_id else None,
             "play": f"/media/renders/{post.render_id}?view=1" if post.render_id else None,
             "cover": f"/media/renders/{post.render_id}/cover" if post.render_id else None,
@@ -102,8 +116,10 @@ def new_post(body: NewPost, request: Request, user=Depends(current_user), db=Dep
     """A draft from a finished export (or the creator's open draft for it)."""
     settings = request.app.state.settings
     render = db.get(Render, body.render_id)
-    if render is None or render.user_id != user.id or render.kind != "export":
+    if render is None or render.user_id != user.id or render.kind not in ("export", "highlight"):
         raise HTTPException(404, "Not found.")
+    if render.kind == "highlight":
+        return post_view(highlight_draft(db, settings, user, render))
     clip = own_clip(db, user, render.clip_id)
     if render.status != "done" or lane.export_path(settings, clip, render) is None:
         raise HTTPException(409, "This export isn't finished yet.")
@@ -118,6 +134,31 @@ def new_post(body: NewPost, request: Request, user=Depends(current_user), db=Dep
     db.add(post)
     db.commit()
     return post_view(post)
+
+
+def highlight_draft(db, settings, user, render, publish_at=None):
+    """A draft for a highlight (a long 16:9 video), or the open draft for it: the highlight's own title and
+    description, with the full-stream link when the creator has given it."""
+    if render.status != "done" or lane.render_file(settings, db, render) is None:
+        raise HTTPException(409, "This highlight isn't finished yet.")
+    open_draft = db.scalar(select(Post).where(Post.render_id == render.id, Post.status == "draft"))
+    if open_draft is not None:
+        return open_draft
+    stream = db.get(Stream, (render.params or {}).get("stream_id"))
+    folder = lane.highlight_folder(settings, stream, render.id)
+    from ..jobs import read_json
+
+    text = read_json(folder / "post.json", {}) or {}
+    names = (read_json(folder / "titles.json", {}) or {}).get("titles") or ["Highlights"]
+    channel = db.scalar(select(YouTubeChannel).where(YouTubeChannel.user_id == user.id, YouTubeChannel.status == "ok")
+                        .order_by(YouTubeChannel.connected_at))
+    description = posting.with_link(text.get("description") or "", stream.link)
+    post = Post(user_id=user.id, render_id=render.id, channel_id=channel.id if channel else None, kind="video",
+                title=first_title(text.get("title") or names[0]), description=description,
+                tags=posting.clean_tags(text.get("hashtags") or []), publish_at=publish_at)
+    db.add(post)
+    db.commit()
+    return post
 
 
 @router.get("/api/posts")
@@ -194,14 +235,15 @@ def approve_one(db, settings, user, post_id, seen):
         raise posting.PostError(f"Reconnect {channel.title} in Settings first.")
     clip = post.clip
     render = db.get(Render, post.render_id) if post.render_id else None
-    video = lane.export_path(settings, clip, render) if (clip and render and render.status == "done") else None
+    video = lane.render_file(settings, db, render, clip) if (render and render.status == "done") else None
     if video is None:
         raise posting.PostError("The exported video is gone. Export the clip again.")
     post.title = posting.check_text(post.title, post.description)
     post.tags = posting.clean_tags(post.tags)
     now = utcnow()
     posting.check_time(post.mode, post.publish_at, now)
-    clash = db.scalar(select(Post).where(Post.clip_id == post.clip_id, Post.channel_id == post.channel_id,
+    same = (Post.clip_id == post.clip_id) if post.clip_id else (Post.render_id == post.render_id)
+    clash = db.scalar(select(Post).where(same, Post.channel_id == post.channel_id,
                                          Post.id != post.id, Post.status.in_(posting.LIVE_STATES)))
     if clash is not None:
         raise posting.PostError(f"This clip is already going to {channel.title}.")

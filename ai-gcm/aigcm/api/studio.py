@@ -204,8 +204,8 @@ def render_video(render_id: str, request: Request, download: int = 0, view: int 
                  db=Depends(get_db)):
     render = own_render(db, user, render_id)
     clip = own_clip(db, user, render.clip_id) if render.clip_id else None
-    path = lane.export_path(request.app.state.settings, clip, render) if clip else None
-    stream_id = clip.stream_id if clip else None
+    path = lane.render_file(request.app.state.settings, db, render, clip)
+    stream_id = clip.stream_id if clip else (render.params or {}).get("stream_id")
     db.close()  # the video may stream for minutes; no transaction may stay open that long
     if path is None:
         raise HTTPException(404, "This video is no longer on the laptop.")
@@ -223,7 +223,7 @@ def render_cover(render_id: str, request: Request, download: int = 0, user=Depen
     """The Short's cover frame (a JPEG of the export at its cover time)."""
     render = own_render(db, user, render_id)
     clip = own_clip(db, user, render.clip_id) if render.clip_id else None
-    path = lane.export_path(request.app.state.settings, clip, render) if clip else None
+    path = lane.render_file(request.app.state.settings, db, render, clip)
     db.close()
     cover = lane.cover_path(path) if path else None
     if cover is None or not cover.is_file():

@@ -1,0 +1,63 @@
+{
+  "job": "acc_rajput_small_hindi",
+  "duration": 1800,
+  "orientation": "vertical",
+  "layout_notes": "1080x1920 vertical canvas (PRISM Live). The landscape game is letterboxed in a band at about y 0.28-0.57 of the frame, full width; black above and below. A white 'Like Share And Subscribe' banner sits at about y 0.75 and a 'PRISM Live' watermark bottom right. No facecam. HUD Remaining/Eliminations counters at the top-left of the game band (about x 0-0.17, y 0.286-0.298 of the full frame), so very small (about 12 px tall).",
+  "parts": [
+    {"start": 0, "end": 501, "kind": "match", "match": 1, "what": "already running at 0 s (Livik, Remaining 41, Eliminations 0)"},
+    {"start": 501, "end": 585, "kind": "between", "what": "death cam, #6/12 result flash, spectating teammate, result, MVP, team results, loading, lobby, mail, 'played 2 hours' notice, loading"},
+    {"start": 585, "end": 1097, "kind": "match", "match": 2},
+    {"start": 1097, "end": 1280, "kind": "between", "what": "spectating teammates (recall possible), streamer leaves at ~1215, #31 result, lobby, loading"},
+    {"start": 1280, "end": 1617, "kind": "match", "match": 3},
+    {"start": 1617, "end": 1719, "kind": "between", "what": "streamer dead, spectating teammates while waiting to be recalled (counter shows teammates' kills)"},
+    {"start": 1719, "end": 1793, "kind": "match", "match": 3, "what": "recalled: back on the plane 'Returning to the battleground', then fights again"},
+    {"start": 1793, "end": 1800, "kind": "between", "what": "dead again, spectating teammate until the file ends"}
+  ],
+  "matches": [
+    {
+      "n": 1,
+      "mode": "classic",
+      "map": "livik",
+      "start": 0,
+      "end": 501,
+      "ended": "death",
+      "placement": 6,
+      "kills": 4,
+      "kill_times": [34, 36, 59, 231],
+      "knocked_streamer": [],
+      "result_screen_seen": true,
+      "tolerance_s": 5,
+      "notes": "Already running at 0 s (start=0 is the file start, not the real match start). Eliminations counter reads 0 at 0 s, so all 4 kills are inside the file. Ranked Classic Mode (TPP) Squad Livik per the result screen, #6/12. Streamer dies ~501 (deathbox at 8:21); the counter then shows the spectated teammate's 6 (8:28-8:38), which is not the streamer's."
+    },
+    {
+      "n": 2,
+      "mode": "classic",
+      "map": "livik",
+      "start": 585,
+      "end": 1097,
+      "ended": "death",
+      "placement": 31,
+      "kills": 1,
+      "kill_times": [691],
+      "knocked_streamer": [],
+      "result_screen_seen": true,
+      "tolerance_s": 5,
+      "notes": "Spawn island with 'Players 50' from ~585 (a notice dialog at 584). Streamer finished off ~1097 (deathbox 18:17), then spectates teammates with 'teammates can still recall you'; counter switches to teammates (0 and 2). At ~1215 the streamer chooses 'Leave anyway?' and the result shows #31 /50 (map read from the snowy plane view and the Livik loading; result header too small to read with certainty). If you count leaving as the end, end would be ~1215 (ended=left)."
+    },
+    {
+      "n": 3,
+      "mode": "classic",
+      "map": "livik",
+      "start": 1280,
+      "end": 1793,
+      "ended": "death",
+      "placement": null,
+      "kills": 4,
+      "kill_times": [1392, 1436, 1437, 1593],
+      "knocked_streamer": [1617, 1793],
+      "result_screen_seen": false,
+      "tolerance_s": 5,
+      "notes": "Spawn island ('Players 52') from ~1280. Streamer killed ~1617 (death cam 26:57), spectates teammates 1617-1719 (counter shows teammates' 3/0/2/3), is recalled at ~1719 ('Returning to the battleground' plane) with his own counter back at 4, then dies again ~1793 and spectates until the file ends at 1800. A further recall was still possible, so the match is not truly over at file end; no result screen. Placement unknown (Remaining ~24 at the second death is not placement). 'knocked_streamer' here lists the two deaths (finished off), not knocks."
+    }
+  ]
+}
