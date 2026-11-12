@@ -88,7 +88,9 @@ def draft_text(db, clip):
         from ..studio.edit import is_talk
 
         title = fallback_title(clip.type, 0, is_talk(clip.type, details.get("labels")), clip.spoken)
-    return first_title(title), description, posting.clean_tags(text["hashtags"])
+    from ..studio.variety import with_series
+
+    return first_title(with_series(db, clip.stream.user_id, title)), description, posting.clean_tags(text["hashtags"])
 
 
 class NewPost(BaseModel):
@@ -322,6 +324,20 @@ def link_suggestions(stream_id: str, user=Depends(current_user), db=Depends(get_
                               "score": 2 * same_day + close})
     found.sort(key=lambda f: (-f["score"], f["at"]))
     return [{k: v for k, v in f.items() if k != "score"} for f in found[:3]]
+
+
+@router.post("/api/posts/{post_id}/cover")
+def cover_again(post_id: str, user=Depends(current_user), db=Depends(get_db)):
+    """Try the cover again (after the creator verified their channel, say): the worker sets it within a minute
+    or two. 50 quota units."""
+    post = own_post(db, user, post_id)
+    if not post.video_id or post.status not in ("scheduled", "posted"):
+        raise HTTPException(409, "The cover is set once the video is on YouTube.")
+    if post.thumbnail == "set":
+        raise HTTPException(409, "The cover is already set.")
+    post.thumbnail, post.checked_at = None, None
+    db.commit()
+    return post_view(post)
 
 
 class StudioDone(BaseModel):

@@ -28,6 +28,7 @@ CHUNK = 8 * 1024 * 1024            # a multiple of 256 KiB, as YouTube asks
 UPLOADS_PER_DAY = 100
 UNITS_PER_DAY = 10_000
 UNITS = {"list": 1, "thumbnail": 50}
+NEEDS_VERIFY = "not set: verify the channel"   # the post page explains: youtube.com/verify, then Set cover again
 MISSED = timedelta(minutes=2)       # a scheduled time this close when a new upload starts has been missed
 BACKOFF_S = [60, 120, 300, 600, 1800]
 CHECK_EVERY = timedelta(minutes=1)
@@ -179,6 +180,9 @@ def set_thumbnail(http, token, video_id, jpeg_path):
     if response.status_code == 200:
         return "set"
     reason, message = reason_of(response)
+    if response.status_code == 403 and "permission" in (message or "").lower():
+        # YouTube allows custom covers only on verified channels (phone verification, free).
+        return NEEDS_VERIFY
     return f"not set: {message or reason or response.status_code}"[:200]
 
 

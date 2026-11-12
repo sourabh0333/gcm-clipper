@@ -313,7 +313,7 @@ def plan_compilation(settings, session, render):
     chapter_lines = compile.chapters(pieces)
     kit = project.kit_for(next(iter(clips.values())))
     engine_text = "Chapters:\n" + "\n".join(chapter_lines) + "\n\n" + titles.KRAFTON_LINE
-    post = brand.post_text(names[0], engine_text, ["#bgmi"], kit)
+    post = brand.post_text(names[0], engine_text, ["#bgmi"], kit, own_text=True)
     best = next((p for p in reversed(pieces) if not p.talk), pieces[0])
     moments = []
     for p in pieces:

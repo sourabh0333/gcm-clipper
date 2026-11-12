@@ -269,9 +269,44 @@ def strip_for(jobs_dir, user_id, kit):
 
 # --- the post text --------------------------------------------------------------------------------------------
 
-def post_text(title, engine_description, engine_tags, kit):
+REELS_TAGS = {"#shorts": "#reels", "#bgmishorts": "#bgmireels", "#ytshorts": None, "#youtubeshorts": None,
+              "#shortsfeed": "#reelsindia", "#bgmilive": "#bgmiindia"}
+REELS_MAX_TAGS = 10        # Instagram allows 30; a few relevant ones read better
+
+
+def reels_text(post, kit):
+    """The same clip's caption for Instagram Reels: the title and the creator's own description, the stream as
+    "on YouTube" (links in a Reels caption can't be tapped), the game line, and the hashtags with the
+    YouTube-only ones swapped for Reels ones. Instagram allows 2,200 characters."""
+    kit = kit or BrandKit()
+    tags = []
+    for tag in post["hashtags"]:
+        tag = "#" + str(tag).strip().lstrip("#")       # post tags are kept without the # sign
+        swapped = REELS_TAGS.get(tag.lower(), tag)
+        if swapped and swapped.lower() not in [t.lower() for t in tags]:
+            tags.append(swapped)
+    if "#reels" not in [t.lower() for t in tags]:
+        tags.append("#reels")
+    tags = tags[:REELS_MAX_TAGS]
+    parts = [post["title"]] if post["title"] else []
+    if kit.description.strip():
+        parts.append(kit.description.strip())
+    if any(p.startswith("Full stream:") for p in post["description"].split("\n\n")):
+        parts.append("Full stream on my YouTube channel 🔴 (link in bio)")
+    from ..titles import KRAFTON_LINE
+
+    game_line = KRAFTON_LINE if kit.disclaimer is None else (kit.disclaimer or "").strip()
+    if game_line and game_line in post["description"]:
+        parts.append(game_line)
+    parts.append(" ".join(tags))
+    caption = "\n\n".join(parts)
+    return {"caption": caption[:2200], "hashtags": tags}
+
+
+def post_text(title, engine_description, engine_tags, kit, own_text=False):
     """Title, description and hashtags for posting: the engine's description (stream link, game line), with
-    the kit's standard description added and its game line and hashtags used."""
+    the kit's standard description added and its game line and hashtags used. `own_text` is for text Kaatclip
+    wrote itself (a compilation's chapters and credits), which is kept whole."""
     from ..titles import KRAFTON_LINE
 
     kit = kit or BrandKit()
@@ -284,7 +319,10 @@ def post_text(title, engine_description, engine_tags, kit):
     had_game_line = KRAFTON_LINE in parts
     # Only the stream link is kept from the engine's text: anything else there is the AI judge's private note
     # about the clip ("The screen is black..."), which must never reach a public description (found 12 Nov).
-    parts = [p for p in parts if p.strip().startswith("Full stream:")]
+    if own_text:
+        parts = [p for p in parts if p != KRAFTON_LINE and not p.strip().startswith("#")]
+    else:
+        parts = [p for p in parts if p.strip().startswith("Full stream:")]
     if kit.description.strip():
         parts.append(kit.description.strip())
     game_line = KRAFTON_LINE if kit.disclaimer is None and had_game_line else (kit.disclaimer or "").strip()

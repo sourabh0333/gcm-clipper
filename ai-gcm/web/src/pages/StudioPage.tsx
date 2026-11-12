@@ -50,6 +50,30 @@ export default function StudioPage() {
     return () => window.clearInterval(timer);
   }, [waiting, load]);
 
+  // Another version: the next hook title and the other length, saved as a new edit to export (hook variety).
+  async function anotherVersion() {
+    setBusy(true);
+    try {
+      const made = await api<{ version: number; hook: string; length_s: number }>(`/api/clips/${id}/variant`, { method: "POST" });
+      setExportNote(`Version ${made.version}: “${made.hook || "no hook"}”, ${made.length_s.toFixed(0)} s. Tap Export to make it.`);
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyReels() {
+    try {
+      const reels = await api<{ caption: string }>(`/api/clips/${id}/reels-text`);
+      await copyText(reels.caption);
+      setNote("Reels caption copied. Share the video to Instagram and paste it.");
+    } catch {
+      setNote("Couldn't copy here.");
+    }
+  }
+
   async function exportNow(sponsorSafe = false) {
     setBusy(true);
     try {
@@ -118,6 +142,7 @@ export default function StudioPage() {
             <div className="row" style={{ marginTop: 10 }}>
               <Link className="button primary" to={`/clips/${id}/edit`}>Open editor</Link>
               <button disabled={busy} onClick={() => exportNow()}>Export</button>
+              <button disabled={busy} onClick={anotherVersion}>Make another version</button>
               {clip.safe_video && <button disabled={busy} onClick={() => exportNow(true)}>Export sponsor-safe</button>}
             </div>
             <p className="small muted">
@@ -167,6 +192,13 @@ export default function StudioPage() {
                   Share
                 </button>
               </div>
+              <div className="row small" style={{ marginTop: 8 }}>
+                <span className="muted" style={{ flex: 1, minWidth: 160 }}>
+                  For Instagram Reels: copy the caption, tap Share, pick Instagram and paste it.
+                </span>
+                <button className="chip" onClick={copyReels}>Copy Reels caption</button>
+              </div>
+              {note && <p className="small">{note}</p>}
             </>
           )}
         </div>

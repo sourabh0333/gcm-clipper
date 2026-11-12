@@ -256,7 +256,18 @@ export default function PostPage() {
             <p className="small muted">On YouTube as private. YouTube makes it public {when(post.publish_at)}, even if the laptop is off.</p>
           )}
           {post.status === "posted" && <p className="small">Live on YouTube{post.posted_at ? ` since ${when(post.posted_at)}` : ""}.</p>}
-          {post.thumbnail && post.thumbnail !== "set" && <p className="small muted">Thumbnail {post.thumbnail}.</p>}
+          {post.thumbnail && post.thumbnail !== "set" && (
+            <div className="small muted" style={{ margin: "8px 0" }}>
+              {/verif|permission/i.test(post.thumbnail)
+                ? <>Cover not set: YouTube allows custom covers only on verified channels. Verify yours free at{" "}
+                    <a href="https://www.youtube.com/verify" target="_blank" rel="noreferrer">youtube.com/verify</a>, then try again.</>
+                : <>Cover {post.thumbnail}.</>}{" "}
+              <button className="chip" disabled={busy} onClick={() => run(async () => {
+                setPost(await api<Post>(`/api/posts/${id}/cover`, { method: "POST" }));
+              })}>Set cover again</button>
+            </div>
+          )}
+          {post.thumbnail === null && post.video_id && <p className="small muted">The cover is set once YouTube finishes processing.</p>}
           {post.error && post.status !== "approved" && <p className="small error">{post.error}</p>}
           {post.video_id && (
             <div className="row">

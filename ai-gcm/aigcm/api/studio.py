@@ -111,6 +111,36 @@ class ExportBody(BaseModel):
     sponsor_safe: bool = False
 
 
+@router.post("/api/clips/{clip_id}/variant")
+def variant(clip_id: int, request: Request, user=Depends(current_user), db=Depends(get_db)):
+    """Another version of the clip's edit: the next hook title and the other length (moment or full fight),
+    saved as a new version so it can be exported as an alternate cut (studio.variety)."""
+    from ..jobs import read_json as read
+    from ..studio import variety
+    from ..studio import window as win
+
+    settings = request.app.state.settings
+    clip = own_clip(db, user, clip_id)
+    status, details = project.window_state(db, settings, clip)
+    if status != "ready":
+        raise HTTPException(409, "This clip's footage isn't ready for editing yet.")
+    _, edit = project.current_edit(db, settings, clip, details)
+    events = (read(project.job_folder(settings, clip) / "vision.json", {}) or {}).get("events") or []
+    presets = win.length_presets(clip.start_s, clip.end_s, (clip.details or {}).get("anchor"), events,
+                                 details["start"], details["end"])
+    other, _ = variety.alternate(edit, clip, presets, variety.next_title(clip, edit.hook.text))
+    try:
+        other = EditData.model_validate(other.model_dump())
+        check_window(other, details["start"], details["end"])
+    except (ValidationError, ValueError) as exc:
+        raise HTTPException(422, f"Couldn't make another version: {exc}") from exc
+    version = project.save_edit(db, clip, other)
+    db.add(AuditEntry(user_id=user.id, action="edit_variant", detail={"clip": clip.id, "version": version}))
+    db.commit()
+    return {"version": version, "hook": other.hook.text, "length_s": round(output_length(other.segments), 1),
+            "data": other.model_dump(mode="json")}
+
+
 @router.post("/api/clips/{clip_id}/export")
 def export(clip_id: int, body: ExportBody, request: Request, user=Depends(current_user), db=Depends(get_db)):
     settings = request.app.state.settings
@@ -325,6 +355,19 @@ def post_text(clip_id: int, user=Depends(current_user), db=Depends(get_db)):
     details = clip.details or {}
     return brand.post_text(title or clip.title, details.get("description"), details.get("hashtags"),
                            project.kit_for(clip))
+
+
+@router.get("/api/clips/{clip_id}/reels-text")
+def reels_text(clip_id: int, user=Depends(current_user), db=Depends(get_db)):
+    """The caption to paste on Instagram Reels for this clip (brand.reels_text)."""
+    from ..studio import brand
+
+    from .posts import draft_text
+
+    clip = own_clip(db, user, clip_id)
+    # The same title as the YouTube post would get (a fallback when the engine gave none, series numbers).
+    title, description, tags = draft_text(db, clip)
+    return brand.reels_text({"title": title, "description": description, "hashtags": tags}, project.kit_for(clip))
 
 
 @router.get("/sfx/{name}.wav")

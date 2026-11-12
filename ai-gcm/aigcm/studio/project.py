@@ -86,7 +86,9 @@ def default_for(settings, clip, window=None):
     info = window or read_json(folder / "info.json", {}) or {}
     width, height = info.get("width") or 1920, info.get("height") or 1080
     span = (window["start"], window["end"]) if window else None
-    return default_edit(clip.start_s, clip.end_s, width, height, clip.title,
+    from .variety import rotated_title
+
+    return default_edit(clip.start_s, clip.end_s, width, height, rotated_title(clip),
                         engine_clip(folder, clip.clip_key).get("events") or (),
                         captions=has_captions(folder, clip), window=span,
                         facecam=stream_facecam(settings, clip), brand=brand_defaults(settings, clip))
