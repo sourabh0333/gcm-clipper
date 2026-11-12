@@ -56,7 +56,7 @@ def client_for(app, email):
 
 def test_the_public_pages_say_what_the_policies_require(app):
     anyone = TestClient(app, base_url="http://localhost")
-    for path in ("/about", "/privacy", "/terms"):
+    for path in ("/about", "/guide", "/privacy", "/terms"):
         page = anyone.get(path)
         assert page.status_code == 200 and page.headers["content-type"].startswith("text/html"), path
         assert 'href="/privacy"' in page.text and 'href="/terms"' in page.text
@@ -120,3 +120,10 @@ def test_an_account_with_a_running_stream_waits(app):
         s.commit()
     refused = client.request("DELETE", "/api/me", json={"email": "owner@example.com"})
     assert refused.status_code == 409 and "Stop it first" in refused.json()["detail"]
+
+
+def test_the_guide_walks_a_streamer_through(app):
+    page = TestClient(app, base_url="http://localhost").get("/guide").text
+    for needed in ("Continue with Google", "Connect YouTube", "Automatically record when streaming",
+                   "Upload while I stream", "Approve", "Copy Reels caption", "youtube.com/verify", "hello@kaatclip.example"):
+        assert needed in page, needed

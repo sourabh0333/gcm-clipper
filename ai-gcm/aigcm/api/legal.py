@@ -38,7 +38,7 @@ def page(title, body):
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)} · Kaatclip</title>
 <style>{STYLE}</style></head><body><main>
 <a class="brand" href="/">Kaat<span>clip</span></a>
-<nav class="muted" style="margin-top:8px"><a href="/about">About</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></nav>
+<nav class="muted" style="margin-top:8px"><a href="/about">About</a><a href="/guide">Guide</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></nav>
 {body}</main></body></html>""")
 
 
@@ -57,6 +57,72 @@ your moderators type <code>!clip</code> in your live chat.</p>
 <a class="button" href="/">Open Kaatclip</a>
 <p class="muted" style="margin-top:32px">Read the <a href="/privacy">privacy policy</a> and the
 <a href="/terms">terms</a>. Kaatclip uses YouTube API Services.</p>""")
+
+
+@router.get("/guide", include_in_schema=False)
+def guide(request: Request):
+    """The beta streamer's setup guide: one link the owner sends with the invite (docs/beta-outreach.md)."""
+    app = html.escape(request.app.state.settings.public_url or "")
+    mail = html.escape(contact(request.app.state.settings))
+    ask = f'<a href="mailto:{mail}">{mail}</a>' if mail else "the person who invited you"
+    return page("Guide", f"""
+<h1>Getting started with Kaatclip</h1>
+<p>About 10 minutes, once. Kaatclip finds the best moments of your BGMI streams, turns them into Shorts with Hinglish
+captions, and posts the ones you approve to your YouTube. Nothing is posted without your approval.</p>
+
+<h2>1. Sign in</h2>
+<ol>
+<li>Send your Gmail to the person who invited you. You can sign in after they add you.</li>
+<li>Open <a href="{app}">{app}</a> on your phone and on your streaming PC, and tap <b>Continue with Google</b>.</li>
+<li>During the beta Google may show "Google hasn't verified this app". Tap <b>Advanced</b> and <b>Go to Kaatclip</b>.</li>
+<li>Read <b>Before you start</b>, tick the box and tap <b>Continue</b>.</li>
+</ol>
+
+<h2>2. Connect your YouTube channel</h2>
+<ol>
+<li>Settings → <b>Connect YouTube</b> → pick your channel → leave all three boxes ticked → <b>Continue</b>.</li>
+<li>Leave "made for kids" and "altered or AI-made content" unticked unless they are true for your channel.</li>
+<li>Verify your channel once at <a href="https://www.youtube.com/verify">youtube.com/verify</a> (free), so Kaatclip
+can set your Shorts covers.</li>
+<li>During the beta the connection lasts 7 days: when Settings shows <b>Reconnect</b>, tap it.</li>
+</ol>
+
+<h2>3. Set OBS to record when you stream</h2>
+<ol>
+<li>OBS → Settings → Advanced → tick <b>Automatically record when streaming</b>.</li>
+<li>OBS → Settings → Output → Recording: keep the format (Hybrid MP4 or MKV) and note the recording folder
+(usually <b>Videos</b>).</li>
+</ol>
+
+<h2>4. Every stream</h2>
+<ol>
+<li>Go live as usual. OBS starts recording.</li>
+<li>On the streaming PC, open Kaatclip in <b>Chrome or Edge</b> → <b>+ Upload</b> → <b>Upload while I stream</b>.</li>
+<li>Drag the newest recording from your Videos folder onto the page (or tap <b>Pick the OBS recording</b>). Keep that
+tab open; it can stay in the background.</li>
+<li>Optional: on your phone, tap <b>Live → I'm live</b>, and ask your moderators to type <code>!clip</code> in chat at
+great moments.</li>
+<li>When you stop streaming, the upload finishes by itself and Kaatclip starts making clips.</li>
+</ol>
+<p class="muted">Not streaming live? <b>+ Upload → Upload a recording</b> works for any finished recording.</p>
+
+<h2>5. After the stream</h2>
+<ol>
+<li>When the clips are ready, open the stream and tap <b>Review</b>: swipe right to keep, left to skip.</li>
+<li>Library → a kept clip → <b>Export</b>. Use the editor for layout, zoom, captions and the title text, or
+<b>Make another version</b> for a different title and length.</li>
+<li><b>Post to YouTube</b> → check the title and description → pick a time → <b>Review and approve</b> →
+<b>Approve</b>. Or Posts → <b>Fill empty evenings</b> → <b>Approve the week</b>.</li>
+<li>For Instagram: <b>Copy Reels caption</b>, then <b>Share</b> the video to Instagram and paste it.</li>
+<li>Paste the stream's YouTube link on the stream page, so every Short sends viewers to your full stream.</li>
+</ol>
+
+<h2>Good to know</h2>
+<ul>
+<li>Use only your own streams. Kaatclip can't edit or delete your YouTube videos.</li>
+<li>Telegram (Settings → Connect Telegram) tells you when clips are ready and when Shorts go live.</li>
+<li>Questions or problems: {ask}. Honest feedback is the whole point of the beta.</li>
+</ul>""")
 
 
 @router.get("/privacy", include_in_schema=False)
