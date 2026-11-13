@@ -28,7 +28,7 @@ DINNER_TAIL_S = 6.0
 # Fights inside a match: kills close together, and shooting heard on the stream.
 FIGHT_GAP_S = 30.0
 GUNFIRE_ON = 0.3
-SHOT_PAUSE_S = 6.0
+SHOT_PAUSE_S = 4.0
 MIN_SHOTS = 4                  # sound samples (about 1 s each) with gunfire for shooting alone to be a fight
 
 # Gaps between matches: a frame every GAP_SAMPLE_S seconds is read; BGMI's lobby and menus use these words.
@@ -64,9 +64,10 @@ def _match_starts(vision):
 # What the screen said just after the counters vanished (vision.py reads it): the match goes on (a respawn or
 # recall since update 4.6, or the game is on and only the counters were unreadable), or it is over.
 RESPAWN_TEXT = re.compile(r"respawn|returning to the battle|recall|don'?t give up|join the vampires", re.I)
-END_TEXT = re.compile(r"winner ?winner|chicken ?dinner|better ?luck|keep it up|you made the top|you'?re in the top|"
-                      r"defeat|victory|finishes|promoting to|squad wiped", re.I)
-TDM_TEXT = re.compile(r"goal\s?:\s?\d+", re.I)
+END_TEXT = re.compile(r"winner ?winner|chicken ?dinner|better ?luck|luck ?next ?time|keep it up|you made the top|you'?re in the top|"
+                      r"\bdefeat\b|\bvictory\b|finishes|promoting to|squad wiped", re.I)
+# TDM's score goal ("Goal: 40"); a stream overlay's donation goal ("GOAL:2225/6000") is not it.
+TDM_TEXT = re.compile(r"\bgoal\s?:\s?(?:20|30|40|50|60|80)(?![\d/])", re.I)
 COMPASS = {"15", "30", "60", "75", "105", "120", "150", "165", "195", "210", "240", "255", "285", "300", "330", "345"}
 
 
@@ -94,19 +95,31 @@ def reads_after(results, t):
 def what_next(lines):
     """"on" (a respawn, or the game still on screen), "end" (a result screen) or None (nothing read)."""
     text = " ".join(lines)
+    if END_TEXT.search(text):
+        return "end"
     if RESPAWN_TEXT.search(text):
         return "on"
-    if END_TEXT.search(text):
+    if in_lobby(lines):
         return "end"
     if compass_marks(text) >= 3:
         return "on"
     return None
 
 
-def _group_runs(hud, starts, results=()):
+def in_lobby(lines):
+    """True for BGMI's lobby or menus, False for a match on screen, None when the frame doesn't say."""
+    text = " ".join(lines)
+    if compass_marks(text) >= 3:
+        return False
+    words = sum(len(LOBBY_WORDS.findall(line)) for line in lines)
+    return True if words >= MIN_LOBBY_WORDS + 1 else None
+
+
+def _group_runs(hud, starts, results=(), read_text=None):
     """HUD runs → matches. After a run ends, the screen read says whether the match went on (respawn, game
-    still on) or ended (result screen); without a read, a fresh-lobby signal after a lobby-length gap, or a
-    long gap, starts a new match."""
+    still on) or ended (result screen). Without a read, a fresh-lobby signal after a lobby-length gap, or a
+    long gap, starts a new match, unless a frame from the middle of the gap shows the game still on (a
+    vertical stream's tiny counters can go unread for minutes, and a teammate's 0 looks like a reset)."""
     groups = []
     for start, end in hud:
         if not groups:
@@ -116,6 +129,14 @@ def _group_runs(hud, starts, results=()):
         gap = start - prev_end
         said = what_next(reads_after(results, prev_end))
         fresh = any(prev_end - 1 < s <= end for s in starts)
+        if said is None and read_text and gap >= MIN_LOBBY_GAP_S:
+            # Look early in the gap: its last minute or so is the next match's spawn island and plane.
+            last = start - (SPAWN_S + 20) if gap > SPAWN_S + 50 else prev_end + gap * 0.4
+            looks = [in_lobby(read_text(t)) for t in sorted({round(prev_end + 12, 1), round(max(prev_end + 12, last), 1)})]
+            if True in looks:
+                said = "end"
+            elif False in looks:
+                said = "on"
         if said == "end" or (said is None and ((fresh and gap >= MIN_LOBBY_GAP_S) or gap >= NEW_MATCH_GAP_S)):
             groups.append([[start, end]])
         else:
@@ -155,22 +176,6 @@ def mode_from(lines):
     return {"mode": mode, "ranked": bool(found and found.group(1) == "ranked"), "map": game_map} if (mode or game_map) else None
 
 
-def _shooting(sounds, start, end):
-    """Spans of gunfire heard between start and end: [(first, last, samples)]."""
-    if not sounds or "gunfire" not in sounds:
-        return []
-    t, gun = sounds["t"], sounds["gunfire"]
-    shots = t[(gun >= GUNFIRE_ON) & (t >= start) & (t <= end)]
-    spans = []
-    for s in shots:
-        if spans and s - spans[-1][1] <= SHOT_PAUSE_S:
-            spans[-1][1] = float(s)
-            spans[-1][2] += 1
-        else:
-            spans.append([float(s), float(s), 1])
-    return [tuple(s) for s in spans]
-
-
 def _players_left(remaining, t):
     left = None
     for when, value in remaining:
@@ -180,37 +185,85 @@ def _players_left(remaining, t):
     return left
 
 
-def fights(match, events, sounds, remaining):
-    """The fights of one match, in order: kill and knock clusters joined with the shooting around them, plus
-    shooting with no kill (a fight lost, a near miss) when it lasted a few seconds."""
-    own = [e for e in events if e["kind"] in ("self_kill", "self_knock", "self_down", "dinner")
-           and match["start"] <= e["t"] <= match["end"] + DINNER_TAIL_S]
-    spans = []
-    for first, last, n in _shooting(sounds, match["start"], match["end"]):
-        spans.append({"start": first, "end": last, "shots": n, "events": []})
-    for e in own:
-        spans.append({"start": e["t"], "end": e["t"], "shots": 0, "events": [e]})
-    spans.sort(key=lambda s: s["start"])
-    merged = []
-    for s in spans:
-        if merged and s["start"] - merged[-1]["end"] <= FIGHT_GAP_S:
-            m = merged[-1]
-            m["end"] = max(m["end"], s["end"])
-            m["shots"] += s["shots"]
-            m["events"].extend(s["events"])
+LEAD_BACK_S = 25.0             # how far back the shooting before a fight's first kill is followed
+TAIL_ON_S = 10.0               # and forward after its last kill
+FINAL_FIGHT_S = 30.0           # shooting that ends this close to the streamer's end is the fight they lost
+
+
+def _shots(sounds, start, end):
+    if not sounds or "gunfire" not in sounds:
+        return np.array([])
+    t, gun = sounds["t"], sounds["gunfire"]
+    return t[(gun >= GUNFIRE_ON) & (t >= start) & (t <= end)]
+
+
+def _follow(shots, t, direction, limit):
+    """From t, follow gunfire with pauses of at most SHOT_PAUSE_S, up to `limit` seconds away."""
+    edge = t
+    ordered = shots[shots <= t][::-1] if direction < 0 else shots[shots >= t]
+    for shot in ordered:
+        if abs(shot - edge) > SHOT_PAUSE_S or abs(shot - t) > limit:
+            break
+        edge = float(shot)
+    return edge
+
+
+CLOSE_S = 12.0
+
+
+def _connected(shots, a, b):
+    """True when gunfire keeps coming between a and b with no pause longer than SHOT_PAUSE_S."""
+    inside = shots[(shots >= a) & (shots <= b)] if len(shots) else shots
+    edges = np.concatenate([[a], inside, [b]])
+    return bool(len(edges) and np.max(np.diff(edges)) <= SHOT_PAUSE_S)
+
+
+def fights(match, events, sounds, remaining, kill_times=None):
+    """The fights of one match, in order. A fight is a cluster of the streamer's kills (and knocks), from the
+    shooting that led up to it to the shooting that followed; shooting with no kill counts only as the
+    match's last fight, the one the streamer lost. (Joining all gunfire made one 12-minute "fight" out of a
+    busy 28-kill match: other squads' fights are heard all the time.)"""
+    lo, hi = match["start"], match["end"] + DINNER_TAIL_S
+    if kill_times is None:
+        kill_times = [e["t"] for e in events if e["kind"] == "self_kill" and lo <= e["t"] <= hi]
+    points = sorted([(t, "self_kill") for t in kill_times]
+                    + [(e["t"], e["kind"]) for e in events
+                       if e["kind"] in ("self_down", "dinner") and lo <= e["t"] <= hi])
+    # Knocks read from the kill feed are not trusted to shape fights: on some layouts the feed reader logs a
+    # "knock" every read (LoLzZz's vampire-event feed: one every 4 s for 6 minutes). They are counted only.
+    knocks = [e["t"] for e in events if e["kind"] == "self_knock" and lo <= e["t"] <= hi]
+    shots = _shots(sounds, lo, hi)
+    clusters = []
+    for t, kind in points:
+        prev = clusters[-1][-1][0] if clusters else None
+        # Same fight: close together, or the shooting between them never stops for long (a busy match has a
+        # kill every 20-30 s, but the looting and running between fights is cut, as editors do).
+        if prev is not None and (t - prev <= CLOSE_S or (t - prev <= FIGHT_GAP_S and _connected(shots, prev, t))):
+            clusters[-1].append((t, kind))
         else:
-            merged.append(dict(s, events=list(s["events"])))
+            clusters.append([(t, kind)])
     out = []
-    for m in merged:
-        kinds = [e["kind"] for e in m["events"]]
-        if not kinds and m["shots"] < MIN_SHOTS:
-            continue
-        out.append({"start": round(m["start"], 2), "end": round(m["end"], 2),
-                    "kills": kinds.count("self_kill"), "knocks": kinds.count("self_knock"),
-                    "down": "self_down" in kinds, "dinner": "dinner" in kinds, "shots": m["shots"],
-                    "players_left": _players_left(remaining, m["start"]),
-                    "kill_times": [e["t"] for e in m["events"] if e["kind"] == "self_kill"]})
-    return out
+    for c in clusters:
+        first, last = c[0][0], c[-1][0]
+        begin = max(lo, _follow(shots, first, -1, LEAD_BACK_S)) if len(shots) else first
+        finish = min(hi, _follow(shots, last, +1, TAIL_ON_S)) if len(shots) else last
+        kinds = [k for _, k in c]
+        out.append({"start": round(begin, 2), "end": round(finish, 2), "kills": kinds.count("self_kill"),
+                    "knocks": sum(1 for k in knocks if begin <= k <= finish), "down": "self_down" in kinds, "dinner": "dinner" in kinds,
+                    "shots": int(((shots >= begin) & (shots <= finish)).sum()) if len(shots) else 0,
+                    "players_left": _players_left(remaining, first),
+                    "kill_times": [t for t, k in c if k == "self_kill"],
+                    "points": [round(t, 2) for t, k in c if k in ("self_kill", "self_knock", "dinner")]})
+    if match.get("ended") in ("death", "unknown") and len(shots):
+        last_shot = float(shots[-1])
+        if match["end"] - last_shot <= FINAL_FIGHT_S and not any(f["start"] <= last_shot <= f["end"] for f in out):
+            begin = _follow(shots, last_shot, -1, 60.0)
+            n = int(((shots >= begin) & (shots <= last_shot)).sum())
+            if n >= MIN_SHOTS:
+                out.append({"start": round(begin, 2), "end": round(min(hi, last_shot + 3), 2), "kills": 0, "knocks": 0,
+                            "down": True, "dinner": False, "shots": n, "players_left": _players_left(remaining, begin),
+                            "kill_times": [], "final": True})
+    return sorted(out, key=lambda f: f["start"])
 
 
 FINAL_SPECTATE_S = 90.0        # Spectating seen this close to the end of the HUD: the streamer was out for good
@@ -258,15 +311,36 @@ def _match(group, vision, sounds, duration):
         place = 1
     elif place is not None and ended == "unknown":
         ended = "death" if place > 1 else "dinner"
-    kills = [e["t"] for e in events if e["kind"] == "self_kill" and start <= e["t"] <= end + 2]
+    kills = [e["t"] for e in events if e["kind"] == "self_kill" and start <= e["t"] <= end + 2
+             and not any(a - 2 <= e["t"] <= b + 6 for a, b in vision.get("spectating", []))]
+    kills = drop_teammate_jumps(kills, hud_end, ended)
     match = {"start": round(start, 2), "end": round(min(end, duration), 2), "ended": ended,
              "placement": place, "kills": len(kills), "kill_times": kills,
              "players_left_at_end": _players_left(vision.get("remaining", []), end),
              "mode": mode_from([line for r in vision.get("results", []) if start <= r.get("after", -1) <= hud_end + 1
                                 for line in r["lines"]]),
              "result_text": lines[:20]}
-    match["fights"] = fights(match, events, sounds, vision.get("remaining", []))
+    match["fights"] = fights(match, events, sounds, vision.get("remaining", []), kills)
     return match
+
+
+TEAMMATE_JUMP = 3          # this many "kills" in the same second, just before the counters go, is a teammate's count
+TEAMMATE_WINDOW_S = 45.0
+
+
+def drop_teammate_jumps(kills, hud_end, ended):
+    """After the streamer is out for good the counter shows a teammate's eliminations (DIPENDU: "5 -> 9" a few
+    seconds before the result screen). Three or more at once in the last seconds before the counters go is
+    that, not a squad wipe read in one second."""
+    if ended == "dinner":
+        return kills
+    out = []
+    for t in kills:
+        same = sum(1 for k in kills if abs(k - t) < 0.5)
+        if same >= TEAMMATE_JUMP and hud_end - TEAMMATE_WINDOW_S <= t <= hud_end:
+            continue
+        out.append(t)
+    return out
 
 
 def score(match):
@@ -324,7 +398,8 @@ def classify_gaps(gaps, read_text, step=GAP_SAMPLE_S):
 
 def build(vision, duration, sounds=None, read_text=None):
     """The map of one stream. `read_text(t)` reads a frame's text, for telling the lobby from not-BGMI."""
-    groups = _group_runs([tuple(s) for s in vision.get("hud", [])], _match_starts(vision), vision.get("results", []))
+    groups = _group_runs([tuple(s) for s in vision.get("hud", [])], _match_starts(vision), vision.get("results", []),
+                         read_text)
     matches, previous_end = [], 0.0
     for g in groups:
         m = _match(g, vision, sounds, duration)

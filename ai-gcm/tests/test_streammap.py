@@ -49,7 +49,8 @@ def test_fights_join_kills_with_the_shooting_around_them():
     first = streammap.build(_vision(), 4000.0, _sounds())["matches"][0]
     fights = first["fights"]
     assert fights[0]["start"] == 690.0 and fights[0]["kills"] == 2 and fights[0]["players_left"] == 99
-    assert any(f["kills"] == 0 and f["shots"] >= streammap.MIN_SHOTS for f in fights)   # a fight with no kill
+    # Shooting with no kill in mid-match is someone else's fight heard nearby, not one of the streamer's.
+    assert not any(f["kills"] == 0 for f in fights)
     assert sum(f["kills"] for f in fights) == first["kills"]
 
 
@@ -141,3 +142,20 @@ def test_the_screen_after_the_counters_says_whether_the_match_went_on():
     assert len(streammap._group_runs(hud, [880.0], results)) == 1
     assert len(streammap._group_runs(hud, [880.0], [{"after": 700.0, "lines": ["DEFEAT"]}])) == 2
     assert streammap.mode_from(["Goal:40", "09:08"])["mode"] == "tdm"
+    assert streammap.mode_from(["NEWGAMINGKEYBOARD&MOUSEGOAL:2225/6000"]) is None   # a donation goal
+
+
+def test_a_frame_in_the_gap_settles_a_doubtful_split():
+    hud = [(100.0, 700.0), (760.0, 1500.0)]
+    assert len(streammap._group_runs(hud, [740.0])) == 2                                   # a reset in the gap
+    assert len(streammap._group_runs(hud, [740.0], (), lambda t: ["150165", "W285", "330345"])) == 1   # game on
+    assert len(streammap._group_runs(hud, [740.0], (), lambda t: ["START", "Classic Erangel", "Inventory"])) == 2
+
+
+def test_the_lost_last_fight_counts_even_without_a_kill():
+    t = np.arange(0, 4000, 1.0, dtype=np.float32)
+    gun = np.zeros_like(t)
+    gun[(t >= 1660) & (t <= 1690)] = 0.8      # the fight the streamer dies in (Spectating from 1700)
+    first = streammap.build(_vision(), 4000.0, {"t": t, "gunfire": gun})["matches"][0]
+    last = first["fights"][-1]
+    assert last.get("final") and last["kills"] == 0 and last["start"] <= 1662

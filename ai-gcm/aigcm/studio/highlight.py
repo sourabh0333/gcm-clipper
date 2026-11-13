@@ -109,6 +109,33 @@ def fight_piece(fight, words, audio, lo, hi):
     return {"kind": "fight", "start": max(lo, start), "end": min(hi, end), "kills": fight.get("kills", 0)}
 
 
+LONG_FIGHT_S = 90.0          # a fight longer than this is cut down to its kills (the walking between goes)
+POINT_BEFORE_S, POINT_AFTER_S = 15.0, 8.0
+
+
+def fight_pieces(fight, words, audio, lo, hi):
+    """A short fight whole; a long one (a busy match where the kills never stop) as a window around each kill
+    and knock, joined where they touch, with the run-up before the first and the reaction after the last."""
+    points = sorted(fight.get("points") or fight.get("kill_times") or [])
+    if fight["end"] - fight["start"] <= LONG_FIGHT_S or len(points) < 2:
+        return [fight_piece(fight, words, audio, lo, hi)]
+    windows = []
+    for t in points:
+        a, b = t - POINT_BEFORE_S, t + POINT_AFTER_S
+        if windows and a - windows[-1][1] <= MERGE_GAP_S:
+            windows[-1][1] = b
+        else:
+            windows.append([a, b])
+    windows[0][0] = min(windows[0][0], fight["start"] - LEAD_S)
+    last = points[-1]
+    windows[-1][1] = max(windows[-1][1], _excited_until(last, audio, last + REACTION_MAX_S))
+    out = []
+    for a, b in windows:
+        kills = sum(1 for t in fight.get("kill_times", []) if a <= t <= b)
+        out.append({"kind": "fight", "start": max(lo, a), "end": min(hi, b), "kills": kills})
+    return out
+
+
 def _talk_pieces(match, talks):
     out = []
     for c in talks or []:
@@ -136,7 +163,7 @@ def _merge(pieces):
 def match_pieces(match, words, audio, talks, duration):
     """The kept stretches of one match, in order, with their edges out of words."""
     lo, hi = match["start"], min(duration, match["end"])
-    pieces = [fight_piece(f, words, audio, lo, hi + DINNER_AFTER_S) for f in match["fights"]]
+    pieces = [p for f in match["fights"] for p in fight_pieces(f, words, audio, lo, hi + DINNER_AFTER_S)]
     pieces += _talk_pieces(match, talks)
     if not match["fights"] or match["fights"][0]["start"] - lo > 120:
         drop = lo + DROP_AT_S
