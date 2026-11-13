@@ -82,3 +82,18 @@ def test_no_kills_no_teaser():
                                                          "players_left": 50}]}]}
     plan = highlight.plan(stream_map, [1], 700.0)
     assert plan["pieces"][0]["kind"] != "teaser"
+
+
+def test_a_dinner_with_few_kills_keeps_its_last_circles_and_gunfights():
+    t = np.arange(0, 3000, 1.0)
+    gun = np.zeros_like(t)
+    gun[(t >= 500) & (t <= 530)] = 0.9            # a gunfight with no kill
+    gun[(t >= 800) & (t <= 803)] = 0.9            # too short to add
+    stream_map = {"matches": [{"n": 1, "start": 100.0, "end": 2000.0, "ended": "dinner", "placement": 1, "kills": 1, "score": 20,
+                               "fights": [{"start": 1200.0, "end": 1210.0, "kills": 1, "kill_times": [1205.0], "players_left": 30}]}]}
+    plan = highlight.plan(stream_map, [1], 3000.0, sounds={"t": t, "gunfire": gun})
+    body = [p for p in plan["pieces"] if p["kind"] not in ("card", "teaser")]
+    assert any(p["start"] <= 1820 and p["end"] >= 2000 for p in body)          # the last 3 minutes
+    assert any(p["start"] <= 500 and p["end"] >= 530 for p in body)            # the gunfight with no kill
+    assert not any(p["start"] <= 800 <= p["end"] for p in body)
+    assert highlight.titles_for(stream_map, [1], plan)[0][0].startswith("CHICKEN DINNER WITH 1 FINISHES")

@@ -160,11 +160,48 @@ def _merge(pieces):
     return out
 
 
-def match_pieces(match, words, audio, talks, duration):
+FINAL_STRETCH_S = 180.0      # a Dinner or a top-3 finish: the last circles are the story, kept whole
+MIN_BODY_S = 240.0           # a match cut shorter than this gets the heaviest shooting that had no kill
+EXTRA_SHOTS = 6              # gunfire samples (about 1 s each) a no-kill gunfight needs to be added
+EXTRA_PAD = (6.0, 5.0)
+
+
+def shooting_runs(sounds, lo, hi, pause=4.0, threshold=0.3):
+    """Gunfire heard between lo and hi as [(first, last, samples)], pauses up to `pause` s joined."""
+    if not sounds or "gunfire" not in sounds:
+        return []
+    t, gun = sounds["t"], sounds["gunfire"]
+    shots = t[(gun >= threshold) & (t >= lo) & (t <= hi)]
+    runs = []
+    for x in shots:
+        if runs and x - runs[-1][1] <= pause:
+            runs[-1][1] = float(x)
+            runs[-1][2] += 1
+        else:
+            runs.append([float(x), float(x), 1])
+    return [tuple(r) for r in runs]
+
+
+def _length(pieces):
+    return sum(p["end"] - p["start"] for p in _merge([dict(p) for p in pieces]))
+
+
+def match_pieces(match, words, audio, talks, duration, sounds=None):
     """The kept stretches of one match, in order, with their edges out of words."""
     lo, hi = match["start"], min(duration, match["end"])
     pieces = [p for f in match["fights"] for p in fight_pieces(f, words, audio, lo, hi + DINNER_AFTER_S)]
     pieces += _talk_pieces(match, talks)
+    if match["ended"] == "dinner" or (match.get("placement") or 99) <= 3:
+        pieces.append({"kind": "fight", "start": max(lo, hi - FINAL_STRETCH_S), "end": hi, "kills": 0, "final": True})
+    if _length(pieces) < MIN_BODY_S:
+        # Few kills: the gunfights that had none tell the match too (a Dinner with 3 kills is still a fight).
+        for first, last, n in sorted(shooting_runs(sounds, lo, hi), key=lambda r: -r[2]):
+            if n < EXTRA_SHOTS or _length(pieces) >= MIN_BODY_S:
+                break
+            if any(p["start"] <= first and last <= p["end"] for p in pieces):
+                continue
+            pieces.append({"kind": "fight", "start": max(lo, first - EXTRA_PAD[0]), "end": min(hi, last + EXTRA_PAD[1]),
+                           "kills": 0})
     if not match["fights"] or match["fights"][0]["start"] - lo > 120:
         drop = lo + DROP_AT_S
         if drop + DROP_S < hi:
@@ -245,7 +282,7 @@ def plan(stream_map, match_numbers, duration, transcript=None, sounds=None, audi
         raise ValueError("no such match in the map")
     body, kept = [], 0.0
     for k, m in enumerate(matches):
-        pieces = match_pieces(m, words, audio, talks, duration)
+        pieces = match_pieces(m, words, audio, talks, duration, sounds)
         if len(matches) > 1:
             body.append({"kind": "card", "text": f"MATCH {k + 1}", "length": CARD_S, "match": m["n"]})
         for i, p in enumerate(pieces):
@@ -323,6 +360,10 @@ def titles_for(stream_map, numbers, the_plan, names=()):
     context = f"{len(matches)} MATCHES" if len(matches) > 1 else (maps[0] if maps and maps[0] else "FULL MATCH")
     talk = next((p.get("title") for p in the_plan["pieces"] if p["kind"] == "talk" and p.get("title")), None)
     out = titles.long_titles(kills, dinners, context, talk)
+    if len(matches) == 1 and dinners:
+        # One match: "CHICKEN DINNER WITH 15 FINISHES", not "1 CHICKEN DINNER + 15 FINISHES".
+        out[0] = titles._cut(f"CHICKEN DINNER WITH {kills} FINISHES | {context} | BGMI" if kills
+                             else f"CHICKEN DINNER | {context} | BGMI", titles.LONG_MAX)
     for name in names:
         out.insert(0, titles._cut(f"{name.upper()} vs ME 😱 | {kills} FINISHES | BGMI", titles.LONG_MAX))
     words = titles.thumb_words(kills, dinners)
