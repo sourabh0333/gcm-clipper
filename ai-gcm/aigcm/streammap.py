@@ -61,17 +61,65 @@ def _match_starts(vision):
     return sorted(starts)
 
 
-def _group_runs(hud, starts):
-    """HUD runs → matches: a run begins a new match when a fresh-match signal falls inside it or just before,
-    or when the HUD was gone long enough for a new lobby."""
+# What the screen said just after the counters vanished (vision.py reads it): the match goes on (a respawn or
+# recall since update 4.6, or the game is on and only the counters were unreadable), or it is over.
+RESPAWN_TEXT = re.compile(r"respawn|returning to the battle|recall|don'?t give up|join the vampires", re.I)
+END_TEXT = re.compile(r"winner ?winner|chicken ?dinner|better ?luck|keep it up|you made the top|you'?re in the top|"
+                      r"defeat|victory|finishes|promoting to|squad wiped", re.I)
+TDM_TEXT = re.compile(r"goal\s?:\s?\d+", re.I)
+COMPASS = {"15", "30", "60", "75", "105", "120", "150", "165", "195", "210", "240", "255", "285", "300", "330", "345"}
+
+
+def compass_marks(text):
+    """How many of the in-game compass's bearings are on screen. OCR runs them together ("150165", "330345"),
+    so each run of digits counts when it splits wholly into bearings."""
+    count = 0
+    for run in re.findall(r"\d{2,12}", text):
+        best = [0] + [None] * len(run)       # best[i]: bearings in a split of run[:i]
+        for i in range(1, len(run) + 1):
+            for k in (2, 3):
+                if i >= k and best[i - k] is not None and run[i - k:i] in COMPASS:
+                    best[i] = max(best[i] or 0, best[i - k] + 1)
+        count += best[-1] or 0
+    return count
+MIN_LOBBY_GAP_S = 40.0     # a new match needs at least this long without the HUD before it (the lobby)
+SPAWN_S = 58.0             # the spawn island and plane before the counters show (measured on 5 labelled matches)
+SPAWN_GAP_S = 75.0
+
+
+def reads_after(results, t):
+    return [line for r in results if abs(r.get("after", -1e9) - t) <= 1 for line in r["lines"]]
+
+
+def what_next(lines):
+    """"on" (a respawn, or the game still on screen), "end" (a result screen) or None (nothing read)."""
+    text = " ".join(lines)
+    if RESPAWN_TEXT.search(text):
+        return "on"
+    if END_TEXT.search(text):
+        return "end"
+    if compass_marks(text) >= 3:
+        return "on"
+    return None
+
+
+def _group_runs(hud, starts, results=()):
+    """HUD runs → matches. After a run ends, the screen read says whether the match went on (respawn, game
+    still on) or ended (result screen); without a read, a fresh-lobby signal after a lobby-length gap, or a
+    long gap, starts a new match."""
     groups = []
     for start, end in hud:
-        fresh = any(start - NEW_MATCH_GAP_S <= s <= end for s in starts
-                    if not groups or s > groups[-1][-1][1] - 1)
-        if groups and not fresh and start - groups[-1][-1][1] < NEW_MATCH_GAP_S:
-            groups[-1].append([start, end])
-        else:
+        if not groups:
             groups.append([[start, end]])
+            continue
+        prev_end = groups[-1][-1][1]
+        gap = start - prev_end
+        said = what_next(reads_after(results, prev_end))
+        fresh = any(prev_end - 1 < s <= end for s in starts)
+        if said == "end" or (said is None and ((fresh and gap >= MIN_LOBBY_GAP_S) or gap >= NEW_MATCH_GAP_S)):
+            groups.append([[start, end]])
+        else:
+            groups[-1].append([start, end])
     return [g for g in groups if g[-1][1] - g[0][0] >= MIN_MATCH_S]
 
 
@@ -100,6 +148,8 @@ def mode_from(lines):
     text = " ".join(lines).lower()
     found = MODE_TEXT.search(text)
     mode = found.group(2).replace(" ", "") if found else None
+    if mode is None and TDM_TEXT.search(text):
+        mode = "tdm"
     words = re.findall(r"[a-z]{4,}", text)
     game_map = next((m for m in MAPS for w in words if difflib.SequenceMatcher(None, w, m).ratio() >= 0.8), None)
     return {"mode": mode, "ranked": bool(found and found.group(1) == "ranked"), "map": game_map} if (mode or game_map) else None
@@ -212,7 +262,8 @@ def _match(group, vision, sounds, duration):
     match = {"start": round(start, 2), "end": round(min(end, duration), 2), "ended": ended,
              "placement": place, "kills": len(kills), "kill_times": kills,
              "players_left_at_end": _players_left(vision.get("remaining", []), end),
-             "mode": mode_from(lines),
+             "mode": mode_from([line for r in vision.get("results", []) if start <= r.get("after", -1) <= hud_end + 1
+                                for line in r["lines"]]),
              "result_text": lines[:20]}
     match["fights"] = fights(match, events, sounds, vision.get("remaining", []))
     return match
@@ -273,8 +324,15 @@ def classify_gaps(gaps, read_text, step=GAP_SAMPLE_S):
 
 def build(vision, duration, sounds=None, read_text=None):
     """The map of one stream. `read_text(t)` reads a frame's text, for telling the lobby from not-BGMI."""
-    groups = _group_runs([tuple(s) for s in vision.get("hud", [])], _match_starts(vision))
-    matches = [_match(g, vision, sounds, duration) for g in groups]
+    groups = _group_runs([tuple(s) for s in vision.get("hud", [])], _match_starts(vision), vision.get("results", []))
+    matches, previous_end = [], 0.0
+    for g in groups:
+        m = _match(g, vision, sounds, duration)
+        # The counters show only once the match is under way; the spawn island and the plane come first.
+        if m["start"] - previous_end >= SPAWN_GAP_S and m["start"] > 5 and (m.get("mode") or {}).get("mode") != "tdm":
+            m["start"] = round(max(previous_end + 10.0, m["start"] - SPAWN_S), 2)
+        previous_end = m["end"]
+        matches.append(m)
     for n, m in enumerate(matches, 1):
         m["n"] = n
         m["score"] = score(m)

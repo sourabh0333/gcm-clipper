@@ -211,6 +211,8 @@ The owner approved [plans/Highlights Stage 1 plan.md](../plans/Highlights%20Stag
 
 **First measurement:** a 30-minute piece of GtxPreet. Kills 4/4, each within 5 s; the end is 11 s from the labelled final death; the recall wasn't mistaken for an end. The start is about 55 s late, because the spawn island shows "Players", not "Remaining".
 
+**13 Nov morning:** rescans restarted (they had died at 19:57 when moved outside the session; run them from the session). ANJI, lolzzz and bixi rescanned and scored (`scratchpad .../labels/score.py`, maps without frame reads): matches found **9/9**, kills exact **9/9** (the new scan no longer counts teammates' counters), edges within 20 s **7/9**. Map changes: the screen read after the counters vanish decides splits (`what_next`: respawn/recall or the compass still on screen = same match; Dinner, BETTER LUCK, DEFEAT, Finishes = over), starts move back 58 s for the spawn island (not TDM, found from "Goal:40"). Left: ANJI match 3 still split by a fake match_start after a short run (vertical, no Remaining counter); bixi match 2's disconnect end. GtxPreet, DIPENDU, shlok and rajput rescans were still running (they resume from `vision.partial.json`). Full test suite passed this morning (281); web tests need a quiet CPU (workers time out under the rescans).
+
 **Next:**
 1. The rescans of the 3 full streams and 4 sections were started with the new scan (`scratchpad .../labels/rescan.py`). It writes `vision.json` and keeps `vision.old.json`, and resumes from `vision.partial.json` if stopped.
 2. Then run `python -m aigcm map <job> --labels tests/data/labels/<job>.json` for each job and tune the map toward the plan's targets: all matches found, edges within 20 s, kills exact in 9 of 10, all Dinners.

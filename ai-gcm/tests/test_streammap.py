@@ -36,7 +36,8 @@ def _sounds():
 def test_matches_their_endings_and_kills():
     found = streammap.build(_vision(), 4000.0, _sounds())
     first, second = found["matches"]
-    assert (first["start"], first["kills"], first["ended"], first["placement"]) == (390.0, 3, "death", 7)
+    # The counters show from 390; the spawn island and plane before them are part of the match.
+    assert (first["start"], first["kills"], first["ended"], first["placement"]) == (390.0 - streammap.SPAWN_S, 3, "death", 7)
     assert first["end"] == 1700.0 - streammap.END_AFTER_SPECTATE_S        # ends when Spectating shows
     assert (second["ended"], second["placement"], second["kills"]) == ("dinner", 1, 1)
     assert found["best"] == 2 and found["session"] == []                     # a Dinner beats 3 kills here
@@ -82,7 +83,7 @@ def test_a_cut_off_match_and_the_comparison_with_labels():
     v = _vision(hud=[[390.0, 3995.0]], spectating=[], results=[], events=[{"t": 700.0, "kind": "self_kill"}])
     found = streammap.build(v, 4000.0)
     assert found["matches"][0]["ended"] == "cut_off"
-    labels = {"matches": [{"n": 1, "start": 395, "end": 4000, "ended": "cut_off", "kills": 1},
+    labels = {"matches": [{"n": 1, "start": 335, "end": 4000, "ended": "cut_off", "kills": 1},
                           {"n": 2, "start": 5000, "end": 5100, "ended": "death", "kills": 0}]}
     report = streammap.compare(found, labels)
     assert report["found"] == "1/2" and report["kills_ok"] == "1/1" and report["edges_ok"] == "1/1"
@@ -125,3 +126,18 @@ def test_leftover_fights_are_the_ones_no_highlight_used(tmp_path):
     assert leftovers.summary(tmp_path)["count"] == 1
     write_json(tmp_path / "leftovers" / "leftovers.json", {"kept_until": time.time() - 1, "fights": []})
     assert leftovers.expire(tmp_path.parent) == [tmp_path.name] and not (tmp_path / "leftovers").exists()
+
+
+def test_the_screen_after_the_counters_says_whether_the_match_went_on():
+    assert streammap.what_next(["Respawn Countdown", "5"]) == "on"
+    assert streammap.what_next(["Returning to the battleground in 5."]) == "on"
+    assert streammap.what_next(["Vinner Winner Chicken Dinner!", "25"]) == "end"
+    assert streammap.what_next(["BETTER LUCKNEXT TIME!", "/100"]) == "end"
+    assert streammap.what_next(["BGMI", "150165", "W285", "330345"]) == "on"     # the map's compass: still playing
+    assert streammap.what_next(["2,336", "FULL SCREEN LIVE ON KICK"]) is None
+    # A respawn read after a run keeps the next run in the same match, even with a fresh-lobby signal.
+    hud = [(100.0, 700.0), (900.0, 1500.0)]
+    results = [{"after": 700.0, "lines": ["Respawn Countdown"]}]
+    assert len(streammap._group_runs(hud, [880.0], results)) == 1
+    assert len(streammap._group_runs(hud, [880.0], [{"after": 700.0, "lines": ["DEFEAT"]}])) == 2
+    assert streammap.mode_from(["Goal:40", "09:08"])["mode"] == "tdm"
