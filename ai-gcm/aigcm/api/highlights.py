@@ -108,7 +108,8 @@ def stream_highlights(stream_id: str, request: Request, user=Depends(current_use
     left = summary(folder)
     return {"map": map_view(read_json(folder / "map.json")),
             "leftovers": {"count": left["count"],
-                          "until": _stamp(datetime.utcfromtimestamp(left["until"])) if left["until"] else None},
+                          "until": _stamp(datetime.fromtimestamp(left["until"], ZoneInfo("UTC")).replace(tzinfo=None))
+                          if left["until"] else None},
             "map_status": mapping.status if mapping else None,
             "has_source": project.source_file(folder) is not None,
             "highlights": [highlight_view(settings, db, r) for r in renders]}
