@@ -221,6 +221,25 @@ The owner approved [plans/Highlights Stage 1 plan.md](../plans/Highlights%20Stag
 3. Then render the 3 full-stream highlights and check them by frames, then the owner checks them (S1.10).
 4. Known risks: teammates' counters after a death in vertical layouts (ANJI, DIPENDU, rajput) still read as kills in the old scans; spawn-island starts are late.
 
+## What holds viewers: the A-to-Z study (owner, 14 Nov)
+
+The owner asked for many more videos on all six channels, studied A to Z: what attracts and holds viewers, the patterns, and how videos open and close. Five agents worked in parallel and the results were combined in [reports/What holds BGMI viewers.md](../reports/What%20holds%20BGMI%20viewers.md), with notes in `research_notes/BGMI what holds viewers/`. The five studies:
+- "most replayed" curves of 779 long videos, with what sits at the peaks of 59;
+- 9,593 comments on 80 videos, including 393 timestamped moments;
+- 171 Shorts;
+- the openings and endings of 93 videos, with their titles and thumbnails;
+- 15 more videos measured frame by frame in Chrome.
+
+**Headline findings:**
+- Viewers quote talk and people more than kills (51% of timestamped moments are lines, banter or names; 14% are kills). The most-liked quotes are lines said right after a fight.
+- Every Short above 2M views since 2023 is a person moment.
+- Openings that start on a voice line or gunfire at 0 s hold best; slow starts hold 0.41x.
+- None of 93 videos opens on its Chicken Dinner; the end is where viewers wait for it.
+- No editor effect is put on a kill in 18 videos.
+- Endings: a punchline or reaction holds 1.36x, end cards 0.5x.
+
+The report ends in a 50-rule specification, each rule marked KEEP, CHANGE or ADD against Kaatclip. **Next:** the owner approves the CHANGE/ADD list, then it gets built.
+
 ## Editing timed like the real editors (owner, 14 Nov, second look)
 
 The owner said the editing "was not perfectly matching with game, audio and movement" and asked me to watch the channels' posted videos in Chrome. Three were played and measured in the page (frames compared, loudness read while playing, contact sheets at 0.25-2 s, captions for timing; nothing downloaded): [research_notes/BGMI creators content A to Z/editing_timing_watched.md](../research_notes/BGMI%20creators%20content%20A%20to%20Z/editing_timing_watched.md).
