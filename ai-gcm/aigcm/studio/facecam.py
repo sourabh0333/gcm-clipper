@@ -207,16 +207,26 @@ def for_stream(job_folder, source=None):
 
     path = Path(job_folder) / STREAM_FILE
     saved = read_json(path)
-    if saved is not None or source is None:
+    if source is None or (saved is not None and "layout" in saved):
         return saved
-    box = detect(source, count=STREAM_SAMPLES)
-    saved = {"box": [float(v) for v in box] if box else None, "source": "auto"}
+    if saved is None:
+        box = detect(source, count=STREAM_SAMPLES)
+        saved = {"box": [float(v) for v in box] if box else None, "source": "auto"}
+    # A vertical stream's own layout: where its game and camera bands are, for stacked Shorts (owner, 14 Nov).
+    from . import gamebox
+
+    info = read_json(Path(job_folder) / "info.json")
+    saved["layout"] = gamebox.find(source, info, read_json(Path(job_folder) / "vision.json")) if info else None
+    if saved["layout"] and saved["layout"].get("cam") and not saved.get("box"):
+        saved["box"], saved["source"] = saved["layout"]["cam"], "layout"
     write_json(path, saved)
-    log(f"facecam: {Path(job_folder).name}: {saved['box']}")
+    log(f"facecam: {Path(job_folder).name}: {saved['box']}, layout {saved['layout']}")
     return saved
 
 
 def set_manual(job_folder, box):
-    from ..jobs import write_json
+    from ..jobs import read_json, write_json
 
-    write_json(Path(job_folder) / STREAM_FILE, {"box": [round(float(v), 4) for v in box], "source": "manual"})
+    saved = read_json(Path(job_folder) / STREAM_FILE) or {}
+    write_json(Path(job_folder) / STREAM_FILE, {"box": [round(float(v), 4) for v in box], "source": "manual",
+                                                "layout": saved.get("layout")})

@@ -162,11 +162,17 @@ def _even(x):
     return int(round(x / 2)) * 2
 
 
-def template_layout(template, width, height, facecam=None):
+def template_layout(template, width, height, facecam=None, game=None):
     """The starting panels of a layout template for a source of this size. `facecam` is the camera box as
-    frame fractions (x, y, w, h), needed by "split"; without one, "split" falls back to "blur"."""
-    aspect = width / height
+    frame fractions (x, y, w, h), needed by "split"; without one, "split" falls back to "blur". `game` is
+    where the game sits inside a vertical stream's own layout (studio.gamebox); the game panel shows only
+    that part."""
     full = (0.0, 0.0, 1.0, 1.0)
+    if game and template != "native":
+        full = tuple(float(v) for v in game)
+        aspect = (game[2] * width) / (game[3] * height)
+    else:
+        aspect = width / height
     if template == "native":
         w, h = W, _even(W / aspect)
         if h > H:
@@ -232,16 +238,22 @@ def kill_zooms(events, start, end):
 
 
 def default_edit(start, end, width, height, title=None, events=(), captions=False, facecam=None,
-                 window=None, brand=None):
-    """The edit a clip starts with, made from what the engine knows (decision 2). Vertical streams are
-    already laid out by the streamer, so they stay as they are; landscape ones go over a blurred fill
-    with a zoom on each kill."""
+                 window=None, brand=None, game=None):
+    """The edit a clip starts with, made from what the engine knows (decision 2). Shorts are stacked, the
+    camera on top and the game below (owner, 14 Nov; the stacked layout outperforms a game-only crop on the
+    channels studied): a vertical stream's game band and camera are cut out of its own layout (`game`, from
+    studio.gamebox); landscape streams go over a blurred fill with a zoom on each kill. A vertical stream
+    whose game can't be found stays as it was streamed."""
     if window:
         start, end = max(start, window[0]), min(end, window[1])
     b = brand or {}   # what the creator's brand kit sets (studio.brand.defaults)
     vertical = height > width
     # Facecam on top for streams with a camera (the top Indian format); otherwise the blurred fill.
-    layout = template_layout("native" if vertical else ("split" if facecam else "blur"), width, height, facecam)
+    if vertical and not game:
+        layout = template_layout("native", width, height, facecam)
+    else:
+        layout = template_layout("split" if facecam else "blur", width, height, facecam, game if vertical else None)
+    vertical = vertical and not game        # a cropped game band zooms on kills like a landscape stream
     return EditData(
         segments=[Segment(start=round(start, 3), end=round(end, 3))],
         layout=layout,

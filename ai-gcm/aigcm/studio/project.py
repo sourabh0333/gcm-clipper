@@ -60,6 +60,13 @@ def stream_facecam(settings, clip):
     return ((facecam.for_stream(job_folder(settings, clip)) or {}).get("box")) or None
 
 
+def stream_game(settings, clip):
+    """Where the game sits inside a vertical stream's layout, if worked out (studio.gamebox)."""
+    from . import facecam
+
+    return ((facecam.for_stream(job_folder(settings, clip)) or {}).get("layout") or {}).get("game")
+
+
 def kit_for(clip):
     """The clip owner's brand kit (a default kit if they haven't set one)."""
     from sqlalchemy.orm import object_session
@@ -91,7 +98,8 @@ def default_for(settings, clip, window=None):
     return default_edit(clip.start_s, clip.end_s, width, height, rotated_title(clip),
                         engine_clip(folder, clip.clip_key).get("events") or (),
                         captions=has_captions(folder, clip), window=span,
-                        facecam=stream_facecam(settings, clip), brand=brand_defaults(settings, clip))
+                        facecam=stream_facecam(settings, clip), brand=brand_defaults(settings, clip),
+                        game=stream_game(settings, clip))
 
 
 MARKER_KINDS = ("self_kill", "self_knock", "accolade", "dinner")   # the HUD scan's event names (vision.py)

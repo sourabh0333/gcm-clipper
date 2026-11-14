@@ -171,7 +171,9 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
         out_dir.mkdir(exist_ok=True)
         done = read_json(job.path("clips.json"), {})
         said = read_json(job.path("transcript.json")) if use_captions else None
-        cam = list(settings.facecam) if settings.facecam else (facecam.for_stream(job.root, info["path"]) or {}).get("box")
+        stream_cam = facecam.for_stream(job.root, info["path"]) or {}
+        cam = list(settings.facecam) if settings.facecam else stream_cam.get("box")
+        game = (stream_cam.get("layout") or {}).get("game")
         kit = read_json(job.path("brand.json"), {}) or {}   # the owner's brand kit, from the worker
         files = {k: (kit.get(k) or None) for k in ("strip", "intro", "outro")}
         files = {k: (v if v and Path(v).exists() else None) for k, v in files.items()}
@@ -180,7 +182,7 @@ def pipeline(job, source, section, settings, use_judge, use_captions, until=None
                 continue
             edit = default_edit(clip["start"], clip["end"], info["width"], info["height"], clip.get("title"),
                                 clip.get("events") or (), captions=bool(said) and is_talk(clip.get("type"), clip.get("labels")),
-                                facecam=cam, brand=kit.get("defaults"))
+                                facecam=cam, brand=kit.get("defaults"), game=game)
             if settings.layout in ("blur", "split", "native"):
                 edit = edit.model_copy(update={"layout": template_layout(settings.layout, info["width"], info["height"], cam)})
             picture = hook.for_edit(job.path("studio", "hooks"), edit)

@@ -352,13 +352,14 @@ def test_a_camera_box_set_by_hand_is_remembered_for_the_stream(studio_app):
     clip = first_clip(owner)
     owner.post(f"/api/clips/{clip['id']}/decision", json={"verdict": "keep"}, headers=APP)
     worker.render_step()
-    assert F.for_stream(folder) == {"box": None, "source": "auto"}   # worked out once; the test video has no face
+    # Worked out once; the test video has no face and, being landscape, no vertical layout.
+    assert F.for_stream(folder) == {"box": None, "source": "auto", "layout": None}
     view = owner.get(f"/api/clips/{clip['id']}/studio").json()
     assert view["editor"]["facecam"] is None
     data = view["edit"]["data"]
     data["layout"] = E.template_layout("split", 1280, 720, (0.05, 0.6, 0.3, 0.35)).model_dump(mode="json")
     assert owner.put(f"/api/clips/{clip['id']}/edit", json={"base_version": 0, "data": data}, headers=APP).status_code == 200
-    assert F.for_stream(folder) == {"box": [0.05, 0.6, 0.3, 0.35], "source": "manual"}
+    assert F.for_stream(folder) == {"box": [0.05, 0.6, 0.3, 0.35], "source": "manual", "layout": None}
     assert owner.get(f"/api/clips/{clip['id']}/studio").json()["editor"]["facecam"] == [0.05, 0.6, 0.3, 0.35]
 
 

@@ -414,7 +414,9 @@ def plan_highlight(settings, session, render):
         heard = _npz(folder / "sounds.npz")
         loud = _npz(folder / "audio.npz")
         said = read_json(folder / "transcript.json")
-        cam = (facecam.for_stream(folder, source) or {}).get("box")
+        stream_cam = facecam.for_stream(folder, source) or {}
+        cam, game = stream_cam.get("box"), (stream_cam.get("layout") or {}).get("game")
+        # The 16:9 highlight keeps the stream as streamed (owner, 14 Nov); the camera box is for punch-ins.
         the_plan = highlight.plan(stream_map, numbers, info["duration"], said, heard, loud,
                                   read_json(folder / "moments.json", []) or [], cam)
         if drop:
@@ -444,7 +446,8 @@ def plan_highlight(settings, session, render):
                 else f"{kills} FINISHES 🔥" if kills > 1 else "WAIT FOR IT 😱")
             name = f"hl_{render_id[:8]}_{i + 1}.mp4"
             (folder / "clips").mkdir(exist_ok=True)
-            highlight.render_short(moment, source, info, folder / "clips" / name, title, cam, None, None, threads)
+            highlight.render_short(moment, source, info, folder / "clips" / name, title, cam, None, None, threads,
+                                   game)
             shorts.append(dict(moment, file=name, title=title))
         write_json(out_dir / "plan.json", the_plan)
         write_json(out_dir / "titles.json", {"titles": names, "words": words})

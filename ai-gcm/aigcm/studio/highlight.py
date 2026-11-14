@@ -475,7 +475,7 @@ def render(the_plan, source, info, out, threads=3, progress=None):
     return out
 
 
-def render_short(moment, source, info, out, title, facecam, transcript, kit_defaults=None, threads=3):
+def render_short(moment, source, info, out, title, facecam, transcript, kit_defaults=None, threads=3, game=None):
     """One Short from the highlight, through the Studio renderer with a clip's default edit (layout, camera,
     hook title, zoom on kills, captions), so it can be opened in the editor like any clip."""
     from . import hook
@@ -483,7 +483,7 @@ def render_short(moment, source, info, out, title, facecam, transcript, kit_defa
     from .render import render as render_edit
 
     edit = default_edit(moment["start"], moment["end"], info["width"], info["height"], title,
-                        moment.get("events") or (), captions=False, facecam=facecam, brand=kit_defaults)
+                        moment.get("events") or (), captions=False, facecam=facecam, brand=kit_defaults, game=game)
     picture = hook.for_edit(Path(out).parent / "hooks", edit)
     render_edit(edit, source, 0.0, info.get("has_audio", True), out, transcript=transcript, threads=threads,
                 hook_png=picture)
