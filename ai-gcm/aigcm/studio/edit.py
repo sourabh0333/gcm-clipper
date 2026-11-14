@@ -93,6 +93,13 @@ class Captions(Strict):
     words: list[WordFix] = Field(default_factory=list, max_length=800)
 
 
+class FaceSpan(Strict):
+    """A stretch (source seconds) when the Short shows the face alone, big, over a blurred copy of it: the
+    streamer talking or reacting with no shooting."""
+    start: float = Field(ge=0)
+    end: float = Field(ge=0)
+
+
 class EditData(Strict):
     v: Literal[1] = 1
     segments: list[Segment] = Field(min_length=1, max_length=MAX_SEGMENTS)
@@ -107,6 +114,7 @@ class EditData(Strict):
     lower_third: bool = False  # the brand kit's strip (logo, name, UPI, Instagram) at the bottom
     intro: bool = False        # the brand kit's intro before the clip
     outro: bool = False        # and its outro after
+    face: list[FaceSpan] = Field(default_factory=list, max_length=20)   # face-only moments (needs a camera)
 
     @model_validator(mode="after")
     def _segments_in_order(self):

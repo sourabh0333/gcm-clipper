@@ -15,7 +15,7 @@ from pathlib import Path
 from ..jobs import log
 from ..media import run, tool
 from ..safety import mute_filter
-from .edit import H, W, hook_box, output_length, span_to_output, to_output
+from .edit import FACECAM_H, H, W, hook_box, output_length, span_to_output, to_output
 
 CAPTION_FONT = "Mukta ExtraBold"   # bundled in assets/fonts; has both Latin and Devanagari
 CAPTION_COLOURS = {"white": "&H00FFFFFF", "yellow": "&H0000E6FF"}   # ASS is &HAABBGGRR
@@ -86,8 +86,12 @@ def build_graph(edit, input_start, has_audio, captions_name=None, mute=(), hook_
     lines.append(f"{joined}concat=n={n}:v=1:a={1 if has_audio else 0}[cv]" + ("[ca]" if has_audio else ""))
 
     layout = edit.layout
-    k = 1 + len(layout.panels)
-    lines.append(f"[cv]fps={FPS},split={k}[bgsrc]" + "".join(f"[ps{i}]" for i in range(len(layout.panels))))
+    cam = next((p for p in layout.panels if p.role == "cam"), None)
+    faces = [(a, b) for f in edit.face if cam is not None
+             for a, b in [(to_output(segs, f.start), to_output(segs, f.end))] if a is not None and b is not None and b > a]
+    k = 1 + len(layout.panels) + (2 if faces else 0)
+    lines.append(f"[cv]fps={FPS},split={k}[bgsrc]" + "".join(f"[ps{i}]" for i in range(len(layout.panels)))
+                 + ("[fs0][fs1]" if faces else ""))
     if layout.background == "blur":
         lines.append(f"[bgsrc]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},boxblur=24:2,"
                      f"setsar=1[bg]")
@@ -101,6 +105,17 @@ def build_graph(edit, input_start, has_audio, captions_name=None, mute=(), hook_
         lines.extend(_panel_lines(i, panel, zoom, edit.keep_hud))
         lines.append(f"{base}[p{i}]overlay={panel.dst[0]}:{panel.dst[1]}[o{i}]")
         base = f"[o{i}]"
+    if faces:
+        # The face alone: the camera crop, as wide as the Short, over a blurred copy filling the frame.
+        x, y0, w, h = cam.src
+        crop = f"crop=iw*{w:.5f}:ih*{h:.5f}:iw*{x:.5f}:ih*{y0:.5f}"
+        when = "+".join(f"between(t,{a:.3f},{b:.3f})" for a, b in faces)
+        lines.append(f"[fs0]{crop},scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},boxblur=24:2,setsar=1[fbg]")
+        lines.append(f"[fs1]{crop},scale={W}:-2,setsar=1[ffg]")
+        # Below the hook title (which sits at the foot of the camera band), so the title never covers the face.
+        lines.append(f"[fbg][ffg]overlay=0:'min({FACECAM_H},H-h)'[face]")
+        lines.append(f"{base}[face]overlay=0:0:enable='{when}'[faced]")
+        base = "[faced]"
     if hook_input is not None:
         y, _ = hook_box(layout)
         lines.append(f"[{hook_input}:v]format=rgba[hook]")

@@ -9,8 +9,12 @@ Goblin's and LoLzZz's editors tell it (reports/BGMI creators content A to Z.md, 
 - looting, running and waiting cut, with "A FEW MINUTES LATER" only where a lot is skipped;
 - "MATCH 2", "MATCH 3" cards in the session version;
 - the ending: the Chicken Dinner or the last fight, a few seconds of the face, then black;
-- the editing follows the action (owner, 14 Nov): a quick zoom on every kill, a punchy sound on a burst of
-  kills, the face full screen on big reactions, and subtitles on the funny lines.
+- the editing follows the game and the talk, as the editors studied do it (watched 14 Nov,
+  research_notes/BGMI creators content A to Z/editing_timing_watched.md): fights are kept whole (only long dead
+  stretches with no shooting and no talk are cut), every cut falls on a quiet moment of the sound and never inside a
+  word, with a short fade; nothing is added on kills; the face goes full screen only while the streamer talks or
+  reacts with no shooting, held for the whole sentence with its subtitles; the Chicken Dinner banner gets a slow
+  push-in.
 
 The stream layout stays as it is (16:9, vertical streams over a blurred copy). No music under speech, no kill
 counter, no chapters, no film or TV memes. Length is whatever the match needs.
@@ -31,7 +35,7 @@ CALL_BACK_S = 16.0           # at most this far back to catch the call that star
 TAIL_S = 6.0                 # after a fight's last kill
 REACTION_MAX_S = 10.0        # the reaction after it, while the excitement lasts
 EXCITED = 1.0
-MERGE_GAP_S = 6.0            # pieces closer than this are joined (no jump cut for a few seconds)
+MERGE_GAP_S = 18.0           # pieces closer than this are joined: the editors studied never cut out less than about 19 s
 SKIP_CARD_S = 150.0          # skipping more than this gets "A FEW MINUTES LATER"
 CARD_S = 1.8
 END_BLACK_S = 2.0
@@ -45,14 +49,15 @@ PUNCH_S = 2.6
 PUNCH_EVERY_S = 30.0         # at most one face punch-in per this much of the video
 PUNCH_GAP_S = 18.0
 PUNCH_MIN = 2.5              # how far above the stream's normal level a shout or laugh must be
+GUNFIRE_QUIET = 0.3          # no gunfire above this around a punch-in
 
 # The cold open: beats from the whole video, built up to the biggest one.
 INTRO_BEATS = 4
 BEAT_S = (3.0, 6.0)
 BURST_GAP_S = 6.0            # kills this close together are one burst
-KILL_ZOOM = 1.18             # the quick zoom on a kill (the frame grows this much, centred on the crosshair)
-KILL_ZOOM_HOLD_S = 0.9
-ZOOM_IN_S, ZOOM_OUT_S, ZOOM_LEAD_S = 0.18, 0.3, 0.25
+KILL_ZOOM = 1.12             # the push-in on the Chicken Dinner banner
+KILL_ZOOM_HOLD_S = 2.0
+ZOOM_IN_S, ZOOM_OUT_S, ZOOM_LEAD_S = 0.6, 0.4, 0.2
 BOOM_KILLS = 2               # a burst of this many kills gets a punchy sound
 SFX_GAIN = {"whoosh": 0.55, "boom": 0.45}
 CAPTION_SIZE = 84            # subtitles: big and bold, like JokerClips'
@@ -125,31 +130,64 @@ def fight_piece(fight, words, audio, lo, hi):
     return {"kind": "fight", "start": max(lo, start), "end": min(hi, end), "kills": fight.get("kills", 0)}
 
 
-LONG_FIGHT_S = 90.0          # a fight longer than this is cut down to its kills (the walking between goes)
-POINT_BEFORE_S, POINT_AFTER_S = 15.0, 8.0
+QUIET_CUT_S = 20.0           # inside a fight, a stretch this long with no shooting and no talk is cut out
+QUIET_KEEP_S = 2.0           # with this much kept either side of it
+SHOT_ON = 0.5                # gunfire score that counts as the streamer's fight (louder, closer shots)
+SETTLE_S = 1.2               # a cut moves up to this far to a quiet moment of the sound
+FADE_IN_S, FADE_OUT_S = 0.08, 0.15
 
 
-def fight_pieces(fight, words, audio, lo, hi):
-    """A short fight whole; a long one (a busy match where the kills never stop) as a window around each kill
-    and knock, joined where they touch, with the run-up before the first and the reaction after the last."""
-    points = sorted(fight.get("points") or fight.get("kill_times") or [])
-    if fight["end"] - fight["start"] <= LONG_FIGHT_S or len(points) < 2:
-        return [fight_piece(fight, words, audio, lo, hi)]
-    windows = []
-    for t in points:
-        a, b = t - POINT_BEFORE_S, t + POINT_AFTER_S
-        if windows and a - windows[-1][1] <= MERGE_GAP_S:
-            windows[-1][1] = b
-        else:
-            windows.append([a, b])
-    windows[0][0] = min(windows[0][0], fight["start"] - LEAD_S)
-    last = points[-1]
-    windows[-1][1] = max(windows[-1][1], _excited_until(last, audio, last + REACTION_MAX_S))
-    out = []
-    for a, b in windows:
-        kills = sum(1 for t in fight.get("kill_times", []) if a <= t <= b)
-        out.append({"kind": "fight", "start": max(lo, a), "end": min(hi, b), "kills": kills})
+def quiet_spans(a, b, words, sounds, least=QUIET_CUT_S, kills=()):
+    """Stretches inside [a, b] at least `least` long with no shooting, no kill and nobody talking: the looting,
+    running and waiting an editor cuts out of a fight. Everything else stays, so the game's movement is never
+    chopped. Without the sound classes there is no evidence of quiet, so nothing is cut."""
+    if not sounds or "gunfire" not in sounds:
+        return []
+    busy = [w for w in words if w[1] > a and w[0] < b] + [(k - 3.0, k + 3.0) for k in kills]
+    if sounds and "gunfire" in sounds:
+        t, gun = sounds["t"], sounds["gunfire"]
+        busy += [(float(x) - 0.5, float(x) + 0.5) for x in t[(gun >= SHOT_ON) & (t >= a) & (t <= b)]]
+    busy.sort()
+    out, cursor = [], a
+    for s0, s1 in busy:
+        if s0 - cursor >= least:
+            out.append((cursor, s0))
+        cursor = max(cursor, s1)
+    if b - cursor >= least:
+        out.append((cursor, b))
     return out
+
+
+def fight_pieces(fight, words, audio, lo, hi, sounds=None):
+    """A fight whole, from the call or first shots to the reaction; long stretches inside it with no shooting
+    and no talk are left out (Goblin's editor keeps a 162 s final fight in one piece)."""
+    whole = fight_piece(fight, words, audio, lo, hi)
+    pieces, cursor = [], whole["start"]
+    for q0, q1 in quiet_spans(whole["start"], whole["end"], words, sounds, kills=fight.get("kill_times") or ()):
+        if q0 + QUIET_KEEP_S - cursor > 3:
+            pieces.append({"kind": "fight", "start": cursor, "end": q0 + QUIET_KEEP_S})
+        cursor = q1 - QUIET_KEEP_S
+    pieces.append({"kind": "fight", "start": cursor, "end": whole["end"]})
+    for p in pieces:
+        p["kills"] = sum(1 for t in fight.get("kill_times", []) if p["start"] <= t <= p["end"])
+    return [p for p in pieces if p["end"] - p["start"] > 2]
+
+
+def settle(t, side, words, audio):
+    """Move a cut to the quietest moment of the sound within SETTLE_S that is not inside a word, so a cut
+    never lands in the middle of a burst of gunfire or a shout; then out of any word."""
+    if audio and "t" in audio and "loudness" in audio:
+        times, loud = audio["t"], audio["loudness"]
+        mask = (times >= t - SETTLE_S) & (times <= t + SETTLE_S)
+        best = None
+        for x, level in zip(times[mask], loud[mask]):
+            if any(a - 0.05 <= x <= b + 0.05 for a, b in words):
+                continue
+            if best is None or level < best[1] - 1e-9 or (abs(level - best[1]) <= 1e-9 and abs(x - t) < abs(best[0] - t)):
+                best = (float(x), float(level))
+        if best is not None:
+            t = best[0]
+    return snap(t, words, side)
 
 
 def _talk_pieces(match, talks):
@@ -205,7 +243,7 @@ def _length(pieces):
 def match_pieces(match, words, audio, talks, duration, sounds=None):
     """The kept stretches of one match, in order, with their edges out of words."""
     lo, hi = match["start"], min(duration, match["end"])
-    pieces = [p for f in match["fights"] for p in fight_pieces(f, words, audio, lo, hi + DINNER_AFTER_S)]
+    pieces = [p for f in match["fights"] for p in fight_pieces(f, words, audio, lo, hi + DINNER_AFTER_S, sounds)]
     pieces += _talk_pieces(match, talks)
     if match["ended"] == "dinner" or (match.get("placement") or 99) <= 3:
         pieces.append({"kind": "fight", "start": max(lo, hi - FINAL_STRETCH_S), "end": hi, "kills": 0, "final": True})
@@ -229,8 +267,8 @@ def match_pieces(match, words, audio, talks, duration, sounds=None):
         pieces.append({"kind": "ending", "start": max(lo, hi - 6), "end": min(duration, hi + ENDING_FACE_S)})
     pieces = _merge(pieces)
     for p in pieces:
-        p["start"] = round(max(0.0, snap(p["start"], words, "start")), 2)
-        p["end"] = round(min(duration, snap(p["end"], words, "end")), 2)
+        p["start"] = round(max(0.0, settle(p["start"], "start", words, audio)), 2)
+        p["end"] = round(min(duration, settle(p["end"], "end", words, audio)), 2)
         p["match"] = match["n"]
     return _merge(pieces)
 
@@ -259,7 +297,7 @@ def intro_text(matches):
     return "WATCH TILL THE END 😱"
 
 
-def cold_open(matches, talks, words):
+def cold_open(matches, talks, words, sounds=None, audio=None):
     """The intro: the best beats of the video, 3-6 s each, the biggest last. Beats are kill bursts (the more
     kills and the later in the match, the bigger), the funniest talk moments, and the Chicken Dinner."""
     beats = []
@@ -268,8 +306,16 @@ def cold_open(matches, talks, words):
         for first, last, n in bursts([t for f in m.get("fights") or [] for t in f.get("kill_times") or []]):
             late = any(f["start"] <= first <= f["end"] and (f.get("players_left") or 99) <= 15
                        for f in m.get("fights") or [])
-            a = first - 2.5
-            b = min(last + 2.0, a + BEAT_S[1])
+            # From the shots that lead to the kill (or 2.5 s before it) to when the shooting stops.
+            shots = sounds["t"][sounds["gunfire"] >= SHOT_ON] if sounds and "gunfire" in sounds else np.array([])
+            onset = first - 2.5
+            before = shots[(shots >= first - 4.0) & (shots <= first)] if len(shots) else shots
+            if len(before):
+                onset = float(before.min()) - 0.6
+            after = shots[(shots >= last) & (shots <= last + 3.0)] if len(shots) else shots
+            settle_at = (float(after.max()) if len(after) else last) + 0.8
+            a = onset
+            b = min(settle_at, a + BEAT_S[1] + 2)
             beats.append({"score": 3.0 * n + (3 if late else 0), "start": a, "end": max(b, a + BEAT_S[0]),
                           "kills": n, "match": m["n"], "why": "kills"})
         if m["ended"] == "dinner":
@@ -296,8 +342,8 @@ def cold_open(matches, talks, words):
     text = intro_text(matches)
     out = []
     for i, b in enumerate(chosen):
-        piece = {"kind": "intro", "start": round(max(0.0, snap(b["start"], words, "start")), 2),
-                 "end": round(snap(b["end"], words, "end"), 2), "match": b["match"], "kills": b["kills"],
+        piece = {"kind": "intro", "start": round(max(0.0, settle(b["start"], "start", words, audio)), 2),
+                 "end": round(settle(b["end"], "end", words, audio), 2), "match": b["match"], "kills": b["kills"],
                  "text": text, "sfx": [["whoosh", 0.0]] if i else [], "why": b["why"]}
         if piece["end"] - piece["start"] > BEAT_S[1] + 2.5:     # a word ran long: keep the beat short
             piece["end"] = round(piece["start"] + BEAT_S[1] + 2.5, 2)
@@ -308,28 +354,19 @@ def cold_open(matches, talks, words):
     return out
 
 
-def effects(pieces, kill_times, talks):
-    """What each kept piece shows on top of the footage: a quick zoom on every kill, a punchy sound at the
-    end of a burst of kills, and subtitles on the funny lines (talk pieces and funny moments inside fights)."""
+def effects(pieces, kill_times, talks, dinners=()):
+    """What a piece shows on top of the footage. Nothing on kills (none of the channels studied adds zooms or
+    sounds there; the game's own kill feed and recoil carry them). The Chicken Dinner banner gets a slow
+    push-in, as Goblin's editor does. The funny lines get subtitles."""
     funny = [(c["start"], c["end"]) for c in talks or [] if (c.get("talk_score") or 0) >= TALK_MIN_SCORE]
     for p in pieces:
         if p["kind"] == "card":
             continue
-        inside = [t for t in kill_times if p["start"] + 0.3 <= t <= p["end"] - 0.3]
-        zooms = []
-        for t in inside:
-            if not zooms or t - zooms[-1] > KILL_ZOOM_HOLD_S + ZOOM_OUT_S:
-                zooms.append(t)
-        p["zooms"] = [round(t - p["start"], 2) for t in zooms]
-        sfx = list(p.get("sfx") or [])
-        for first, last, n in bursts(inside):
-            if n >= BOOM_KILLS:
-                sfx.append(["boom", round(last - p["start"], 2)])
-        p["sfx"] = sfx
+        p["zooms"] = [round(t - p["start"], 2) for t in dinners if p["start"] + 0.5 <= t <= p["end"] - 1.0]
+        p["sfx"] = list(p.get("sfx") or [])
         if p["kind"] == "talk":
             p["captions"] = True
         else:
-            # Only the funny lines inside a fight get subtitles, not the whole stretch.
             spans = [[round(max(a, p["start"]) - p["start"], 2), round(min(b, p["end"]) - p["start"], 2)]
                      for a, b in funny if a < p["end"] and b > p["start"]]
             if spans:
@@ -337,41 +374,51 @@ def effects(pieces, kill_times, talks):
     return pieces
 
 
-def punch_ins(pieces, sounds, audio, limit):
-    """Face full screen for a moment on the biggest shouts and laughs inside the kept footage."""
-    if limit <= 0:
+PUNCH_SENTENCE_S = (1.2, 6.0)   # a punch-in lasts the sentence, within these bounds
+
+
+def punch_ins(pieces, sounds, audio, limit, transcript=None):
+    """The face full screen while the streamer talks or reacts and nobody is shooting, held for the whole
+    sentence (JokerClips: a hard cut in on the line, a hard cut back after it). Sentences in talk pieces come
+    first; then the ones with the biggest laugh or shout."""
+    if limit <= 0 or not transcript:
         return {}
-    peaks = []
+    shots = np.array([])
+    if sounds and "gunfire" in sounds:
+        shots = sounds["t"][sounds["gunfire"] >= GUNFIRE_QUIET]
+    level = {}
     if sounds and "t" in sounds:
-        t = sounds["t"]
         for group in ("scream", "laugh"):
-            if group not in sounds:
-                continue
-            values = sounds[group]
-            base = float(np.median(values)) + 1e-3
-            spread = float(np.percentile(values, 90) - np.median(values)) + 1e-3
-            level = (values - base) / spread
-            peaks += [(float(level[i]), float(t[i])) for i in range(len(t)) if level[i] >= PUNCH_MIN]
-    if audio and "t" in audio:
-        peaks += [(float(v) / 2, float(t)) for t, v in zip(audio["t"], audio["excitement"]) if v >= 2 * PUNCH_MIN]
-    inside = [(v, t) for v, t in peaks if any(p["start"] + 1 <= t <= p["end"] - PUNCH_S for p in pieces
-                                              if p["kind"] not in ("card", "teaser", "intro"))]
-    # Every funny talk piece gets the face at its loudest moment (or its middle), the reaction being the joke.
-    for p in pieces:
-        if p["kind"] == "talk" and p["end"] - p["start"] > PUNCH_S + 2:
-            near = [(v, t) for v, t in peaks if p["start"] + 1 <= t <= p["end"] - PUNCH_S]
-            inside.append((99.0, max(near)[1] if near else (p["start"] + p["end"] - PUNCH_S) / 2))
+            if group in sounds:
+                values = sounds[group]
+                base = float(np.median(values)) + 1e-3
+                spread = float(np.percentile(values, 90) - np.median(values)) + 1e-3
+                level[group] = (sounds["t"], (values - base) / spread)
+    candidates = []
+    for seg in transcript.get("segments", []):
+        a, b = seg.get("start"), seg.get("end")
+        if a is None or b is None or not (PUNCH_SENTENCE_S[0] <= b - a <= PUNCH_SENTENCE_S[1] + 2):
+            continue
+        b = min(b, a + PUNCH_SENTENCE_S[1])
+        if len(shots) and ((shots >= a - 1.0) & (shots <= b + 0.5)).any():
+            continue                     # shooting: the game is the story, the face stays small
+        host = next((i for i, p in enumerate(pieces) if p["kind"] not in ("card", "intro")
+                     and p["start"] + 0.5 <= a and b <= p["end"] - 0.3), None)
+        if host is None:
+            continue
+        react = max([float(lv[(t >= a) & (t <= b)].max()) for t, lv in level.values() if ((t >= a) & (t <= b)).any()] or [0.0])
+        score = react + (5.0 if pieces[host]["kind"] == "talk" else 0.0)
+        if score >= PUNCH_MIN or pieces[host]["kind"] == "talk":
+            candidates.append((score, a, b, host))
     chosen = []
-    for v, t in sorted(inside, reverse=True):
-        if all(abs(t - c) >= PUNCH_GAP_S for c in chosen):
-            chosen.append(t)
+    for score, a, b, host in sorted(candidates, reverse=True):
+        if all(abs(a - c[0]) >= PUNCH_GAP_S for c in chosen):
+            chosen.append((a, b, host))
         if len(chosen) >= limit:
             break
     out = {}
-    for t in sorted(chosen):
-        i = next(i for i, p in enumerate(pieces) if p["kind"] not in ("card", "teaser", "intro")
-                 and p["start"] + 1 <= t <= p["end"] - PUNCH_S)
-        out.setdefault(i, []).append([round(t - 0.3, 2), round(t - 0.3 + PUNCH_S, 2)])
+    for a, b, host in sorted(chosen):
+        out.setdefault(host, []).append([round(a - 0.1, 2), round(b + 0.2, 2)])
     return out
 
 
@@ -395,13 +442,19 @@ def plan(stream_map, match_numbers, duration, transcript=None, sounds=None, audi
             body.append(p)
             kept += p["end"] - p["start"]
     kill_times = [t for m in matches for f in m.get("fights") or [] for t in f.get("kill_times") or []]
-    effects(body, kill_times, talks)
-    intro = effects(cold_open(matches, talks, words), kill_times, talks)
+    dinners = [m["end"] - DINNER_AFTER_S + 1.5 for m in matches if m["ended"] == "dinner"]
+    effects(body, kill_times, talks, dinners)
+    intro = effects(cold_open(matches, talks, words, sounds, audio), kill_times, talks, dinners)
     pieces = intro + body + [{"kind": "card", "text": "", "length": END_BLACK_S}]
     total = sum(p.get("length") or (p["end"] - p["start"]) for p in pieces)
     if facecam:
-        for i, spans in punch_ins(pieces, sounds, audio, int(total // PUNCH_EVERY_S)).items():
+        for i, spans in punch_ins(pieces, sounds, audio, int(total // PUNCH_EVERY_S), transcript).items():
             pieces[i]["punch"] = spans
+            # What is said while the face fills the screen gets subtitles.
+            p = pieces[i]
+            extra = [[round(a - p["start"], 2), round(b - p["start"], 2)] for a, b in spans]
+            if p.get("captions") is not True:
+                p["captions"] = (p.get("captions") or []) + extra
     span = sum(m["end"] - m["start"] for m in matches)
     return {"matches": [m["n"] for m in matches], "pieces": pieces, "length": round(total, 1),
             "kept": round(kept / span, 3) if span else 0, "kills": sum(m["kills"] for m in matches),
@@ -628,15 +681,16 @@ def render_piece(piece, source, info, out, folder, facecam=None, threads=3, tran
         tail = ",subtitles=captions.ass:fontsdir=fonts"
     lines.append(f"{base}fps={FPS}{tail},format=yuv420p[v]")
     audio = "[0:a:0]" if info.get("has_audio", True) else f"[{silent_in}:a]"
+    fade = f"afade=t=in:d={FADE_IN_S},afade=t=out:st={max(0.0, length - FADE_OUT_S):.3f}:d={FADE_OUT_S}"
     if sounds:
-        lines.append(f"{audio}aresample=48000,aformat=channel_layouts=stereo[main]")
+        lines.append(f"{audio}aresample=48000,aformat=channel_layouts=stereo,{fade}[main]")
         for k, (index, at, gain) in enumerate(sounds):
             ms = int(at * 1000)
             lines.append(f"[{index}:a]aresample=48000,aformat=channel_layouts=stereo,adelay={ms}|{ms},volume={gain}[fx{k}]")
         lines.append("[main]" + "".join(f"[fx{k}]" for k in range(len(sounds)))
                      + f"amix=inputs={1 + len(sounds)}:duration=first:normalize=0[a]")
     else:
-        lines.append(f"{audio}aresample=48000,aformat=channel_layouts=stereo[a]")
+        lines.append(f"{audio}aresample=48000,aformat=channel_layouts=stereo,{fade}[a]")
     cmd += ["-filter_complex", ";".join(lines), "-map", "[v]", "-map", "[a]", *ENCODE, "-threads", str(threads),
             str(Path(out).resolve())]
     try:
@@ -686,7 +740,27 @@ def render(the_plan, source, info, out, threads=3, progress=None, transcript=Non
     return out
 
 
-def render_short(moment, source, info, out, title, facecam, transcript, kit_defaults=None, threads=3, game=None):
+def talk_spans(a, b, transcript, sounds):
+    """Sentences inside [a, b] spoken with no shooting around them: when a Short shows the face alone."""
+    if not transcript:
+        return []
+    shots = sounds["t"][sounds["gunfire"] >= GUNFIRE_QUIET] if sounds and "gunfire" in sounds else np.array([])
+    out = []
+    for seg in transcript.get("segments", []):
+        s0, s1 = seg.get("start"), seg.get("end")
+        if s0 is None or s1 is None or s0 < a + 1.0 or s1 > b - 0.5 or not (PUNCH_SENTENCE_S[0] <= s1 - s0 <= 8.0):
+            continue
+        if len(shots) and ((shots >= s0 - 1.0) & (shots <= s1 + 0.5)).any():
+            continue
+        if out and s0 - out[-1][1] < 2.5:
+            out[-1][1] = s1 + 0.2                     # back-to-back sentences: one face moment
+        else:
+            out.append([s0 - 0.1, s1 + 0.2])
+    return [tuple(round(x, 2) for x in span) for span in out]
+
+
+def render_short(moment, source, info, out, title, facecam, transcript, kit_defaults=None, threads=3, game=None,
+                 sounds=None, said=None):
     """One Short from the highlight, through the Studio renderer with a clip's default edit (layout, camera,
     hook title, zoom on kills, captions), so it can be opened in the editor like any clip."""
     from . import hook
@@ -696,6 +770,11 @@ def render_short(moment, source, info, out, title, facecam, transcript, kit_defa
     edit = default_edit(moment["start"], moment["end"], info["width"], info["height"], title,
                         moment.get("events") or (), captions=bool(transcript), facecam=facecam, brand=kit_defaults,
                         game=game)
+    if any(p.role == "cam" for p in edit.layout.panels):
+        from .edit import FaceSpan
+
+        spans = talk_spans(moment["start"], moment["end"], said or transcript, sounds)
+        edit = edit.model_copy(update={"face": [FaceSpan(start=a, end=b) for a, b in spans]})
     picture = hook.for_edit(Path(out).parent / "hooks", edit)
     render_edit(edit, source, 0.0, info.get("has_audio", True), out, transcript=transcript, threads=threads,
                 hook_png=picture)

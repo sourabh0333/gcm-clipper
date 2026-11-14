@@ -221,6 +221,29 @@ The owner approved [plans/Highlights Stage 1 plan.md](../plans/Highlights%20Stag
 3. Then render the 3 full-stream highlights and check them by frames, then the owner checks them (S1.10).
 4. Known risks: teammates' counters after a death in vertical layouts (ANJI, DIPENDU, rajput) still read as kills in the old scans; spawn-island starts are late.
 
+## Editing timed like the real editors (owner, 14 Nov, second look)
+
+The owner said the editing "was not perfectly matching with game, audio and movement" and asked me to watch the channels' posted videos in Chrome. Three were played and measured in the page (frames compared, loudness read while playing, contact sheets at 0.25-2 s, captions for timing; nothing downloaded): [research_notes/BGMI creators content A to Z/editing_timing_watched.md](../research_notes/BGMI%20creators%20content%20A%20to%20Z/editing_timing_watched.md).
+
+**What the editors do:**
+- **Goblin's stream cut:** 4 long stretches, each from the call or the first shots straight through, and no effects inside a fight.
+- **JokerClips:** hard cuts to the face for the whole line, and a game zoom on what the joke is about, half a second before it's said.
+- **GoBLiN's Short:** stacked while shooting, the face alone and large while talking.
+
+**What changed in Kaatclip:**
+- **Fights stay whole.** Only stretches of 20 s or more inside a fight with no loud gunfire, no kill and no talk are cut, and only when there is sound data. Gaps under 18 s are bridged.
+- **Cuts settle on sound.** Every cut moves (by up to 1.2 s) to the quietest moment that isn't in a word (`settle`), with 80/150 ms audio fades.
+- **Nothing on kills.** No zooms and no boom. The Chicken Dinner banner gets a slow push-in (1.12x).
+- **Face punch-ins** only on transcript sentences with no gunfire around them, held for the sentence, with its subtitles.
+- **Intro beats** run from the shots that lead to the kill to when the shooting stops.
+- **Shorts switch layout:** a new `EditData.face` field (face moments). The renderer cuts to the camera alone, as wide as the Short, below the hook title over its own blur. The highlight's Shorts get face moments on sentences with no shooting (`talk_spans`; moments under 2.5 s apart are joined).
+
+**Checked by frames on GtxPreet:**
+- the GtxPreet highlight: the intro joins, the Dinner push-in, and a punch-in from 2:49.5 to 2:53.6 exactly over "...to recall le liya... yahaan par";
+- a funny Short: stacked while playing, face alone while talking, with subtitles.
+
+**Tests:** `test_highlight.py` (11).
+
 ## The owner's first look: intro, editing, Shorts (14 Nov)
 
 The owner asked for three changes before watching further.

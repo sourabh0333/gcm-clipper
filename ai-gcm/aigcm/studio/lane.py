@@ -446,7 +446,8 @@ def plan_highlight(settings, session, render):
             (folder / "clips").mkdir(exist_ok=True)
             # A funny Short shows what was said (subtitles); the others let the action speak.
             highlight.render_short(moment, source, info, folder / "clips" / name, title, cam,
-                                   said if moment.get("kind") == "funny" else None, None, threads, game)
+                                   said if moment.get("kind") == "funny" else None, None, threads, game,
+                                   sounds=heard, said=said)
             shorts.append(dict(moment, file=name, title=title))
         write_json(out_dir / "plan.json", the_plan)
         write_json(out_dir / "titles.json", {"titles": names, "words": words})

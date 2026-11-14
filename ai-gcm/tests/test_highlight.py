@@ -70,15 +70,20 @@ def test_cuts_never_land_inside_a_word():
     assert highlight.snap(30.0, words, "end") == 30.0
 
 
-def test_punch_ins_go_on_the_loudest_reactions_inside_kept_footage():
+def test_punch_ins_go_on_talk_or_reactions_held_for_the_sentence():
     t = np.arange(0, 3000, 1.0)
-    scream = np.zeros_like(t)
-    scream[[315, 935, 2500]] = 1.0              # 2500 is outside the highlight
-    plan = highlight.plan(_map(), [1], 3000.0, TRANSCRIPT, sounds={"t": t, "scream": scream, "laugh": np.zeros_like(t)},
+    scream, gun = np.zeros_like(t), np.zeros_like(t)
+    scream[[315, 937, 2500]] = 1.0                    # 2500 is outside the highlight
+    gun[(t >= 930) & (t <= 939)] = 0.8                # 937 is during shooting: no face then
+    said = {"segments": [{"start": 314.0, "end": 317.5, "text": "bhai kya hua", "words": []},
+                         {"start": 936.0, "end": 938.5, "text": "aaja", "words": []},
+                         {"start": 2499.0, "end": 2501.0, "text": "outside", "words": []}]}
+    plan = highlight.plan(_map(), [1], 3000.0, said, sounds={"t": t, "scream": scream, "laugh": np.zeros_like(t), "gunfire": gun},
                           facecam=(0.7, 0.6, 0.3, 0.4))
     spans = [s for p in plan["pieces"] for s in p.get("punch", [])]
-    assert 1 <= len(spans) <= 2 and all(300 < a < 1200 for a, _ in spans)
-    assert plan["facecam"] == [0.7, 0.6, 0.3, 0.4]
+    assert spans == [[313.9, 317.7]]                  # the whole sentence, not a fixed 2.6 s; never during shooting
+    host = next(p for p in plan["pieces"] if p.get("punch"))
+    assert host["captions"] and plan["facecam"] == [0.7, 0.6, 0.3, 0.4]
 
 
 def test_no_kills_no_kill_beats():
@@ -104,16 +109,31 @@ def test_a_dinner_with_few_kills_keeps_its_last_circles_and_gunfights():
     assert highlight.titles_for(stream_map, [1], plan)[0][0].startswith("CHICKEN DINNER WITH 1 FINISHES")
 
 
-def test_the_editing_follows_the_action():
-    plan = highlight.plan(_map(), [1], 3000.0, TRANSCRIPT,
+def test_the_editing_follows_the_game_and_the_talk():
+    t = np.arange(0, 3000, 1.0)
+    gun = np.zeros_like(t)
+    gun[(t >= 905) & (t <= 940)] = 0.9                # the fight around kills 910-938
+    plan = highlight.plan(_map(), [1], 3000.0, TRANSCRIPT, sounds={"t": t, "gunfire": gun},
                           talks=[{"start": 600.0, "end": 630.0, "peak": 615.0, "talk_score": 9, "title": "Bhai kya kar raha"}])
     fight = next(p for p in plan["pieces"] if p["kind"] == "fight" and p["start"] <= 910 <= p["end"])
-    # A quick zoom on each kill (kills 5 s apart each get their own), a boom at the end of a burst.
-    assert [round(t + fight["start"]) for t in fight["zooms"]] == [910, 915, 930, 938]
-    assert any(name == "boom" for name, _ in fight["sfx"])
+    # The fight is one piece from the shots to the reaction, with nothing added on its kills.
+    assert fight["start"] <= 905 and fight["end"] >= 938 and fight["zooms"] == [] and fight["sfx"] == []
+    # The Chicken Dinner banner gets a slow push-in.
+    assert any(p["zooms"] for p in plan["pieces"] if p["kind"] in ("ending", "intro", "fight") and p["end"] >= 1190)
     talk = next(p for p in plan["pieces"] if p["kind"] == "talk")
-    assert talk["captions"]                                                     # the funny line gets subtitles
+    assert talk["captions"] is True                    # the funny line gets subtitles
     assert any(p["kind"] == "intro" and p["why"] == "funny" and p.get("captions") for p in plan["pieces"])
+
+
+def test_dead_stretches_inside_a_fight_are_cut_but_action_never_is():
+    t = np.arange(0, 2000, 1.0)
+    gun = np.zeros_like(t)
+    gun[(t >= 100) & (t <= 130)] = 0.9
+    gun[(t >= 200) & (t <= 230)] = 0.9                # 70 s of looting between two bursts of shooting
+    fight = {"start": 100.0, "end": 230.0, "kills": 2, "kill_times": [128.0, 228.0], "players_left": 40}
+    pieces = highlight.fight_pieces(fight, [], None, 0.0, 2000.0, {"t": t, "gunfire": gun})
+    assert len(pieces) == 2 and pieces[0]["end"] <= 140 and pieces[1]["start"] >= 190
+    assert highlight.fight_pieces(fight, [], None, 0.0, 2000.0, None)[0]["end"] >= 230   # no sound data: kept whole
 
 
 def test_shorts_are_short_high_impact_moments():
@@ -132,3 +152,22 @@ def test_shorts_are_short_high_impact_moments():
     lone = {"matches": [{"n": 1, "start": 0.0, "end": 900.0, "ended": "death", "placement": 30, "kills": 1, "score": 3,
                          "fights": [{"start": 400.0, "end": 405.0, "kills": 1, "kill_times": [402.0], "players_left": 60}]}]}
     assert len(highlight.short_moments({"matches": [1]}, lone)) == 1             # a weak match: one Short, not three
+
+
+def test_a_short_shows_the_face_alone_while_talking_with_no_shooting():
+    t = np.arange(0, 100, 1.0)
+    gun = np.zeros_like(t)
+    gun[(t >= 40) & (t <= 48)] = 0.9
+    said = {"segments": [{"start": 12.0, "end": 15.0}, {"start": 16.5, "end": 19.0},     # joined: 1.5 s apart
+                         {"start": 42.0, "end": 45.0},                                    # during shooting: no
+                         {"start": 60.0, "end": 60.5}]}                                   # too short to switch for
+    assert highlight.talk_spans(10.0, 70.0, said, {"t": t, "gunfire": gun}) == [(11.9, 19.2)]
+    from aigcm.studio.edit import FaceSpan, default_edit
+    from aigcm.studio.render import build_graph
+
+    edit = default_edit(10.0, 40.0, 1280, 720, "X", facecam=(0.7, 0.6, 0.3, 0.4))
+    edit = edit.model_copy(update={"face": [FaceSpan(start=11.9, end=19.2)]})
+    graph = build_graph(edit, 10.0, True)
+    assert "between(t,1.900,9.200)" in graph and "[faced]" in graph
+    plain = build_graph(default_edit(10.0, 40.0, 1280, 720, "X"), 10.0, True)
+    assert "[faced]" not in plain                                  # no camera, no face moments
