@@ -1,5 +1,5 @@
 """The kill-match highlight's cut (Highlights Stage 1, S1.4): fights whole, cuts out of words, cards on jumps,
-the teaser first, the ending last."""
+the cold open first, the ending last; kill zooms, sounds and subtitles; short high-impact Shorts."""
 
 import numpy as np
 
@@ -32,9 +32,14 @@ TRANSCRIPT = {"segments": [{"words": [
 def test_a_match_highlight_keeps_fights_whole_and_cuts_the_rest():
     plan = highlight.plan(_map(), [1], 3000.0, TRANSCRIPT)
     pieces = plan["pieces"]
-    assert pieces[0]["kind"] == "teaser" and pieces[0]["label"] == "IN THIS VIDEO"
-    assert highlight.TEASER_S[0] <= pieces[0]["end"] - pieces[0]["start"] <= highlight.TEASER_S[1] + 3
-    body = [p for p in pieces[1:] if p["kind"] != "card"]
+    intro = [p for p in pieces if p["kind"] == "intro"]
+    assert pieces[0] is intro[0] and intro[0]["label"] == "IN THIS VIDEO"
+    # A fast cold open: a few short beats under the hook, the Chicken Dinner last, a whoosh between beats.
+    assert 2 <= len(intro) <= highlight.INTRO_BEATS and intro[-1]["why"] == "dinner"
+    assert all(p["end"] - p["start"] <= highlight.BEAT_S[1] + 2.6 for p in intro)
+    assert all(p["text"] == "7 KILLS + CHICKEN DINNER 🏆" for p in intro)
+    assert intro[0]["sfx"] == [] and all(["whoosh", 0.0] in p["sfx"] for p in intro[1:])
+    body = [p for p in pieces if p["kind"] not in ("card", "intro")]
     assert body[0]["kind"] == "drop"                # the first fight is minutes in: a look at the drop first
     first = body[1]
     # The call before the first fight is in, both fights near each other joined, and the word at the end
@@ -52,9 +57,9 @@ def test_the_session_version_has_match_cards_in_order():
     plan = highlight.plan(_map(), [2, 1], 3000.0)
     cards = [p["text"] for p in plan["pieces"] if p["kind"] == "card" and p["text"].startswith("MATCH")]
     assert cards == ["MATCH 1", "MATCH 2"]
-    matches = [p["match"] for p in plan["pieces"] if p["kind"] not in ("card", "teaser")]
+    matches = [p["match"] for p in plan["pieces"] if p["kind"] not in ("card", "intro")]
     assert matches == sorted(matches)
-    assert plan["pieces"][0]["match"] == 1          # the teaser comes from the better match
+    assert plan["pieces"][0]["kind"] == "intro"     # the cold open takes beats from both matches
 
 
 def test_cuts_never_land_inside_a_word():
@@ -76,12 +81,12 @@ def test_punch_ins_go_on_the_loudest_reactions_inside_kept_footage():
     assert plan["facecam"] == [0.7, 0.6, 0.3, 0.4]
 
 
-def test_no_kills_no_teaser():
+def test_no_kills_no_kill_beats():
     stream_map = {"matches": [{"n": 1, "start": 0.0, "end": 600.0, "ended": "death", "placement": None, "kills": 0,
                                "score": 1.0, "fights": [{"start": 200.0, "end": 210.0, "kills": 0, "kill_times": [],
                                                          "players_left": 50}]}]}
     plan = highlight.plan(stream_map, [1], 700.0)
-    assert plan["pieces"][0]["kind"] != "teaser"
+    assert not any(p["kind"] == "intro" and p["why"] == "kills" for p in plan["pieces"])
 
 
 def test_a_dinner_with_few_kills_keeps_its_last_circles_and_gunfights():
@@ -92,8 +97,38 @@ def test_a_dinner_with_few_kills_keeps_its_last_circles_and_gunfights():
     stream_map = {"matches": [{"n": 1, "start": 100.0, "end": 2000.0, "ended": "dinner", "placement": 1, "kills": 1, "score": 20,
                                "fights": [{"start": 1200.0, "end": 1210.0, "kills": 1, "kill_times": [1205.0], "players_left": 30}]}]}
     plan = highlight.plan(stream_map, [1], 3000.0, sounds={"t": t, "gunfire": gun})
-    body = [p for p in plan["pieces"] if p["kind"] not in ("card", "teaser")]
+    body = [p for p in plan["pieces"] if p["kind"] not in ("card", "intro")]
     assert any(p["start"] <= 1820 and p["end"] >= 2000 for p in body)          # the last 3 minutes
     assert any(p["start"] <= 500 and p["end"] >= 530 for p in body)            # the gunfight with no kill
     assert not any(p["start"] <= 800 <= p["end"] for p in body)
     assert highlight.titles_for(stream_map, [1], plan)[0][0].startswith("CHICKEN DINNER WITH 1 FINISHES")
+
+
+def test_the_editing_follows_the_action():
+    plan = highlight.plan(_map(), [1], 3000.0, TRANSCRIPT,
+                          talks=[{"start": 600.0, "end": 630.0, "peak": 615.0, "talk_score": 9, "title": "Bhai kya kar raha"}])
+    fight = next(p for p in plan["pieces"] if p["kind"] == "fight" and p["start"] <= 910 <= p["end"])
+    # A quick zoom on each kill (kills 5 s apart each get their own), a boom at the end of a burst.
+    assert [round(t + fight["start"]) for t in fight["zooms"]] == [910, 915, 930, 938]
+    assert any(name == "boom" for name, _ in fight["sfx"])
+    talk = next(p for p in plan["pieces"] if p["kind"] == "talk")
+    assert talk["captions"]                                                     # the funny line gets subtitles
+    assert any(p["kind"] == "intro" and p["why"] == "funny" and p.get("captions") for p in plan["pieces"])
+
+
+def test_shorts_are_short_high_impact_moments():
+    stream_map = _map()
+    plan = highlight.plan(stream_map, [1], 3000.0, TRANSCRIPT)
+    shorts = highlight.short_moments(plan, stream_map, [{"start": 600.0, "end": 650.0, "talk_score": 9, "title": "Bhai"}])
+    assert 1 <= len(shorts) <= highlight.SHORTS_MAX
+    assert all(highlight.SHORT_S[0] - 0.01 <= s["end"] - s["start"] <= highlight.SHORT_S[1] + 0.01 for s in shorts)
+    assert shorts[0]["kind"] == "dinner" and shorts[0]["role"] == "teaser" and "DINNER" in shorts[0]["title"]
+    kinds = {s["kind"] for s in shorts}
+    assert "clutch" in kinds or "fight" in kinds                                 # the 4-kill burst
+    burst = next(s for s in shorts if s["kind"] in ("clutch", "fight"))
+    assert burst["start"] <= 910 - highlight.SHORT_LEAD_S + 0.01 and burst["end"] >= 938 and burst["kills"] == 4
+    for a in shorts:                                                            # no two Shorts overlap
+        assert all(a is b or a["end"] <= b["start"] or a["start"] >= b["end"] for b in shorts)
+    lone = {"matches": [{"n": 1, "start": 0.0, "end": 900.0, "ended": "death", "placement": 30, "kills": 1, "score": 3,
+                         "fights": [{"start": 400.0, "end": 405.0, "kills": 1, "kill_times": [402.0], "players_left": 60}]}]}
+    assert len(highlight.short_moments({"matches": [1]}, lone)) == 1             # a weak match: one Short, not three

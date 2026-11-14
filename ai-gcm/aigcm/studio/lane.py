@@ -423,7 +423,7 @@ def plan_highlight(settings, session, render):
             the_plan["pieces"] = [p for i, p in enumerate(the_plan["pieces"]) if i not in drop]
             the_plan["dropped"] = sorted(drop)
         out_dir.mkdir(parents=True, exist_ok=True)
-        video = highlight.render(the_plan, source, info, out_dir / "video.mp4", threads)
+        video = highlight.render(the_plan, source, info, out_dir / "video.mp4", threads, transcript=said)
         make_view(video, threads)
         names, words = highlight.titles_for(stream_map, numbers, the_plan)
         moments = [Moment(source, t + 0.3, "kill", score=1.0)
@@ -436,18 +436,17 @@ def plan_highlight(settings, session, render):
         engine_text = (f"Full stream: {link}\n\n" if link else "") + title_maker.KRAFTON_LINE
         post = brand.post_text(names[0], engine_text, ["#bgmi", "#bgmihighlights"], kit, own_text=True)
         shorts = []
-        for i, moment in enumerate(highlight.short_moments(the_plan)):
+        talks = read_json(folder / "moments.json", []) or []
+        for i, moment in enumerate(highlight.short_moments(the_plan, stream_map, talks, highlight._words(said))):
             moment["events"] = [{"t": t, "kind": "self_kill"} for m in stream_map["matches"] for t in m["kill_times"]
                                 if moment["start"] <= t <= moment["end"]]
-            kills = len(moment["events"])
-            moment["kills"] = kills
-            title = ("CHICKEN DINNER 🏆" if moment["role"] == "teaser" and any(
-                m["ended"] == "dinner" for m in stream_map["matches"] if m["n"] in numbers)
-                else f"{kills} FINISHES 🔥" if kills > 1 else "WAIT FOR IT 😱")
+            moment["kills"] = len(moment["events"])
+            title = moment["title"]
             name = f"hl_{render_id[:8]}_{i + 1}.mp4"
             (folder / "clips").mkdir(exist_ok=True)
-            highlight.render_short(moment, source, info, folder / "clips" / name, title, cam, None, None, threads,
-                                   game)
+            # A funny Short shows what was said (subtitles); the others let the action speak.
+            highlight.render_short(moment, source, info, folder / "clips" / name, title, cam,
+                                   said if moment.get("kind") == "funny" else None, None, threads, game)
             shorts.append(dict(moment, file=name, title=title))
         write_json(out_dir / "plan.json", the_plan)
         write_json(out_dir / "titles.json", {"titles": names, "words": words})
@@ -468,12 +467,14 @@ def plan_highlight(settings, session, render):
             if any(c.clip_key == key for c in st.clips):
                 continue
             labels = {"type": "fight", "game": st.game or "bgmi", "kills": short["kills"], "knocks": 0,
-                      "win": short["role"] == "teaser" and "DINNER" in short["title"], "marked": False,
+                      "win": short.get("kind") == "dinner", "marked": False,
                       "talk": None, "players_left": None, "length_s": round(short["end"] - short["start"], 1)}
             st.clips.append(Clip(clip_key=key, rank=rank + i, start_s=short["start"], end_s=short["end"],
-                                 type="win" if labels["win"] else "multi_kill" if short["kills"] > 1 else "fight",
+                                 type={"dinner": "win", "funny": "funny", "clutch": "clutch"}.get(
+                                     short.get("kind"), "multi_kill" if short["kills"] > 1 else "fight"),
                                  score=100.0 - i, file_name=short["file"], title=short["title"],
-                                 why=f"From the highlight ({'teaser' if short['role'] == 'teaser' else 'best fight'})",
+                                 why="From the highlight: " + {"dinner": "the Chicken Dinner", "funny": "a funny moment",
+                                                             "clutch": "a last-circle clutch"}.get(short.get("kind"), "a kill burst"),
                                  details={"labels": labels, "titles": [short["title"]], "anchor": short["end"] - 4,
                                           "from_highlight": render_id, "role": short["role"]}))
         project.queue_posters(s, st)

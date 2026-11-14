@@ -221,6 +221,19 @@ The owner approved [plans/Highlights Stage 1 plan.md](../plans/Highlights%20Stag
 3. Then render the 3 full-stream highlights and check them by frames, then the owner checks them (S1.10).
 4. Known risks: teammates' counters after a death in vertical layouts (ANJI, DIPENDU, rajput) still read as kills in the old scans; spawn-island starts are late.
 
+## The owner's first look: intro, editing, Shorts (14 Nov)
+
+The owner asked for three changes before watching further.
+- **"The intro is the most crucial part":** the single 15-25 s teaser became a **cold open** (`highlight.cold_open`). It takes the 3-4 best beats of the video, 3-6 s each: kill bursts (more kills and later in the match score higher), the funniest talk moment (Gemini 8+, with subtitles), and the Chicken Dinner banner last. The beats build up to the biggest, with a whoosh between beats, "IN THIS VIDEO" on the first and a big hook ("15 KILLS + CHICKEN DINNER 🏆") across all of them, at the top so it covers neither the face cam nor the streamer's name bar. GtxPreet's came out at 26 s, ending on the "#1 WINNER WINNER CHICKEN DINNER" banner.
+- **"The editing should reflect the dialogue or action"** (`highlight.effects`, `render_piece`):
+  - a quick zoom (1.18x) on every kill;
+  - a boom (our own synthesised sound) at the end of a burst of 2+ kills;
+  - face punch-ins up to one per 30 s (was 75), and every funny talk piece gets one at its loudest moment;
+  - big subtitles (84 px, above the overlay bar) on talk pieces and on the funny lines inside fights, not on whole stretches.
+  - Checked on GtxPreet by frames: the hook and label at the top, subtitles readable, the punch-in on "MERA NA, MERA".
+- **"Shorts are for high-impact moments; long Shorts are too much"** (`highlight.short_moments`): Shorts are 15-40 s (were up to 58), cut from the run-up to the reaction. They are chosen by impact: the Chicken Dinner (the last kill and the banner), kill bursts (a whole fight's kills up to 15 s apart; "3 KILLS IN 4 SECONDS 🔥", "LAST CIRCLE CLUTCH 😱"), and the funniest talk (with subtitles). There are at most 3 and never two that overlap, and a weak match gets only one.
+- All 4 test highlights were remade in the app with these changes.
+
 ## Stacked Shorts from vertical streams (owner, 14 Nov)
 
 **Owner's decision:** Shorts and Reels (9:16) are stacked, the face cam on top and the game filling the rest; long YouTube highlights (16:9) keep the stream as it was streamed (a vertical stream over its blurred copy). This matches the research: GoBLiN shorts' stacked Shorts have a 90K median against 46K for game-only crops, and every stream-fed channel keeps the stream layout in long videos.

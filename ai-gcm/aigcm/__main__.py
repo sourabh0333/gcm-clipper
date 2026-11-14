@@ -390,7 +390,8 @@ def cmd_highlight(args, settings):
         what = p.get("text") if p["kind"] == "card" else f"{p['start'] / 60:6.2f}-{p['end'] / 60:6.2f} min ({p['end'] - p['start']:.0f}s)"
         print(f"  {p['kind']:8s} {what} {'punch ' + str(p['punch']) if p.get('punch') else ''}")
     if args.render:
-        highlight.render(the_plan, info["path"], info, job.path(name + ".mp4"), threads=args.threads)
+        highlight.render(the_plan, info["path"], info, job.path(name + ".mp4"), threads=args.threads,
+                         transcript=read_json(job.path("transcript.json")))
 
 
 def cmd_serve(args, settings):
