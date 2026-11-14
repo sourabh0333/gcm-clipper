@@ -434,7 +434,8 @@ def short_moments(the_plan, stream_map=None, talks=(), words=()):
             score = 4.0 * n + (4 if late else 0) + (2 if quick else 0)
             a, b = first - SHORT_LEAD_S, last + SHORT_TAIL_S
             role = "clutch" if late and n >= 2 else "fight"
-            title = (f"{n} KILLS IN {max(1, round(last - first))} SECONDS 🔥" if quick and n >= 3
+            secs = max(1, round(last - first))
+            title = (f"{n} KILLS IN {secs} SECOND{'S' if secs > 1 else ''} 🔥" if quick and n >= 3
                      else "LAST CIRCLE CLUTCH 😱" if role == "clutch" else f"{n} KILLS 🔥" if n >= 2 else "ONE TAP 🎯")
             candidates.append({"score": score, "start": a, "end": b, "kills": n, "match": m["n"], "role": role,
                                "title": title})
