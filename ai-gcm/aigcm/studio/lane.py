@@ -416,19 +416,22 @@ def plan_highlight(settings, session, render):
         said = read_json(folder / "transcript.json")
         stream_cam = facecam.for_stream(folder, source) or {}
         cam, game = stream_cam.get("box"), (stream_cam.get("layout") or {}).get("game")
+        marks = _marks(folder, said)
+        talks = read_json(folder / "moments.json", []) or []
         # The 16:9 highlight keeps the stream as streamed (owner, 14 Nov); the camera box is for punch-ins.
-        the_plan = highlight.plan(stream_map, numbers, info["duration"], said, heard, loud,
-                                  read_json(folder / "moments.json", []) or [], cam)
+        the_plan = highlight.plan(stream_map, numbers, info["duration"], said, heard, loud, talks, cam, marks)
         if drop:
             the_plan["pieces"] = [p for i, p in enumerate(the_plan["pieces"]) if i not in drop]
             the_plan["dropped"] = sorted(drop)
         out_dir.mkdir(parents=True, exist_ok=True)
         video = highlight.render(the_plan, source, info, out_dir / "video.mp4", threads, transcript=said)
         make_view(video, threads)
-        names, words = highlight.titles_for(stream_map, numbers, the_plan)
+        names, words = highlight.titles_for(stream_map, numbers, the_plan, transcript=said)
         moments = [Moment(source, t + 0.3, "kill", score=1.0)
                    for m in stream_map["matches"] if m["n"] in numbers for t in m["kill_times"]
                    if any(p["kind"] != "card" and p["start"] <= t <= p["end"] for p in the_plan["pieces"])]
+        # Rule 48: the thumbnail's face is the streamer reacting (a shout or laugh), not a calm frame.
+        moments += [Moment(source, t, "reaction", score=s) for t, s in highlight.reaction_peaks(the_plan, heard)]
         if moments:
             make_set(moments, cam, words, out_dir)
             if (out_dir / "thumb_1.jpg").exists():
@@ -436,17 +439,17 @@ def plan_highlight(settings, session, render):
         engine_text = (f"Full stream: {link}\n\n" if link else "") + title_maker.KRAFTON_LINE
         post = brand.post_text(names[0], engine_text, ["#bgmi", "#bgmihighlights"], kit, own_text=True)
         shorts = []
-        talks = read_json(folder / "moments.json", []) or []
-        for i, moment in enumerate(highlight.short_moments(the_plan, stream_map, talks, highlight._words(said))):
+        for i, moment in enumerate(highlight.short_moments(the_plan, stream_map, talks, highlight._words(said),
+                                                           heard, marks, said)):
             moment["events"] = [{"t": t, "kind": "self_kill"} for m in stream_map["matches"] for t in m["kill_times"]
                                 if moment["start"] <= t <= moment["end"]]
             moment["kills"] = len(moment["events"])
             title = moment["title"]
             name = f"hl_{render_id[:8]}_{i + 1}.mp4"
             (folder / "clips").mkdir(exist_ok=True)
-            # A funny Short shows what was said (subtitles); the others let the action speak.
+            # A talk Short shows what was said (subtitles); the others let the action speak.
             highlight.render_short(moment, source, info, folder / "clips" / name, title, cam,
-                                   said if moment.get("kind") == "funny" else None, None, threads, game,
+                                   said if moment.get("kind") in ("funny", "marked") else None, None, threads, game,
                                    sounds=heard, said=said)
             shorts.append(dict(moment, file=name, title=title))
         write_json(out_dir / "plan.json", the_plan)
@@ -471,16 +474,26 @@ def plan_highlight(settings, session, render):
                       "win": short.get("kind") == "dinner", "marked": False,
                       "talk": None, "players_left": None, "length_s": round(short["end"] - short["start"], 1)}
             st.clips.append(Clip(clip_key=key, rank=rank + i, start_s=short["start"], end_s=short["end"],
-                                 type={"dinner": "win", "funny": "funny", "clutch": "clutch"}.get(
+                                 type={"dinner": "win", "funny": "funny", "clutch": "clutch", "marked": "funny"}.get(
                                      short.get("kind"), "multi_kill" if short["kills"] > 1 else "fight"),
                                  score=100.0 - i, file_name=short["file"], title=short["title"],
                                  why="From the highlight: " + {"dinner": "the Chicken Dinner", "funny": "a funny moment",
-                                                             "clutch": "a last-circle clutch"}.get(short.get("kind"), "a kill burst"),
+                                                             "clutch": "a last-circle clutch",
+                                                             "marked": "a moment you marked"}.get(short.get("kind"), "a kill burst"),
                                  details={"labels": labels, "titles": [short["title"]], "anchor": short["end"] - 4,
                                           "from_highlight": render_id, "role": short["role"]}))
         project.queue_posters(s, st)
     task.after = after
     return task
+
+
+def _marks(folder, said):
+    """Times the creator marked live: the app's button, a !clip in chat, or saying "clip that"."""
+    from .. import markers
+    from ..jobs import Job
+
+    found = markers.load(Job(folder)) + (markers.from_transcript(said) if said else [])
+    return sorted({round(m["t"], 1) for m in found})
 
 
 def _npz(path):

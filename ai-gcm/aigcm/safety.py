@@ -14,9 +14,9 @@ import re
 GAALI = re.compile(
     r"(?:\bch+u+t+i*y|\bbh?en+ ?ch|\bb?h?ehen ?ke\b|\bbhen ?ke\b|\bmadar ?ch|\bmaa ?ki ?ch|\bm+c\b|\bb+c\b|\bbsdk\b|"
     r"\bg+a+n+d+u*\b|\bgaand\b|\blawd|\blund\b|\bl+o+d+[aeu]\b|\bran+d+i\b|\bhar+am+i\b|\bkamin|\bkutt?e\b|\bsaal[ae]\b|"
-    r"\bbhosd|\bbhosad|\bchod\b|\bchodu\b|\bteri maa\b|\bbakchod|"
+    r"\bbhosd|\bbhosad|\bchod\b|\bchodu\b|\bteri maa\b|\bbakchod|\bbhad[wv]|"
     r"\bfuck|\bshit\b|\bbitch|\basshole\b|\bmotherf|\bwtf\b|"
-    r"चुत|भेन|भैन|मादर|गांड|गाँड|लौड|लंड|रंडी|हरामी|भोसड|चोद|बकचोद|कमीन|कुत्त|साल[ाे])", re.I)
+    r"चुत|भेन|भैन|मादर|गांड|गाँड|लौड|लंड|रंडी|हरामी|भोसड|चोद|बकचोद|कमीन|कुत्त|साल[ाे]|भड़व|भडव)", re.I)
 # Slurs that YouTube and sponsors treat more harshly than ordinary swearing.
 SLURS = re.compile(r"\b(?:chakka|hijra|hijda|chhakka|katua|mulla|chamar|bhangi|retard)\b|छक्का|हिजड़ा|कटुआ|चमार|भंगी", re.I)
 BETTING = re.compile(r"\b(?:betting|bet ?365|1 ?x ?bet|parimatch|stake\.com|satta|casino|rummy ?circle|teen ?patti|"

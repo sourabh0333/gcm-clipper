@@ -30,7 +30,8 @@ export type StreamHighlights = {
 };
 
 const PIECE_LABEL: Record<string, string> = {
-  teaser: "Opening (IN THIS VIDEO)", drop: "The drop", fight: "Fight", talk: "Talk", ending: "Ending",
+  intro: "Opening (IN THIS VIDEO)", teaser: "Opening (IN THIS VIDEO)", drop: "The drop", fight: "Fight", talk: "Talk",
+  marked: "You marked this", ending: "Ending",
 };
 
 function ending(m: MapMatch) {
