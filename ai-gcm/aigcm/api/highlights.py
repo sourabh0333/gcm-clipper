@@ -5,6 +5,7 @@ Nothing posts by itself: "Plan the posts" makes drafts in the calendar, which th
 
 import shutil
 from datetime import datetime, time, timedelta
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -45,6 +46,7 @@ def highlight_view(settings, db, render):
     params = render.params or {}
     out = {"id": render.id, "status": render.status, "error": render.error, "stream_id": params.get("stream_id"),
            "matches": params.get("matches"), "session": bool(params.get("session")), "auto": bool(params.get("auto")),
+           "style": params.get("style") or "kill",
            "created_at": _stamp(render.created_at)}
     if render.status != "done":
         return out
@@ -63,7 +65,8 @@ def highlight_view(settings, db, render):
         else:
             pieces.append({"i": i, "kind": p["kind"], "start": p["start"], "end": p["end"],
                            "length": round(p["end"] - p["start"], 1), "kills": p.get("kills", 0),
-                           "title": p.get("title"), "match": p.get("match"), "punch": len(p.get("punch") or [])})
+                           "title": p.get("title"), "match": p.get("match"), "punch": len(p.get("punch") or []),
+                           "funny": p.get("funny")})
     posts = db.scalars(select(Post).where(Post.render_id == render.id)).all()
     out.update(matches=result.get("matches"), length_s=result.get("length"), kept=result.get("kept"),
                kills=result.get("kills"), label=result.get("label"), titles=names.get("titles", []),
@@ -127,6 +130,7 @@ def make_map(stream_id: str, user=Depends(current_user), db=Depends(get_db)):
 
 
 class MakeBody(BaseModel):
+    style: Literal["kill", "comedy"] = "kill"     # Stage 2: "comedy" is the funny-session cut of the stream
     matches: list[int] | None = Field(default=None, max_length=8)
     session: bool = False
     drop: list[int] = Field(default_factory=list, max_length=200)
@@ -145,16 +149,21 @@ def make(stream_id: str, body: MakeBody, request: Request, user=Depends(current_
     if project.source_file(folder) is None:
         raise HTTPException(409, "The recording is no longer on the laptop.")
     known = {m["n"] for m in stream_map["matches"]}
-    if body.matches and not set(body.matches) <= known:
-        raise HTTPException(422, "No such match in this stream.")
-    if not body.matches and not stream_map.get("best"):
-        raise HTTPException(409, "No match with kills was found in this stream.")
-    render = Render(user_id=user.id, kind="highlight",
-                    params={"stream_id": stream.id, "matches": sorted(body.matches) if body.matches else None,
-                            "session": body.session, "drop": sorted(set(body.drop))})
+    if body.style == "comedy":
+        if not any(p["kind"] in ("match", "between") for p in stream_map.get("parts") or []):
+            raise HTTPException(409, "No BGMI part was found in this stream.")
+        params = {"stream_id": stream.id, "style": "comedy", "drop": sorted(set(body.drop))}
+    else:
+        if body.matches and not set(body.matches) <= known:
+            raise HTTPException(422, "No such match in this stream.")
+        if not body.matches and not stream_map.get("best"):
+            raise HTTPException(409, "No match with kills was found in this stream.")
+        params = {"stream_id": stream.id, "matches": sorted(body.matches) if body.matches else None,
+                  "session": body.session, "drop": sorted(set(body.drop))}
+    render = Render(user_id=user.id, kind="highlight", params=params)
     db.add(render)
     db.add(AuditEntry(user_id=user.id, action="highlight", detail={"stream": stream.id, "matches": body.matches,
-                                                                     "session": body.session}))
+                                                                     "session": body.session, "style": body.style}))
     db.commit()
     return highlight_view(settings, db, render)
 

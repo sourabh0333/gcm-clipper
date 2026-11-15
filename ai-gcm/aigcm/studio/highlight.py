@@ -984,6 +984,15 @@ def zoom_factor(times):
     return "1+" + "+".join(terms) if terms else None
 
 
+def _overlay_png(folder, item):
+    from . import hook
+    if not (item.get("text") or "").strip():
+        return None
+    if item["kind"] == "headline":
+        return hook.cached(folder, item["text"], "yellow", 220, backing=True, width=WIDE[0], start_size=110)
+    return hook.cached(folder, item["text"], "white", 140, backing=True, width=720, start_size=90)
+
+
 def _hook_png(folder, text):
     from . import hook
     return hook.cached(folder, text, "yellow", 260, backing=True, width=WIDE[0], start_size=150)
@@ -1008,6 +1017,14 @@ def render_piece(piece, source, info, out, folder, facecam=None, threads=3, tran
         cmd += ["-i", str(label)]
         label_in = inputs
         inputs += 1
+    # The comedy cut's headlines (big punchlines at the top) and stickers (a word and an emoji, top right).
+    shown = []
+    for item in piece.get("overlays") or []:
+        png = _overlay_png(folder, item)
+        if png is not None and 0 <= item["a"] < length:
+            cmd += ["-i", str(png)]
+            shown.append((inputs, item))
+            inputs += 1
     hook_text = _hook_png(folder, piece["text"]) if piece.get("text") and piece["kind"] == "intro" else None
     if hook_text:
         cmd += ["-i", str(hook_text)]
@@ -1062,6 +1079,10 @@ def render_piece(piece, source, info, out, folder, facecam=None, threads=3, tran
     if label:
         lines.append(f"{base}[{label_in}:v]overlay=0:40[labelled]")
         base = "[labelled]"
+    for k, (index, item) in enumerate(shown):
+        x, y = ("0", "50") if item["kind"] == "headline" else ("W-w-50", "230")
+        lines.append(f"{base}[{index}:v]overlay={x}:{y}:enable='between(t,{item['a']:.2f},{item['b']:.2f})'[ov{k}]")
+        base = f"[ov{k}]"
     tail = ""
     work = None
     words = _piece_words(piece, transcript) if piece.get("captions") else []

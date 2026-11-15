@@ -14,11 +14,11 @@ export type MapMatch = {
 export type StreamMap = { duration: number; parts: MapPart[]; matches: MapMatch[]; best: number | null; session: number[] };
 export type HighlightPiece = {
   i: number; kind: string; text?: string; start?: number; end?: number; length?: number; kills?: number;
-  title?: string | null; match?: number; punch?: number;
+  title?: string | null; match?: number; punch?: number; funny?: number | null;
 };
 export type Highlight = {
   id: string; status: "queued" | "running" | "done" | "failed"; error: string | null; stream_id: string;
-  matches: number[] | null; session: boolean; auto: boolean; created_at: string | null;
+  matches: number[] | null; session: boolean; auto: boolean; created_at: string | null; style?: "kill" | "comedy";
   length_s?: number; kept?: number; kills?: number; label?: "main" | "second"; titles?: string[]; description?: string;
   pieces?: HighlightPiece[]; dropped?: number[]; video?: string; play?: string; thumbnails?: string[];
   shorts?: { clip_id: number; title: string | null; role: string; length_s: number; poster: string; decision: string | null }[];
@@ -31,7 +31,7 @@ export type StreamHighlights = {
 
 const PIECE_LABEL: Record<string, string> = {
   intro: "Opening (IN THIS VIDEO)", teaser: "Opening (IN THIS VIDEO)", drop: "The drop", fight: "Fight", talk: "Talk",
-  marked: "You marked this", ending: "Ending",
+  marked: "You marked this", ending: "Ending", unit: "Funny bit",
 };
 
 function ending(m: MapMatch) {
@@ -71,7 +71,8 @@ function HighlightCard({ h, onChange }: { h: Highlight; onChange: () => void }) 
     setBusy(true);
     try {
       await api(`/api/streams/${h.stream_id}/highlights`, {
-        method: "POST", body: { matches: h.matches, session: h.session, drop: [...off] },
+        method: "POST", body: h.style === "comedy" ? { style: "comedy", drop: [...off] }
+          : { matches: h.matches, session: h.session, drop: [...off] },
       });
       setOff(new Set());
       onChange();
@@ -116,13 +117,15 @@ function HighlightCard({ h, onChange }: { h: Highlight; onChange: () => void }) 
     }
   }
 
-  const what = h.session ? "Session" : `Match ${(h.matches ?? []).join(", ") || "best"}`;
+  const comedy = h.style === "comedy";
+  const what = comedy ? "Comedy cut" : h.session ? "Session" : `Match ${(h.matches ?? []).join(", ") || "best"}`;
   if (h.status !== "done") {
     return (
       <div className="card">
         <div className="spread"><div className="title">{what}</div><span className={`chip ${h.status}`}>{h.status === "failed" ? "Failed" : "Making…"}</span></div>
         {h.status === "failed" ? <p className="error small">{h.error}</p>
-          : <p className="small muted">Cutting the highlight and its Shorts. A 10-minute video takes about 15 minutes.</p>}
+          : <p className="small muted">{comedy ? "Finding the funny bits and cutting about 8 minutes of them, with Shorts. This takes about 15-20 minutes."
+              : "Cutting the highlight and its Shorts. A 10-minute video takes about 15 minutes."}</p>}
         {h.status === "failed" && <button className="danger" onClick={remove}>Delete</button>}
       </div>
     );
@@ -131,14 +134,21 @@ function HighlightCard({ h, onChange }: { h: Highlight; onChange: () => void }) 
   return (
     <div className="card">
       <div className="spread">
-        <div className="title">{what} · {h.kills} kills · {duration(h.length_s ?? 0)}</div>
+        <div className="title">{what}{comedy ? "" : ` · ${h.kills} kills`} · {duration(h.length_s ?? 0)}</div>
         <span className="chip done">Ready</span>
       </div>
       <video className="highlight-video" src={h.play} controls preload="metadata" playsInline />
-      <p className="small muted">
-        Keeps {Math.round((h.kept ?? 0) * 100)}% of the match. Suggested for your{" "}
-        <b>{h.label === "main" ? "main channel (a record match)" : "second channel (a match cut)"}</b>.
-      </p>
+      {comedy ? (
+        <p className="small muted">
+          {pieces.filter((p) => p.kind === "unit").length} funny bits in stream order. Suggested for your <b>second channel</b>.
+          Bits with swearing stay in, but their words are never written on screen or in titles.
+        </p>
+      ) : (
+        <p className="small muted">
+          Keeps {Math.round((h.kept ?? 0) * 100)}% of the match. Suggested for your{" "}
+          <b>{h.label === "main" ? "main channel (a record match)" : "second channel (a match cut)"}</b>.
+        </p>
+      )}
       {h.thumbnails && h.thumbnails.length > 0 && (
         <div className="row thumbs">{h.thumbnails.map((t) => <img key={t} src={t} alt="Thumbnail" />)}</div>
       )}
@@ -155,7 +165,7 @@ function HighlightCard({ h, onChange }: { h: Highlight; onChange: () => void }) 
           {h.shorts.map((s) => (
             <Link key={s.clip_id} className="row short-row" to={`/clips/${s.clip_id}/studio`}>
               <img src={s.poster} alt="" />
-              <span>{s.role === "teaser" ? "Teaser" : "Best fight"} · {s.title} · {Math.round(s.length_s)} s</span>
+              <span>{s.role === "teaser" ? "Teaser" : comedy ? "Funny bit" : "Best fight"} · {s.title} · {Math.round(s.length_s)} s</span>
             </Link>
           ))}
         </>
@@ -206,7 +216,7 @@ export default function Highlights({ streamId }: { streamId: string }) {
     return () => window.clearInterval(timer);
   }, [waiting, load]);
 
-  async function make(body: { matches?: number[]; session?: boolean }) {
+  async function make(body: { matches?: number[]; session?: boolean; style?: "comedy" }) {
     setNote("");
     try {
       await api(`/api/streams/${streamId}/highlights`, { method: "POST", body });
@@ -256,6 +266,9 @@ export default function Highlights({ streamId }: { streamId: string }) {
           ))}
           {data.has_source && map.session.length >= 2 && (
             <button onClick={() => make({ session: true })}>Make a session video (matches {map.session.join(", ")})</button>
+          )}
+          {data.has_source && map.parts.some((p) => p.kind === "match") && (
+            <button onClick={() => make({ style: "comedy" })}>Make a comedy cut (the funniest bits, about 8 min)</button>
           )}
           {!data.has_source && <p className="small muted">The recording is no longer on the laptop, so no new highlights can be cut.</p>}
           {data.leftovers && data.leftovers.count > 0 && data.highlights.length > 0 && (

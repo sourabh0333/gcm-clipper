@@ -48,6 +48,26 @@ describe("highlights on the stream page", () => {
     await waitFor(() => expect(calls.some((c) => c.url === "/api/streams/s1/highlights" && JSON.stringify(c.body) === '{"matches":[2]}')).toBe(true));
     fireEvent.click(screen.getByText(/Make a session video/));
     await waitFor(() => expect(calls.some((c) => JSON.stringify(c.body) === '{"session":true}')).toBe(true));
+    fireEvent.click(screen.getByText(/Make a comedy cut/));
+    await waitFor(() => expect(calls.some((c) => JSON.stringify(c.body) === '{"style":"comedy"}')).toBe(true));
+  });
+
+  it("shows a comedy cut's funny bits and makes it again without one", async () => {
+    const calls: { url: string; body: unknown }[] = [];
+    const comedy = { ...done, id: "r2", style: "comedy", kills: 0, titles: ["GTX & LOLO KALESH 😂 | FUNNY BGMI HIGHLIGHT"],
+      pieces: [{ i: 0, kind: "intro", start: 5, end: 9, length: 4 }, { i: 1, kind: "unit", start: 40, end: 60, length: 20, title: "Kara do meri shaadi", funny: 9, punch: 1 },
+               { i: 2, kind: "unit", start: 90, end: 100, length: 10, funny: 8 }],
+      shorts: [{ clip_id: 6, title: "Kara do meri shaadi 😂", role: "funny", length_s: 25, poster: "/media/posters/6", decision: null }],
+    } as StreamHighlights["highlights"][number];
+    serve({ map, map_status: "done", has_source: true, highlights: [comedy] }, calls);
+    render(<MemoryRouter><Highlights streamId="s1" /></MemoryRouter>);
+    expect(await screen.findByText((_, el) => el?.className === "title" && el.textContent === "Comedy cut · 9 min")).toBeTruthy();
+    expect(screen.getByText(/2 funny bits in stream order/)).toBeTruthy();
+    expect(screen.getByText(/Funny bit · Kara do meri shaadi 😂/)).toBeTruthy();
+    fireEvent.click(screen.getByText(/What's in it/));
+    fireEvent.click(screen.getAllByRole("checkbox")[2]);
+    fireEvent.click(screen.getByText("Make again"));
+    await waitFor(() => expect(calls.some((c) => JSON.stringify(c.body) === '{"style":"comedy","drop":[2]}')).toBe(true));
   });
 
   it("plays a finished highlight, leaves out an unticked part and plans the posts", async () => {

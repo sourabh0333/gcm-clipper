@@ -395,9 +395,10 @@ def plan_highlight(settings, session, render):
     stream_map = read_json(folder / "map.json")
     if not stream_map:
         raise RuntimeError("The stream map isn't ready yet.")
-    numbers = params.get("matches") or (stream_map["session"] if params.get("session") else [stream_map["best"]])
+    comedy_style = params.get("style") == "comedy"     # Stage 2: the funny-session cut
+    numbers = params.get("matches") or (stream_map["session"] if params.get("session") else [stream_map.get("best")])
     numbers = [n for n in numbers if n]
-    if not numbers:
+    if not numbers and not comedy_style:
         raise RuntimeError("No match with kills was found in this stream.")
     kit = project.kit_for(stream.clips[0]) if stream.clips else None
     link = stream.link
@@ -418,29 +419,50 @@ def plan_highlight(settings, session, render):
         cam, game = stream_cam.get("box"), (stream_cam.get("layout") or {}).get("game")
         marks = _marks(folder, said)
         talks = read_json(folder / "moments.json", []) or []
-        # The 16:9 highlight keeps the stream as streamed (owner, 14 Nov); the camera box is for punch-ins.
-        the_plan = highlight.plan(stream_map, numbers, info["duration"], said, heard, loud, talks, cam, marks)
+        if comedy_style:
+            from .. import comedy
+            from ..config import Settings
+            from ..jobs import Job
+            from . import comedycut
+
+            units, _ = comedy.find(Job(folder), said, heard, stream_map, Settings.from_env(), marks, talks)
+            the_plan = comedycut.plan(units, stream_map, info["duration"], said, heard, loud, cam)
+        else:
+            # The 16:9 highlight keeps the stream as streamed (owner, 14 Nov); the camera box is for punch-ins.
+            the_plan = highlight.plan(stream_map, numbers, info["duration"], said, heard, loud, talks, cam, marks)
         if drop:
             the_plan["pieces"] = [p for i, p in enumerate(the_plan["pieces"]) if i not in drop]
             the_plan["dropped"] = sorted(drop)
         out_dir.mkdir(parents=True, exist_ok=True)
         video = highlight.render(the_plan, source, info, out_dir / "video.mp4", threads, transcript=said)
         make_view(video, threads)
-        names, words = highlight.titles_for(stream_map, numbers, the_plan, transcript=said)
+        if comedy_style:
+            names, words = comedycut.titles_for(the_plan, kit.name if kit else "")
+        else:
+            names, words = highlight.titles_for(stream_map, numbers, the_plan, transcript=said)
         moments = [Moment(source, t + 0.3, "kill", score=1.0)
                    for m in stream_map["matches"] if m["n"] in numbers for t in m["kill_times"]
                    if any(p["kind"] != "card" and p["start"] <= t <= p["end"] for p in the_plan["pieces"])]
         # Rule 48: the thumbnail's face is the streamer reacting (a shout or laugh), not a calm frame.
         moments += [Moment(source, t, "reaction", score=s) for t, s in highlight.reaction_peaks(the_plan, heard)]
+        if comedy_style:
+            # No kills to show: the frames are the punchlines.
+            moments += [Moment(source, (u["start"] + u["end"]) / 2, "kill", score=u["funny"])
+                        for p in the_plan["pieces"] if p["kind"] == "unit" for u in p.get("units") or []]
         if moments:
             make_set(moments, cam, words, out_dir)
             if (out_dir / "thumb_1.jpg").exists():
                 shutil.copy(out_dir / "thumb_1.jpg", cover_path(video))   # the cover YouTube gets
         engine_text = (f"Full stream: {link}\n\n" if link else "") + title_maker.KRAFTON_LINE
-        post = brand.post_text(names[0], engine_text, ["#bgmi", "#bgmihighlights"], kit, own_text=True)
+        post = brand.post_text(names[0], engine_text,
+                               ["#bgmi", "#bgmifunny" if comedy_style else "#bgmihighlights"], kit, own_text=True)
         shorts = []
-        for i, moment in enumerate(highlight.short_moments(the_plan, stream_map, talks, highlight._words(said),
-                                                           heard, marks, said)):
+        if comedy_style:
+            picked = comedycut.short_moments([u for p in the_plan["pieces"] if p["kind"] == "unit"
+                                              for u in p.get("units") or []], said, highlight._words(said))
+        else:
+            picked = highlight.short_moments(the_plan, stream_map, talks, highlight._words(said), heard, marks, said)
+        for i, moment in enumerate(picked):
             moment["events"] = [{"t": t, "kind": "self_kill"} for m in stream_map["matches"] for t in m["kill_times"]
                                 if moment["start"] <= t <= moment["end"]]
             moment["kills"] = len(moment["events"])
@@ -455,9 +477,11 @@ def plan_highlight(settings, session, render):
         write_json(out_dir / "plan.json", the_plan)
         write_json(out_dir / "titles.json", {"titles": names, "words": words})
         write_json(out_dir / "post.json", post)
-        write_json(out_dir / "result.json", {"matches": numbers, "length": the_plan["length"], "kept": the_plan["kept"],
+        write_json(out_dir / "result.json", {"matches": the_plan["matches"] if comedy_style else numbers,
+                                             "style": "comedy" if comedy_style else "kill",
+                                             "length": the_plan["length"], "kept": the_plan["kept"],
                                              "kills": the_plan["kills"], "shorts": shorts,
-                                             "label": highlight.channel_label(stream_map, numbers)})
+                                             "label": "second" if comedy_style else highlight.channel_label(stream_map, numbers)})
         return "video.mp4"
 
     def after(s, done):

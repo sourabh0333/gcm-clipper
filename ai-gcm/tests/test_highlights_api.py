@@ -48,6 +48,11 @@ def test_the_map_and_asking_for_a_highlight(app):
     assert made["status"] == "queued" and made["matches"] == [2]
     with app.state.sessions() as s:
         assert s.get(Render, made["id"]).params["drop"] == [3]
+    funny = client.post(f"/api/streams/{stream_id}/highlights", json={"style": "comedy"}).json()
+    assert funny["status"] == "queued" and funny["style"] == "comedy"      # Stage 2: needs no match with kills
+    with app.state.sessions() as s:
+        assert s.get(Render, funny["id"]).params == {"stream_id": stream_id, "style": "comedy", "drop": []}
+    assert client.post(f"/api/streams/{stream_id}/highlights", json={"style": "x"}).status_code == 422
     other = client_for(app, "b@example.com")
     assert other.get(f"/api/streams/{stream_id}/highlights").status_code == 404
     assert other.get(f"/api/highlights/{made['id']}").status_code == 404

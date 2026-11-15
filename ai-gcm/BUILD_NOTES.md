@@ -258,7 +258,34 @@ The report ends in a 50-rule specification, each rule marked KEEP, CHANGE or ADD
 
 **Tests (15 Nov):** full suite 300 passed, web 33 passed (a first run died on a Windows WMI call while importing SQLAlchemy; the rerun was clean).
 
-**S1.10 verdict (owner, 15 Nov):** watched the highlights on the phone: "for now it's okay, moving to next part". Stage 1 is closed; fixes come later if the owner or a beta creator finds any. **Next:** Stage 2 (comedy), planned in [plans/Highlights Stage 2 plan.md](../plans/Highlights%20Stage%202%20plan.md) for the owner's approval before code.
+**S1.10 verdict (owner, 15 Nov):** watched the highlights on the phone: "for now it's okay, moving to next part". Stage 1 is closed; fixes come later if the owner or a beta creator finds any.
+
+## Highlights Stage 2: the comedy cut (15 Nov)
+
+[plans/Highlights Stage 2 plan.md](../plans/Highlights%20Stage%202%20plan.md). **The owner approved it with all 8 default answers (15 Nov):** aim for 8:00-8:15 (never padded), the first ~2 h of BGMI, two-stream videos with "THE NEXT DAY…", own stickers only, a face zoom on every punchline, the richer video offered first, names in titles only when said clearly, no voice separation.
+
+**S2.1 caption truth set** (`tests/data/comedy/`, built by `make_truth.py`): 5 JokerClips videos (4 sessions, 1 single match) mapped to 7 stretches of Joker's streams, 97 kept units. Numbers only in git (line times, word counts, laugh tags); the caption files are cached in `data/comedy_captions/` (not in git). `evaluate.py` scores the finder.
+
+**What the measuring showed (honest):**
+- Plain signals don't find the editor's bits: word density is the same inside and outside kept spans (Joker talks all the time); the captioner's laugh tags are 2-4x denser in kept spans but rare. Rules on captions alone: recall 0.06, no better than random (0.08).
+- **Gemini finds the bits:** its candidates cover 13-21% of the stream and contain 42-90% of what the editor kept (about 60%).
+- **Nothing tried ranks them like this editor:** top-rated picks recall 0.22 vs random 0.10 (about 2x random), precision 0.17. Gemini's 1-10 rating is 7.4 for kept bits and 7.3 for dropped ones. Clustering, densest-window and a second Gemini pass that compares all candidates (0.22 again) didn't help. The plan's target (half the editor's bits) is not met. Likely reasons: many equally good bits, the editor's taste, and what's on screen (captions don't show it). On real jobs the heard laughs and shouts also count, which the caption test can't measure.
+- **So the app makes the cut from the best-rated bits and lists every bit with an on/off switch,** so the creator can drop and remake.
+
+**Built:**
+- `aigcm/comedy.py`: lines from the transcript or captions; Gemini's comedy pass (every bit with trigger, punchline, type, 1-10, the line, a one-word label; one request per 20 min of the window, cached in `comedy.json`); rule units from laugh words, heard laughs and shouts, marks and rated talk; `tidy` (edges on lines, 4-45 s, overlaps joined); `window` (the first 2 h of the map's BGMI parts); `select` (about 8 min, best first, then stream order); `blocks` (bits under 30 s apart joined); `overlap_scores`.
+- `aigcm/studio/comedycut.py`: the cut: a 3-5 beat "IN THIS VIDEO" teaser of punchlines; blocks in stream order; the face zoomed on every punchline with no shooting, held for the sentence; one subtitle per bit; the best lines (9+) written big at the top; up to 6 stickers (a label and an emoji); "2 SECONDS LATER…" on jumps of 2-15 min inside a match; black at the end. Titles ("GTXPREET & LOLO KALESH 😂 | FUNNY BGMI HIGHLIGHT", the best line, "… BEING … FOR 8 MINUTES"); Shorts from the best bits (20-60 s).
+- **Swearing:** bits with gaali stay in the video, but their words are never written: no subtitle, headline, sticker, title or Short band. `safety.GAALI` gained stems that GtxPreet's lines showed it missed (lulla/lulli, jhaant, choochi, mutthi maar, tatte, jhaatu).
+- Renderer: `overlays` on a piece (headline at the top, sticker top right, each for a time span).
+- Worker: a highlight render with `style: "comedy"` (lane.plan_highlight branch). API: `POST /api/streams/{id}/highlights {"style": "comedy"}` (needs a BGMI part, not a kill match); the view has `style` and each piece's `funny`. Phone: "Make a comedy cut" on the map card; the card shows "Comedy cut", the number of bits, "Funny bit" parts and Shorts.
+
+**First plan on GtxPreet:** the window is 2 h of BGMI; Gemini made 7 requests and found 87 bits, 196 units with the rules; 18 bits chosen, about 8:54 with the teaser.
+
+**Made in the app on GtxPreet (15 Nov):** 8:56, 3 Shorts ("Kara do meri shaadi meri shaadi 😂" 28 s, a 20 s bit titled "FUNNY MOMENT 😂" because its line had gaali, "Main jab bhi game khelta hoon 💀" 54 s). Titles: the best line, and "8 MINUTES OF PURE KALESH 😂" (the test account's brand kit has no name, so no "[streamer] & [teammate]" title). Checked by frames: an 18 s subtitled teaser, the face zoomed full screen with subtitles on the jokes, yellow headlines at the top on the 9-rated lines, "NOOB 🔥" and "BANTER 😂" stickers top right. Whisper's Hinglish has mistakes in some lines ("hugindar"). **Next:** the owner watches it on the phone (S2.8: stream page → Highlights → Comedy cut).
+
+**Not built yet:** two-stream videos with "THE NEXT DAY…" (the renderer takes one source), single-match mode, the speech-bubble thumbnail; Shorts use the stacked layout from Stage 1.
+
+**Tests:** `test_comedy.py` (8), the comedy case in `test_highlights_api.py`, web `highlights.test.tsx` (4). Full suite 308 passed, web 34 passed (15 Nov).
 
 **Not built (and why):** a teammate's reply or a named person can't be told apart without speaker separation (talk is still scored from Gemini plus reactions); hooded faces aren't detected (only dark or blank); chat-spike forcing needs a full chat log (only `!clip` markers today); the talk-led punchline ending (33) waits for Stage 2 comedy cuts; the optional freeze-frame sticker (30), story stitch (44), speech-bubble thumbnail (48), question title (49) and description template (50).
 
