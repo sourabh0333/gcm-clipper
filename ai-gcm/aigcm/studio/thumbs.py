@@ -135,13 +135,18 @@ def place(canvas, person, side):
     return canvas
 
 
-def words(text, colour, side, folder, room=W // 2 + 40):
+INK = {"black": "&H00141414&"}      # speech-bubble text; the hook's colours otherwise
+BUBBLE_PAD = 34
+BUBBLE_TAIL = 70
+
+
+def words(text, colour, side, folder, room=W // 2 + 40, start=TEXT_START):
     """Big stat words (Anton, 1-2 lines) as an RGBA layer for one half of the thumbnail."""
     import numpy as np
 
     from . import hook
 
-    size = TEXT_START
+    size = start
     layer = None
     for _ in range(7):
         align, margin_l, margin_r = (4, 50, W - room) if side == "left" else (6, W - room, 50)
@@ -154,7 +159,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: T,{hook.LATIN_FONT},{size},{hook.COLOURS[colour]},&H00FFFFFF&,&H00000000&,&H00000000&,0,0,0,0,100,100,1,0,1,{max(6, size // 13)},0,{align},{margin_l},{margin_r},0,1
+Style: T,{hook.LATIN_FONT},{size},{INK.get(colour) or hook.COLOURS[colour]},&H00FFFFFF&,&H00000000&,&H00000000&,0,0,0,0,100,100,1,0,1,{0 if colour in INK else max(6, size // 13)},0,{align},{margin_l},{margin_r},0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -169,8 +174,39 @@ Dialogue: 0,0:00:00.00,0:00:01.00,T,,0,0,0,,{hook._escape(text.upper())}
     return layer.astype(np.float32)
 
 
-def make_set(moments, cam_box, texts, out_dir):
-    """Three thumbnails (thumb_1.jpg ... thumb_3.jpg) in out_dir from the moments; returns their paths."""
+def bubble(text, side, folder):
+    """A speech bubble quoting a line (viewer study rule 48: the comedy thumbnail quotes the top punchline): dark
+    words on a white rounded box with a black outline, its tail pointing to the streamer on the other side."""
+    import cv2
+    import numpy as np
+
+    from .hook import over
+
+    layer = words(f"“{text}”", "black", side, folder, room=W // 2 - 10, start=96)
+    ys, xs = np.where(layer[..., 3] > 0)
+    if not len(ys):
+        return layer
+    x0, y0 = max(12, xs.min() - BUBBLE_PAD), max(12, ys.min() - BUBBLE_PAD)
+    x1, y1 = min(W - 12, xs.max() + BUBBLE_PAD), min(H - BUBBLE_TAIL - 12, ys.max() + BUBBLE_PAD)
+    mask = np.zeros((H, W), np.uint8)
+    r = 40
+    cv2.rectangle(mask, (x0 + r, y0), (x1 - r, y1), 255, -1)
+    cv2.rectangle(mask, (x0, y0 + r), (x1, y1 - r), 255, -1)
+    for cx, cy in ((x0 + r, y0 + r), (x1 - r, y0 + r), (x0 + r, y1 - r), (x1 - r, y1 - r)):
+        cv2.circle(mask, (cx, cy), r, 255, -1)
+    base = x1 - 120 if side == "left" else x0 + 120
+    tip = (x1 + 30, y1 + BUBBLE_TAIL) if side == "left" else (x0 - 30, y1 + BUBBLE_TAIL)
+    cv2.fillPoly(mask, [np.array([(base - 30, y1 - 2), (base + 30, y1 - 2), tip], np.int32)], 255)
+    ring = cv2.dilate(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (13, 13)))
+    shape = np.zeros((H, W, 4), np.float32)
+    shape[ring > 0, 3] = 255                      # the black outline
+    shape[mask > 0, :3] = 255                     # the white box inside it
+    return over(layer, shape)
+
+
+def make_set(moments, cam_box, texts, out_dir, quote=None):
+    """Three thumbnails (thumb_1.jpg ... thumb_3.jpg) in out_dir from the moments; returns their paths. With a
+    `quote`, the first is a speech bubble of that line next to the streamer (the comedy cut)."""
     import cv2
     import numpy as np
 
@@ -214,7 +250,10 @@ def make_set(moments, cam_box, texts, out_dir):
                 canvas = place(canvas, person, side)
             if text:
                 text_side = "left" if side in ("right", None) else "right"
-                canvas = over(words(text, colour, text_side, tmp), canvas)
+                if quote and i == 1:
+                    canvas = over(bubble(quote, text_side, tmp), canvas)
+                else:
+                    canvas = over(words(text, colour, text_side, tmp), canvas)
             path = out_dir / f"thumb_{i}.jpg"
             cv2.imwrite(str(path), np.clip(canvas[..., :3], 0, 255).astype(np.uint8), [cv2.IMWRITE_JPEG_QUALITY, 92])
             paths.append(path)

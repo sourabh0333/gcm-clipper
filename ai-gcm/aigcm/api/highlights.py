@@ -152,6 +152,8 @@ def make(stream_id: str, body: MakeBody, request: Request, user=Depends(current_
     if body.style == "comedy":
         if not any(p["kind"] in ("match", "between") for p in stream_map.get("parts") or []):
             raise HTTPException(409, "No BGMI part was found in this stream.")
+        if (read_json(folder / "transcript.json", {}) or {}).get("broken"):
+            raise HTTPException(409, lane.BROKEN_TALK)
         params = {"stream_id": stream.id, "style": "comedy", "drop": sorted(set(body.drop))}
     else:
         if body.matches and not set(body.matches) <= known:

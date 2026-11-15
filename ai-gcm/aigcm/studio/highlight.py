@@ -1144,6 +1144,11 @@ def render(the_plan, source, info, out, threads=3, progress=None, transcript=Non
             part = work / f"part_{i:03d}.mp4"
             if piece["kind"] == "card":
                 render_card(piece["text"], part, work, piece["length"])
+            elif piece.get("source"):
+                # A piece from another stream (the comedy cut's "THE NEXT DAY…" part): its own file, layout,
+                # camera box and transcript travel with it.
+                render_piece(piece, piece["source"], piece["info"], part, work, piece.get("facecam"), threads,
+                             piece.get("said"))
             else:
                 render_piece(piece, source, info, part, work, the_plan.get("facecam"), threads, transcript)
             parts.append(part)

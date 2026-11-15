@@ -6,6 +6,7 @@ transaction open (ffmpeg takes seconds to minutes, and an open write transaction
 the M2 lesson), then recorded in a second short transaction."""
 
 import shutil
+from datetime import timedelta
 from pathlib import Path
 
 from sqlalchemy import select
@@ -343,6 +344,7 @@ def plan_compilation(settings, session, render):
 
 
 HIGHLIGHTS = "highlights"
+BROKEN_TALK = "The talk in this stream couldn't be written down well enough for a comedy cut."
 
 
 def highlight_folder(settings, stream, render_id):
@@ -405,6 +407,17 @@ def plan_highlight(settings, session, render):
     out_dir = highlight_folder(settings, stream, render.id)
     stream_id, user_id, render_id = stream.id, stream.user_id, render.id
     drop = set(params.get("drop") or [])
+    # Decision 3 of Stage 2: a thin stream borrows the best bits of another stream of the same creator from the
+    # last 3 weeks, newest first, after a "THE NEXT DAY…" card.
+    others = []
+    if params.get("style") == "comedy":
+        since = (stream.created_at or utcnow()) - timedelta(days=21)
+        for other in session.scalars(select(Stream).where(Stream.user_id == stream.user_id, Stream.id != stream.id,
+                                                          Stream.status == "done", Stream.created_at >= since)
+                                     .order_by(Stream.created_at.desc())).all():
+            folder2 = Path(settings.jobs_dir) / other.job_dir
+            if project.source_file(folder2) is not None and (folder2 / "map.json").exists():
+                others.append(folder2)
 
     def task(threads):
         from ..media import probe
@@ -425,8 +438,18 @@ def plan_highlight(settings, session, render):
             from ..jobs import Job
             from . import comedycut
 
-            units, _ = comedy.find(Job(folder), said, heard, stream_map, Settings.from_env(), marks, talks)
-            the_plan = comedycut.plan(units, stream_map, info["duration"], said, heard, loud, cam)
+            if (said or {}).get("broken"):
+                raise RuntimeError(BROKEN_TALK)     # plan risk 2: no comedy cut from a broken transcript
+            engine = Settings.from_env()
+            units, spans = comedy.find(Job(folder), said, heard, stream_map, engine, marks, talks)
+            extra = []
+            need = comedycut.thin(units)
+            for other in others:              # newest first; the first with funny bits fills the gap
+                extra = comedycut.next_day(need, _comedy_source(other, engine))
+                if extra:
+                    break
+            the_plan = comedycut.plan(units, stream_map, info["duration"], said, heard, loud, cam, spans=spans,
+                                      extra=extra)
         else:
             # The 16:9 highlight keeps the stream as streamed (owner, 14 Nov); the camera box is for punch-ins.
             the_plan = highlight.plan(stream_map, numbers, info["duration"], said, heard, loud, talks, cam, marks)
@@ -450,7 +473,7 @@ def plan_highlight(settings, session, render):
             moments += [Moment(source, (u["start"] + u["end"]) / 2, "kill", score=u["funny"])
                         for p in the_plan["pieces"] if p["kind"] == "unit" for u in p.get("units") or []]
         if moments:
-            make_set(moments, cam, words, out_dir)
+            make_set(moments, cam, words, out_dir, quote=comedycut.quote(the_plan) if comedy_style else None)
             if (out_dir / "thumb_1.jpg").exists():
                 shutil.copy(out_dir / "thumb_1.jpg", cover_path(video))   # the cover YouTube gets
         engine_text = (f"Full stream: {link}\n\n" if link else "") + title_maker.KRAFTON_LINE
@@ -518,6 +541,31 @@ def _marks(folder, said):
 
     found = markers.load(Job(folder)) + (markers.from_transcript(said) if said else [])
     return sorted({round(m["t"], 1) for m in found})
+
+
+def _comedy_source(folder, engine):
+    """Another stream's comedy bits and what the renderer needs to cut them (Stage 2's "THE NEXT DAY…")."""
+    from .. import comedy
+    from ..jobs import Job
+    from ..media import probe
+    from . import facecam
+
+    source = project.source_file(folder)
+    said = read_json(folder / "transcript.json")
+    if (said or {}).get("broken"):
+        return {}
+    heard = _npz(folder / "sounds.npz")
+    stream_map = read_json(folder / "map.json") or {}
+    try:
+        units, _ = comedy.find(Job(folder), said, heard, stream_map, engine, _marks(folder, said),
+                               read_json(folder / "moments.json", []) or [])
+    except Exception as exc:          # a broken job shouldn't stop this stream's cut
+        log(f"comedy: no bits from {folder.name} ({exc!r})")
+        return {}
+    info = dict(read_json(folder / "info.json") or {})
+    info.update(probe(source))
+    return {"source": source, "info": info, "transcript": said, "sounds": heard, "audio": _npz(folder / "audio.npz"),
+            "units": units, "facecam": (facecam.for_stream(folder, source) or {}).get("box")}
 
 
 def _npz(path):

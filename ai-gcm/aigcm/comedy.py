@@ -23,7 +23,9 @@ CHUNK_S = 1200.0              # one Gemini request per 20 minutes
 UNIT_S = (4.0, 45.0)          # rule 8: a unit is short; a rant up to 45 s
 FIGHT_UNIT_S = 110.0          # a funny fight can run longer
 PAD_AFTER_S = 1.5             # rule 7: 0-3 s after the punchline
-JOIN_S = 30.0                 # rule 9: units this close in the stream play as one block
+JOIN_S = 8.0                  # rule 9: units this close play as one block; further apart, a hard cut
+                              # between them (the research's "micro-trims"; joining across 30 s kept the gaps
+                              # and made DIPENDU's cut 10:40)
 MIN_FUNNY = 5                 # Gemini's 1-10 rating for a unit to be considered
 TARGET_S = (480.0, 495.0)     # owner, 15 Nov (default 1): about 8:00-8:15 when there's enough
 SOURCE_S = 7200.0             # rule 10: the first ~120 minutes of the BGMI part

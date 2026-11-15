@@ -53,6 +53,10 @@ def test_the_map_and_asking_for_a_highlight(app):
     with app.state.sessions() as s:
         assert s.get(Render, funny["id"]).params == {"stream_id": stream_id, "style": "comedy", "drop": []}
     assert client.post(f"/api/streams/{stream_id}/highlights", json={"style": "x"}).status_code == 422
+    write_json(folder / "transcript.json", {"segments": [], "broken": True})
+    refused = client.post(f"/api/streams/{stream_id}/highlights", json={"style": "comedy"})
+    assert refused.status_code == 409 and "comedy cut" in refused.json()["detail"]
+    (folder / "transcript.json").unlink()
     other = client_for(app, "b@example.com")
     assert other.get(f"/api/streams/{stream_id}/highlights").status_code == 404
     assert other.get(f"/api/highlights/{made['id']}").status_code == 404

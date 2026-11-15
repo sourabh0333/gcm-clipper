@@ -21,7 +21,8 @@ from . import highlight as hl
 TEASER_BEATS = (3, 5)
 TEASER_S = (10.0, 22.0)
 BEAT_S = 5.0
-LATER_CARD_S = (120.0, 900.0)   # a jump this long inside one match gets "2 SECONDS LATER…"
+LATER_CARD_S = (300.0, 900.0)   # a jump this long inside one match gets "2 SECONDS LATER…"...
+LATER_MAX = 2                    # ...at most this often a video (JokerClips uses it now and then)
 NEXT_DAY = "THE NEXT DAY…"
 LATER = "2 SECONDS LATER…"
 HEADLINE_MIN = 9                 # a punchline rated this high is also written big at the top
@@ -82,71 +83,185 @@ def teaser(chosen, transcript, words, audio):
     return out
 
 
-def plan(units, stream_map, duration, transcript=None, sounds=None, audio=None, facecam=None, target=comedy.TARGET_S):
-    """The comedy cut's piece list from the tidied units: teaser, blocks with their punch-ins, subtitles,
-    headlines and stickers, cards on long jumps, black at the end. Same shape as highlight.plan()."""
+SINGLE_S = (480.0, 720.0)        # research rule 13: a match of 8-12 minutes...
+SINGLE_SPEECH = 0.8              # ...with speech in 80% of its seconds...
+SINGLE_BITS = 6                  # ...and at least this many bits rated 7+ is kept almost whole
+DEAD_S = 5.0                     # inside it, only stretches this long with no words and no shooting are cut
+
+
+def single_match(units, stream_map, words, spans=None):
+    """The match to keep almost whole (research rule 13, JokerClips' "Gun Game duo": 9.6 min became 7.7), or
+    None: 8-12 minutes, speech in 80%+ of its seconds, 6+ bits rated 7 or more. The densest one wins."""
+    best = None
+    for m in (stream_map or {}).get("matches", []):
+        length = m["end"] - m["start"]
+        if not SINGLE_S[0] <= length <= SINGLE_S[1]:
+            continue
+        if spans and not any(a <= m["start"] < b for a, b in spans):
+            continue
+        talk = np.zeros(int(length) + 1, bool)
+        for a, b in words:
+            if b > m["start"] and a < m["end"]:
+                talk[max(0, int(a - m["start"])):min(len(talk), int(b - m["start"]) + 2)] = True
+        bits = [u for u in units if u["funny"] >= 7 and m["start"] <= u["start"] <= m["end"]]
+        if talk.mean() >= SINGLE_SPEECH and len(bits) >= SINGLE_BITS:
+            if best is None or len(bits) > best[1]:
+                best = (m, len(bits))
+    return best[0] if best else None
+
+
+def decorate(piece, units, transcript, shots, facecam, stickers):
+    """A piece's face zooms, subtitles, headlines and stickers from the units inside it; returns how many
+    stickers are now used."""
+    start, end = piece["start"], piece["end"]
+    punch, captions, overlays = [], [], []
+    for u in units:
+        line = punchline(u, transcript)
+        if not line:
+            continue
+        a, b = max(line[0], start + 0.2), min(line[1], end - 0.2)
+        if b - a < 0.8:
+            continue
+        if clean(line[2]):
+            captions.append([round(a - start, 2), round(b + 0.2 - start, 2)])
+        quiet = not (len(shots) and ((shots >= a - 1.0) & (shots <= b + 0.5)).any())
+        if facecam and quiet and b - a >= hl.PUNCH_SENTENCE_S[0]:
+            punch.append([round(a - 0.1, 2), round(min(b, a + hl.PUNCH_SENTENCE_S[1] + 2) + 0.2, 2)])
+        if u["funny"] >= HEADLINE_MIN and clean(u.get("line")):
+            overlays.append({"kind": "headline", "text": u["line"].upper(), "a": round(a - start, 2),
+                             "b": round(min(b - start + 0.5, a - start + HEADLINE_S), 2)})
+        label = (u.get("label") or "").upper()
+        if stickers < STICKERS_MAX and label not in FILLER_LABELS and clean(label) and u["funny"] >= 7:
+            emoji = STICKER_EMOJI.get(u.get("type"), "😂")
+            overlays.append({"kind": "sticker", "text": f"{label} {emoji}", "a": round(max(0.0, a - start - 0.3), 2),
+                             "b": round(a - start - 0.3 + STICKER_S, 2)})
+            stickers += 1
+    piece["captions"] = captions
+    if punch:
+        piece["punch"] = punch
+    if overlays:
+        piece["overlays"] = overlays
+    return stickers
+
+
+def _unit_piece(start, end, units, **extra):
+    return dict({"kind": "unit", "start": start, "end": end, "kills": 0, "sfx": [], "zooms": [],
+                 "funny": max([u["funny"] for u in units] or [0]),
+                 "title": next((t for u in units for t in (u.get("line"), u.get("title")) if clean(t)), ""),
+                 "units": [{k: u.get(k) for k in ("start", "end", "funny", "type", "line", "label", "source")}
+                           for u in units]}, **extra)
+
+
+def _finish(intro, body, stream_map, facecam, chosen, mode):
+    if intro:
+        first = next(p for p in body if p["kind"] != "card")
+        first["sfx"] = [["whoosh", 0.0]]
+    pieces = intro + body + [{"kind": "card", "text": "", "length": hl.END_BLACK_S}]
+    total = sum(p.get("length") or (p["end"] - p["start"]) for p in pieces)
+    own = [p for p in body if p["kind"] != "card" and not p.get("source")]
+    kept = sum(p["end"] - p["start"] for p in own)
+    span = own[-1]["end"] - own[0]["start"] if own else 0
+    return {"style": "comedy", "mode": mode,
+            "matches": sorted({m for p in own for m in [_in_match(p["start"], stream_map)] if m}),
+            "pieces": pieces, "length": round(total, 1), "kept": round(kept / span, 3) if span else 0, "kills": 0,
+            "units": len(chosen), "facecam": list(facecam) if facecam else None}
+
+
+def plan_single(match, units, stream_map, duration, transcript, sounds, audio, facecam):
+    """One talk-dense match kept almost whole: only dead stretches (5 s+ with no words and no shooting) cut, no
+    teaser and no cards, ending on its result and the line said about it."""
     words = hl._words(transcript)
+    kills = [t for f in match.get("fights") or [] for t in f.get("kill_times") or []]
+    _, end, _ = hl.ending_span(match, words, duration)
+    whole = {"kind": "unit", "start": match["start"], "end": end}
+    dead = hl.quiet_spans(whole["start"], whole["end"], words, sounds, least=DEAD_S, kills=kills)
+    shots = hl._shots(sounds, hl.GUNFIRE_QUIET)
+    inside = [u for u in units if match["start"] <= u["start"] <= end]
+    body, stickers = [], 0
+    for part in hl.cut_out(whole, dead, keep=0.4):
+        a = round(max(0.0, hl.settle(part["start"], "start", words, audio)), 2)
+        b = round(min(duration, hl.settle(part["end"], "end", words, audio)), 2)
+        mine = [u for u in inside if a <= (u["start"] + u["end"]) / 2 <= b]
+        piece = _unit_piece(a, b, mine)
+        stickers = decorate(piece, mine, transcript, shots, facecam, stickers)
+        body.append(piece)
+    return _finish([], [p for p in body if p["end"] - p["start"] > 1], stream_map, facecam, inside, "single_match")
+
+
+def plan(units, stream_map, duration, transcript=None, sounds=None, audio=None, facecam=None, target=comedy.TARGET_S,
+         spans=None, extra=None):
+    """The comedy cut's piece list from the tidied units: teaser, blocks with their punch-ins, subtitles,
+    headlines and stickers, cards on long jumps, black at the end. Same shape as highlight.plan(). A
+    talk-dense 8-12 minute match is kept almost whole instead (plan_single). `extra` holds another stream's
+    pieces when this one is thin (see next_day); they follow a "THE NEXT DAY…" card."""
+    words = hl._words(transcript)
+    match = single_match(units, stream_map, words, spans)
+    if match is not None:
+        return plan_single(match, units, stream_map, duration, transcript, sounds, audio, facecam)
+    room = sum(p["end"] - p["start"] for p in extra or []) + (hl.CARD_S if extra else 0)
     # The teaser (about 15 s), cards and black come on top of the units.
-    chosen = comedy.select(units, (target[0] - 25, target[1] - 25))
+    chosen = comedy.select(units, (target[0] - 25 - room, target[1] - 25 - room))
     if not chosen:
         raise ValueError("no funny bits were found in this stream")
+    # Joined blocks keep a few seconds between their bits: drop the weakest bits until it fits.
+    while len(chosen) > 3 and sum(b["end"] - b["start"] for b in comedy.blocks(chosen)) > target[1] - 20 - room:
+        chosen.remove(min(chosen, key=lambda u: (u["funny"], -u["start"])))
     shots = hl._shots(sounds, hl.GUNFIRE_QUIET)
-    body, stickers = [], 0
-    for k, block in enumerate(comedy.blocks(chosen)):
+    body, stickers, later = [], 0, 0
+    for block in comedy.blocks(chosen):
         start = round(max(0.0, hl.settle(block["start"], "start", words, audio)), 2)
         end = round(min(duration, hl.settle(block["end"], "end", words, audio)), 2)
         if body:
             prev = body[-1]
             gap = start - prev["end"]
             same = _in_match(start, stream_map) is not None and _in_match(start, stream_map) == _in_match(prev["end"], stream_map)
-            if same and LATER_CARD_S[0] <= gap <= LATER_CARD_S[1]:
+            if same and LATER_CARD_S[0] <= gap <= LATER_CARD_S[1] and later < LATER_MAX:
                 body.append({"kind": "card", "text": LATER, "length": hl.CARD_S})
-        piece = {"kind": "unit", "start": start, "end": end, "kills": 0, "sfx": [], "zooms": [],
-                 "funny": max(u["funny"] for u in block["units"]),
-                 "title": next((t for u in block["units"] for t in (u.get("line"), u.get("title")) if clean(t)), ""),
-                 "units": [{k2: u.get(k2) for k2 in ("start", "end", "funny", "type", "line", "label", "source")}
-                           for u in block["units"]]}
-        punch, captions, overlays = [], [], []
-        for u in block["units"]:
-            line = punchline(u, transcript)
-            if not line:
-                continue
-            a, b = max(line[0], start + 0.2), min(line[1], end - 0.2)
-            if b - a < 0.8:
-                continue
-            if clean(line[2]):
-                captions.append([round(a - start, 2), round(b + 0.2 - start, 2)])
-            quiet = not (len(shots) and ((shots >= a - 1.0) & (shots <= b + 0.5)).any())
-            if facecam and quiet and b - a >= hl.PUNCH_SENTENCE_S[0]:
-                punch.append([round(a - 0.1, 2), round(min(b, a + hl.PUNCH_SENTENCE_S[1] + 2) + 0.2, 2)])
-            if u["funny"] >= HEADLINE_MIN and clean(u.get("line")):
-                overlays.append({"kind": "headline", "text": u["line"].upper(), "a": round(a - start, 2),
-                                 "b": round(min(b - start + 0.5, a - start + HEADLINE_S), 2)})
-            label = (u.get("label") or "").upper()
-            if stickers < STICKERS_MAX and label not in FILLER_LABELS and clean(label) and u["funny"] >= 7:
-                emoji = STICKER_EMOJI.get(u.get("type"), "😂")
-                overlays.append({"kind": "sticker", "text": f"{label} {emoji}", "a": round(max(0.0, a - start - 0.3), 2),
-                                 "b": round(a - start - 0.3 + STICKER_S, 2)})
-                stickers += 1
-        piece["captions"] = captions
-        if punch:
-            piece["punch"] = punch
-        if overlays:
-            piece["overlays"] = overlays
+                later += 1
+        piece = _unit_piece(start, end, block["units"])
+        stickers = decorate(piece, block["units"], transcript, shots, facecam, stickers)
         body.append(piece)
+    if extra:
+        body.append({"kind": "card", "text": NEXT_DAY, "length": hl.CARD_S})
+        body += extra
     intro = teaser(chosen, transcript, words, audio)
-    if intro:
-        first = next(p for p in body if p["kind"] != "card")
-        first["sfx"] = [["whoosh", 0.0]]
-    pieces = intro + body + [{"kind": "card", "text": "", "length": hl.END_BLACK_S}]
-    total = sum(p.get("length") or (p["end"] - p["start"]) for p in pieces)
-    units_only = [p for p in body if p["kind"] != "card"]
-    kept = sum(p["end"] - p["start"] for p in units_only)
-    span = units_only[-1]["end"] - units_only[0]["start"]
-    return {"style": "comedy", "matches": sorted({m for p in body if p["kind"] == "unit"
-                                                 for m in [_in_match(p["start"], stream_map)] if m}),
-            "pieces": pieces, "length": round(total, 1), "kept": round(kept / span, 3) if span else 0, "kills": 0,
-            "units": len(chosen), "facecam": list(facecam) if facecam else None}
+    return _finish(intro, body, stream_map, facecam, chosen, "two_streams" if extra else "session")
+
+
+THIN_S = 360.0                   # owner default 3: a stream with under ~6 minutes of bits gets another's best
+
+
+def thin(units, target=comedy.TARGET_S):
+    """How many seconds the stream's own bits fall short of a thin stream's limit (0 when it has enough). Only
+    bits rated 7+ count: a laugh heard with nothing readable around it (rated 6) is filler, not material."""
+    good = [u for u in units if u["funny"] >= 7]
+    have = sum(u["end"] - u["start"] for u in comedy.select(good, target))
+    return 0.0 if have >= THIN_S else target[0] - 25 - have
+
+
+def next_day(need, other):
+    """Pieces from another stream of the same creator (decision 3: the last 3 weeks) for a thin stream: its
+    best blocks, in its own stream order, up to `need` seconds, each carrying its own file, layout, camera
+    box and transcript so the renderer can cut it. `other` is {"source", "info", "transcript", "sounds",
+    "audio", "units", "facecam"}."""
+    if need <= 0 or not other.get("units"):
+        return []
+    said, words = other.get("transcript"), hl._words(other.get("transcript"))
+    chosen = comedy.select(other["units"], (need - 20, need))
+    shots = hl._shots(other.get("sounds"), hl.GUNFIRE_QUIET)
+    duration = other["info"].get("duration") or 1e9
+    out, stickers = [], 0
+    for block in comedy.blocks(chosen):
+        a = round(max(0.0, hl.settle(block["start"], "start", words, other.get("audio"))), 2)
+        b = round(min(duration, hl.settle(block["end"], "end", words, other.get("audio"))), 2)
+        piece = _unit_piece(a, b, block["units"], source=str(other["source"]),
+                            info={k: other["info"].get(k) for k in ("width", "height", "has_audio", "duration")},
+                            facecam=list(other["facecam"]) if other.get("facecam") else None)
+        stickers = decorate(piece, block["units"], said, shots, other.get("facecam"), stickers)
+        piece["said"] = {"segments": [seg for seg in (said or {}).get("segments", [])
+                                      if seg.get("end", 0) > a and seg.get("start", 0) < b]}
+        out.append(piece)
+    return out
 
 
 # --- titles, Shorts -------------------------------------------------------------------------------------------
@@ -186,6 +301,16 @@ def titles_for(the_plan, streamer=""):
     out = [titles._cut(t, titles.LONG_MAX) for t in out]
     short = " ".join(line.split()[:4]) if line else "FUNNY MOMENTS"
     return out, [short, other or "FUNNY MOMENTS"]
+
+
+def quote(the_plan, most_words=7):
+    """The speech-bubble line for the thumbnail: the top punchline that may be written, shortened."""
+    units = [u for p in the_plan["pieces"] if p["kind"] == "unit" for u in p.get("units") or [] if clean(u.get("line"))]
+    top = max(units, key=lambda u: u["funny"], default=None)
+    if not top:
+        return None
+    words = top["line"].strip().rstrip(".").split()
+    return " ".join(words[:most_words]) + ("…" if len(words) > most_words else "")
 
 
 def short_moments(units, transcript=None, words=(), most=3):
