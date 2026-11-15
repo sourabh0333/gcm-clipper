@@ -250,7 +250,15 @@ The report ends in a 50-rule specification, each rule marked KEEP, CHANGE or ADD
 - **Titles and thumbnails (46-48):** a repeated phrase (3+ times, 2-3 words, not filler, no gaali) is offered as a title (`catchphrase`); a match with no Dinner and under 5 kills leads with its line, not the result. Thumbnail faces come from the loudest shouts and laughs (`reaction_peaks`). `safety.GAALI` now also catches "bhadwa/bhadva" (it was picked as a "catchphrase" in testing).
 - **Web:** part labels for "Opening" and "You marked this".
 
-**Stopped for the day (owner, 14 Nov):** the 4 test highlights (GtxPreet, LoLzZz, ANJI, DIPENDU) were deleted and queued again with the new rules, but the owner stopped before any finished. They are still **queued** in the database, so they render the next time Kaatclip starts (`setup/start.ps1`, about 30-40 min for the four). **Next:** start Kaatclip, let them finish, check them by frames (cold open with no Dinner, the ending held for the reaction, cutaways, the black-and-white face, the Shorts' face after the last kill), then the owner watches them on the phone. Planned on 14 Nov before the render: GtxPreet 9.1 min, LoLzZz 10.1 min, ANJI 4.7 min, DIPENDU 3.7 min. The full test suite was not run today (only the highlight, highlights API, studio, package and sound tests: all pass); run `python -m pytest` with the CPU free.
+**The 4 test highlights remade in the app (15 Nov):** GtxPreet 9.1 min (Shorts: 2 talk, the Dinner, 1 more talk), LoLzZz 10.1 min (3 talk, a 6-kill fight), ANJI 4.7 min (talk, the Dinner, a one-tap), DIPENDU 3.7 min (4 talk). Checked by frames:
+- **Cold opens:** about 18 s on GtxPreet (kills first, then two subtitled lines) and about 13 s on ANJI; no Dinner banner in any of them.
+- **Endings:** GtxPreet holds about 4 s on the Dinner banner, then black. LoLzZz shows the black-and-white face over "are bhai… are yaar usko… nahin hona tha", then its #2 result screen. That match was 2nd: its map has no placement, so the top-3 skip didn't apply, but the line fits.
+- **Shorts:** the Dinner and 6-kill Shorts end on the face alone, after the kill and the banner. The teaser is a person moment ("PAANI ME YEH KYA HO RAHA 😂").
+- **Cleanup:** removed 43 orphaned `.view.mp4` light copies that resetting the earlier Shorts had left (only the test reset script; the app's Delete keeps Shorts as clips by design).
+
+**Tests (15 Nov):** full suite 300 passed, web 33 passed (a first run died on a Windows WMI call while importing SQLAlchemy; the rerun was clean).
+
+**Next:** the owner watches the 4 highlights and their Shorts on the phone (stream page → Highlights) and says what still feels off (S1.10).
 
 **Not built (and why):** a teammate's reply or a named person can't be told apart without speaker separation (talk is still scored from Gemini plus reactions); hooded faces aren't detected (only dark or blank); chat-spike forcing needs a full chat log (only `!clip` markers today); the talk-led punchline ending (33) waits for Stage 2 comedy cuts; the optional freeze-frame sticker (30), story stitch (44), speech-bubble thumbnail (48), question title (49) and description template (50).
 
