@@ -258,7 +258,7 @@ The report ends in a 50-rule specification, each rule marked KEEP, CHANGE or ADD
 
 **Tests (15 Nov):** full suite 300 passed, web 33 passed (a first run died on a Windows WMI call while importing SQLAlchemy; the rerun was clean).
 
-**Next:** the owner watches the 4 highlights and their Shorts on the phone (stream page → Highlights) and says what still feels off (S1.10).
+**S1.10 verdict (owner, 15 Nov):** watched the highlights on the phone: "for now it's okay, moving to next part". Stage 1 is closed; fixes come later if the owner or a beta creator finds any. **Next:** Stage 2 (comedy), planned in [plans/Highlights Stage 2 plan.md](../plans/Highlights%20Stage%202%20plan.md) for the owner's approval before code.
 
 **Not built (and why):** a teammate's reply or a named person can't be told apart without speaker separation (talk is still scored from Gemini plus reactions); hooded faces aren't detected (only dark or blank); chat-spike forcing needs a full chat log (only `!clip` markers today); the talk-led punchline ending (33) waits for Stage 2 comedy cuts; the optional freeze-frame sticker (30), story stitch (44), speech-bubble thumbnail (48), question title (49) and description template (50).
 
